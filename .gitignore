@@ -1,1 +1,60 @@
+# =========================================
+# 2Synced – Global .gitignore
+# Covers Node (React + Express) + Python ML
+# =========================================
+
+# --- Node / npm ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+dist/
+.DS_Store
+
+# --- React (Vite) ---
+apps/web/.env
+apps/web/.env.local
+apps/web/.env.*.local
+apps/web/node_modules/
+apps/web/dist/
+
+# --- API (Express + TS) ---
+apps/api/.env
+apps/api/.env.local
+apps/api/.env.*.local
+apps/api/node_modules/
+apps/api/dist/
+
+# --- Python (FastAPI / ML) ---
+apps/ml/venv/
+apps/ml/__pycache__/
+apps/ml/*.pyc
+apps/ml/*.pyo
+apps/ml/*.pyd
+apps/ml/models/
+apps/ml/data/
+apps/ml/notebooks/.ipynb_checkpoints/
+
+# --- Logs / temporary ---
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+*.cache/
+__pycache__/
+
+# --- OS generated ---
+Thumbs.db
+ehthumbs.db
+Icon?
+.DS_Store
+desktop.ini
+
+# --- Editor / IDE specific ---
+.vscode/
+.idea/
+*.code-workspace
 .specstory/

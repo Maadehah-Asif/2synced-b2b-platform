@@ -346,9 +346,21 @@ After confirming both frontend (`apps/web`) and backend (`apps/api`) were runnin
 
       ```
       git add .
-      git commit -m "chore: update .gitignore for Node and future Python setup"
+      git commit -m "chore: scaffold frontend & backend structure, add global .gitignore for Node and future Python setup"
       git push
       ```
+
+      Note: the commit message above was added via the text editor (pasted into the commit message editor) rather than entered inline with `-m`.
+
+   Commit message details:
+
+   ```
+   chore: scaffold frontend & backend structure, add global .gitignore for Node and future Python setup
+
+   - Created base folder structure for apps/web (Vite + React) and apps/api (Express + TS)
+   - Initialized Git branches (main, dev, modules/m01–m09)
+   - Configured .gitignore to exclude node_modules, dist, env files, and Python venv paths
+   ```
 
 Then merged the structure into each module branch:
 
@@ -395,3 +407,123 @@ git push
    - Docs folder: `docs/git-setup.md` tracks all progress
 
 ---
+ 
+   ### 🧪 Step 8: ML Service (Python + FastAPI) — Scaffold & Verify
+
+   Where I worked: `apps/ml`
+
+   1. Created & activated virtual env
+
+      ```powershell
+      cd apps/ml
+      python -m venv venv
+      venv\Scripts\activate
+      ```
+
+      - Why: keeps Python packages isolated per project
+      - If not: risk version conflicts across projects
+
+   2. Installed FastAPI + basic ML libs and locked versions
+
+      ```powershell
+      pip install fastapi uvicorn scikit-learn pandas numpy joblib
+      pip freeze > requirements.txt
+      ```
+
+   3. Created minimal app files
+
+      - `main.py`
+
+        ```python
+        from fastapi import FastAPI
+        from api.routes import router
+
+        app = FastAPI(title="2Synced ML Service")
+        app.include_router(router)
+
+        # Optional friendly root
+        @app.get("/")
+        def root():
+            return {"message": "2Synced ML Service is running"}
+        ```
+
+      - `api/routes.py`
+
+        ```python
+        from fastapi import APIRouter
+
+        router = APIRouter()
+
+        @router.get("/health")
+        def health_check():
+            return {"status": "ok"}
+
+        @router.post("/predict/lead")
+        def lead_score(data: dict):
+            return {"lead_score": 0.85}
+
+        @router.post("/predict/intent")
+        def intent(data: dict):
+            return {"intent_prediction": "high"}
+        ```
+
+   4. Run the ML service
+
+      ```powershell
+      uvicorn main:app --reload --port 8001
+      ```
+
+      - Tested: `http://127.0.0.1:8001/health` → `{ "status": "ok" }`
+      - Note: GET `/` and `/favicon.ico` 404 is normal unless a root route is added (added above).
+
+   5. Deactivate env when done
+
+      - Ctrl + C
+      - `deactivate`
+
+   Issues & fixes
+
+   - `uvicorn` not found → venv wasn’t active → activated then `pip install uvicorn`
+   - `ModuleNotFoundError: fastapi` → packages installed to wrong env → re-activated venv, reinstalled
+   - Port in use → changed to `--port 8010`
+
+   ### 🧾 Step 9: Update README with run instructions (web, api, ml)
+
+   I created/updated `README.md` at repo root so anyone can run the project locally. See README for prerequisites, Quickstart, and scripts.
+
+   ### 🚀 Step 10: Commit & Push (dev)
+
+   I committed all scaffold + docs updates with a clear, single-line message and a short body:
+
+   ```bash
+   git add .
+   git commit -m "feat(ml): scaffold FastAPI service; docs: add run instructions; chore: refine .gitignore" -m "- Added apps/ml with FastAPI, /health and placeholder predict endpoints
+   - Updated README with Quickstart (web/api/ml)
+   - Kept .gitignore ready for Node and future Python artifacts"
+   git push   # or: git push -u origin dev (if first push on dev)
+   ```
+
+   ### 🔄 Step 11: Sync module branches with latest dev
+
+   After pushing, merge `dev` → each module so everyone gets the new structure and docs.
+
+   ```bash
+   git checkout dev
+   git pull
+
+   # repeat for all nine modules
+   git checkout modules/m01
+   git merge dev
+   git push
+
+   git checkout dev
+   # (then m02..m09 in the same way)
+   ```
+
+   (If a module has no changes yet, these will fast-forward cleanly.)
+
+   ---
+
+   ## README (project root)
+
+   See `README.md` at repository root for run instructions and Quickstart.

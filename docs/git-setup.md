@@ -520,10 +520,29 @@ git push
    # (then m02..m09 in the same way)
    ```
 
-   (If a module has no changes yet, these will fast-forward cleanly.)
+  ---
+ 
+### ✅ Step 12: Local commit recorded
+
+After updating `README.md` with the final ML instructions and a few minor edits, I committed the change locally using a short, focused message.
+
+Command used locally (PowerShell):
+
+```powershell
+git add README.md
+git commit -m "Updated README."
+```
+
+Notes:
+
+- This commit was made on the `modules/m09` branch (local workspace). The commit completed successfully (exit code 0 in my terminal session).
+- The message is intentionally concise — you can expand it later when squashing or creating a PR (for example: `docs: update README with ML service setup`).
+- Next steps: push this branch to the remote and open a PR into `dev`, or merge/cherry-pick the change into `dev` depending on your workflow:
+
+```powershell
+git push -u origin modules/m09
+# then open PR modules/m09 -> dev on GitHub
+```
 
    ---
 
-   ## README (project root)
-
-   See `README.md` at repository root for run instructions and Quickstart.

@@ -1,108 +1,272 @@
-# 2Synced – B2B Marketing Platform (Monorepo)
+# 2Synced – B2B Marketing Automation (Monorepo)
 
-AI-powered B2B marketing automation platform for SMEs to optimize leads, campaigns, and ROI.
+2Synced is an AI-powered B2B marketing platform that helps SME teams ingest leads, score them, understand intent, analyze conversations, track attribution/ROI, and ship data-driven optimizations.
 
-## Monorepo Layout
+## Why this project exists
+
+Sales and marketing teams collect leads from many places (CSV uploads, CRM, ads, web). It’s hard to clean/merge data, prioritize leads, measure intent, keep conversations moving, and prove ROI. 2Synced gives a single place to: ingest/clean, compute features, score leads with ML, track pipeline intent and conversation health, run attribution/ROI, and generate clear reports.
+
+## Tech stack (high level)
+
+- Frontend: React + Vite + TypeScript (`apps/web`)
+- Backend API: Node.js + Express + TypeScript (ES Modules with `tsx`) (`apps/api`)
+- ML Service: Python + FastAPI (training & inference) (`apps/ml`)
+- Version control: Git (main / dev / modules branches)
+
+Dev ports (default):
+- Web: 5173
+- API: 4000
+- ML: 8001
+
+## Repository layout
 
 ```
 apps/
-	web/  # React (Vite + TS)
-	api/  # Node/Express (TypeScript, ESM)
-	ml/   # Python FastAPI (ML service)
-docs/   # Project docs + module notes
+	web/            # React (Vite + TS). UI and client-side routes.
+		src/modules/  # m01..m09 feature folders (frontend)
+	api/            # Express (TypeScript, ESM). REST API for the UI.
+		src/modules/  # m01..m09 feature folders (backend)
+	ml/             # FastAPI service. ML training/inference endpoints.
+		api/          # FastAPI routers (e.g., /health, /predict/*)
+		models/       # Trained models & artifacts (gitignored)
+		data/         # Raw/processed datasets (gitignored)
+docs/
+	modules/        # Per-module notes (m01..m09)
+.gitignore
+README.md
 ```
 
-## Prerequisites
+🟩 <repo-root>/
+├─ 🟩 apps/
+│  ├─ 🟩 web/
+│  │  └─ 🟩 src/
+│  │     └─ 🟩 modules/
+│  │        ├─ m01/ (.gitkeep)
+│  │        ├─ m02/ (.gitkeep)
+│  │        ├─ ...
+│  │        └─ m09/ (.gitkeep)
+│  │
+│  ├─ 🟩 api/
+│  │  └─ 🟩 src/
+│  │     ├─ 🟩 index.ts
+│  │     └─ 🟩 modules/
+│  │        ├─ m01/ (.gitkeep)
+│  │        ├─ m02/ (.gitkeep)
+│  │        ├─ ...
+│  │        └─ m09/ (.gitkeep)
+│  │
+│  └─ 🟩 ml/
+│     ├─ 🟩 api/
+│     ├─ 🟩 models/
+│     ├─ 🟩 data/
+│     ├─ 🟩 utils/
+│     └─ 🟩 notebooks/
+│        └─ (.gitkeep in each)
+│
+├─ 🟩 docs/
+│  ├─ 🟩 README.md
+│  ├─ 🟩 git-setup.md
+│  └─ 🟩 modules/
+│     ├─ m01/README.md
+│     ├─ ...
+│     └─ m09/README.md
+│
+├─ 🟩 .gitignore
+└─ 🟩 README.md
+```
+## Getting started
 
-- Node.js LTS (18+ recommended)
-- npm (comes with Node)
+### Prerequisites
+
+- Node.js 18+ (comes with npm)
 - Python 3.10+ (added to PATH)
+- Git
 
-## Quickstart
+Windows tip: open a PowerShell at the repo root. Use quotes if your path has spaces.
 
-### 1) Frontend (Vite + React)
+### Install & run — step by step
+
+1) Clone and pick the `dev` branch
+
+```bash
+git clone <your-repo-url>
+cd 2synced-b2b-platform
+git checkout dev
+```
+
+2) Frontend (React + Vite)
 
 ```powershell
 cd apps/web
 npm install
 npm run dev
-# opens http://localhost:5173
+# Dev server: http://localhost:5173
 ```
 
-### 2) Backend API (Express + TS)
+3) Backend API (Express + TypeScript, ESM)
 
 ```powershell
-cd apps/api
+cd ../api
 npm install
 npm run dev
-# API on http://localhost:4000
-# health: http://localhost:4000/health
+# API: http://localhost:4000
+# Health: http://localhost:4000/health
 ```
 
-### 3) ML Service (FastAPI)
+4) 🧠 ML Service (FastAPI) Setup — Final Version
+
+This section explains how to run the Machine Learning (FastAPI) service in `apps/ml`.
+
+📦 1. Create & Activate Virtual Environment
+
+Do this only once when setting up locally.
 
 ```powershell
 cd apps/ml
 python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8001
-# ML on http://localhost:8001
-# health: http://localhost:8001/health
+venv\Scripts\activate      # Windows (PowerShell)
+# source venv/bin/activate  # macOS/Linux
 ```
 
-Each new terminal session: re-activate venv with `cd apps/ml && venv\Scripts\activate`.
+Every time you open a new terminal session, re-activate the venv:
 
-## Branching Model
+```powershell
+cd apps/ml
+venv\Scripts\activate
+```
 
-- `main` – stable releases
+📚 2. Install Dependencies (Don’t Freeze Again)
+
+Since all dependencies are already frozen in `requirements.txt`, simply install them directly:
+
+```powershell
+pip install -r requirements.txt
+```
+
+✅ This ensures that everyone’s environment matches exactly — no need to re-run `pip freeze` unless you intentionally add new dependencies. (See the repository `requirements.txt` for the pinned packages.)
+
+## Quick tests
+
+API health:
+
+```bash
+curl http://localhost:4000/health
+# -> {"ok":true}
+```
+
+ML health:
+
+```bash
+curl http://localhost:8001/health
+# -> {"status":"ok"}
+```
+
+ML lead score (example):
+
+```bash
+curl -X POST http://localhost:8001/predict/lead -H "Content-Type: application/json" -d '{"email":"test@example.com"}'
+# -> {"lead_score":0.85} (placeholder)
+```
+
+## Environment variables
+
+Create `.env` files (they are gitignored):
+
+- `apps/api/.env` – e.g. `PORT=4000`, `DB_URL=...`
+- `apps/web/.env` – e.g. `VITE_API_URL=http://localhost:4000`
+- `apps/ml/` typically uses CLI args or `.env` with python-dotenv (optional)
+
+After setting `VITE_API_URL`, restart `npm run dev` in `apps/web`.
+
+## Branch model
+
+- `main` – stable releases only
 - `dev` – integration branch
-- `modules/m01..m09` – per-module feature branches
+- `modules/m01..m09` – per-module work branches
 
-Flow: `modules/*` → `dev` → `main`.
+Flow: `modules/*` → `dev` → `main`
 
-## Scripts (API)
+## Common scripts
 
-- `npm run dev` – run Express (ESM) with `tsx watch`
-- `npm run build` – compile TypeScript to `dist/`
-- `npm start` – run compiled build
+API (`apps/api`)
 
-## Notes
+```bash
+npm run dev      # run with tsx (ESM)
+npm run build    # compile TS to dist/
+npm start        # run compiled build
+```
 
-- `.gitignore` excludes Node `node_modules`, `dist`, `.env` files, and Python `venv`, caches, and large ML artifacts.
-- Module-specific docs live under `docs/modules/mXX/README.md`.
+Web (`apps/web`)
+
+```bash
+npm run dev      # vite dev server
+npm run build    # production build to dist/
+npm run preview  # preview built app
+```
+
+ML (`apps/ml`)
+
+```powershell
+venv\Scripts\activate
+uvicorn main:app --reload --port 8001
+```
+
+## Troubleshooting
+
+### Port already in use
+
+Change ports (`--port 8010`) or stop the other process.
+
+### `uvicorn` / `fastapi` not found
+
+Activate venv first, then install:
+
+```powershell
+cd apps/ml
+venv\Scripts\activate
+pip install fastapi uvicorn
+```
+
+### API import errors (TypeScript)
+
+Ensure `apps/api/package.json` has `"type": "module"` and you use:
+
+```json
+"scripts": { "dev": "tsx watch src/index.ts" }
+```
+
+And `tsconfig.json` uses:
+
+```json
+{ "module": "NodeNext", "moduleResolution": "NodeNext" }
+```
+
+### Web can’t reach API
+
+Set `VITE_API_URL` in `apps/web/.env` to `http://localhost:4000`, restart Vite.
+
+## Contributing (internal team)
+
+1. Create/checkout your module branch:
+
+```bash
+git checkout -b modules/m0X  # base: dev
+```
+
+2. Work in your module folders:
+
+- Frontend: `apps/web/src/modules/m0X`
+- Backend: `apps/api/src/modules/m0X`
+- ML (if needed): `apps/ml/api`, `apps/ml/models`, `apps/ml/utils`
+
+3. Commit and push. Open a PR `modules/m0X` → `dev`.
+
+4. When stable, merge `dev` → `main` for a release.
 
 ---
 
-## What to push now (and how)
+If you want, I can now:
 
-1) Make sure everything is saved and you’re on `dev`:
+- run a markdown linter / preview for both `README.md` and `docs/git-setup.md` and fix minor style issues
+- create a new branch, stage these changes and open a PR for review
 
-```powershell
-git checkout dev
-git status
-```
-
-Commit & push using the message above:
-
-```powershell
-git add .
-git commit -m "feat(ml): scaffold FastAPI service; docs: add run instructions; chore: refine .gitignore" -m "- Added apps/ml with FastAPI, /health and placeholder predict endpoints
-- Updated README with Quickstart (web/api/ml)
-- Kept .gitignore ready for Node and future Python artifacts"
-git push
-```
-
-Sync each module branch with the latest dev:
-
-```powershell
-git checkout dev
-git pull
-
-# m01..m09
-git checkout modules/m01
-git merge dev
-git push
-git checkout dev
-# repeat for modules/m02 ... modules/m09
-```

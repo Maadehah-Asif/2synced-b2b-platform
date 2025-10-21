@@ -1,4 +1,5 @@
 ﻿from fastapi import APIRouter
+from modules.m01.inference.predict import predict_lead_score
 
 router = APIRouter()
 
@@ -8,8 +9,8 @@ def health_check():
 
 @router.post("/predict/lead")
 def lead_score(data: dict):
-    # TODO: load a trained model and return real score
-    return {"lead_score": 0.85}
+    score = predict_lead_score(data)
+    return {"lead_score": score}
 
 @router.post("/predict/intent")
 def intent(data: dict):

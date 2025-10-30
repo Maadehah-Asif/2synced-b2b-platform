@@ -79,7 +79,7 @@ export default function WorkspaceDetail(){
           <h1 style={{ margin: 0, fontSize: 48 }}>Welcome to RevOps Platform</h1>
           <p style={{ marginTop: 8, fontSize: 18, maxWidth: 800 }}>Your complete revenue operations suite for lead management, intent scoring, and sales intelligence.</p>
           <div style={{ marginTop: 18, display: 'flex', gap: 12 }}>
-            <button className="auth-button" style={{ background: '#fff', color: '#0a66ff' }}>Upload Leads</button>
+            <button className="auth-button" style={{ background: '#fff', color: '#0a66ff' }} onClick={() => { if(id) window.location.hash = `#/m01/upload?workspace=${id}`; }}>Upload Leads</button>
             <button className="auth-button" style={{ background: 'rgba(255,255,255,0.15)', color: '#fff' }}>View Analytics</button>
           </div>
         </div>

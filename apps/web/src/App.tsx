@@ -7,6 +7,7 @@ import JoinWorkspace from './modules/core/landing/JoinWorkspace';
 import Profile from './modules/core/profile/Profile';
 import WorkspacesList from './modules/core/landing/WorkspacesList';
 import WorkspaceDetail from './modules/core/landing/WorkspaceDetail';
+import Upload from './modules/m01/Upload';
 import './components/Layout';
 import './App.css';
 
@@ -28,6 +29,7 @@ function App() {
   if (route.startsWith('#/profile')) return <Profile/>;
   if (route.startsWith('#/workspaces')) return <WorkspacesList/>;
   if (route.startsWith('#/workspace/')) return <WorkspaceDetail/>;
+  if (route.startsWith('#/m01/upload')) return <Upload/>;
   return <Login/>;
 }
 

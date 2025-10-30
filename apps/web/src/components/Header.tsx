@@ -23,8 +23,8 @@ export default function Header(){
     <header style={headerStyle}>
       <div style={{ fontWeight: 800 }}>2Synced</div>
       <nav style={navStyle}>
-        <button className="auth-button" style={{ width: 'auto', padding: '8px 12px', background:'#072a6f' }} onClick={() => window.location.hash = '#/workspaces'}>Workspaces</button>
-        <button className="auth-button" style={{ width: 'auto', padding: '8px 12px', background:'#072a6f' }} onClick={() => window.location.hash = '#/profile'}>Profile</button>
+    <button className="auth-button" style={{ width: 'auto', padding: '8px 12px', background:'#072a6f' }} onClick={() => window.location.hash = '#/workspaces'}>Workspaces</button>
+    <button className="auth-button" style={{ width: 'auto', padding: '8px 12px', background:'#072a6f' }} onClick={() => window.location.hash = '#/profile'}>Profile</button>
       </nav>
     </header>
   );

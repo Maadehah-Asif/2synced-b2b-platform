@@ -4,6 +4,7 @@ import { ENV } from "./config/env.js";
 import { connectDB } from "./config/db.js";
 import authRouter from "./modules/core/auth/routes.js";
 import workspaceRouter from "./modules/core/workspaces/routes.js";
+import m01Router from "./modules/m01/routes.js";
 
 const app = express();
 app.use(cors());
@@ -15,6 +16,8 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 app.use("/auth", authRouter);
 // Workspace routes
 app.use("/workspaces", workspaceRouter);
+// Module 01 (ingestion) routes
+app.use("/m01", m01Router);
 
 (async () => {
   await connectDB();

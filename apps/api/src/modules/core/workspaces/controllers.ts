@@ -1,0 +1,165 @@
+import type { Request, Response } from "express";
+import { Workspace } from "../auth/models/Workspace.js";
+import { WorkspaceMember } from "../auth/models/WorkspaceMember.js";
+import { verifyToken } from "../auth/utils/jwt.js";
+
+function getUserIdFromReq(req: Request) {
+  const auth = req.header("authorization") || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : undefined;
+  if (!token) return null;
+  const payload = verifyToken(token);
+  return payload.sub;
+}
+
+export async function createWorkspace(req: Request, res: Response) {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: "missing_token" });
+
+    const { name } = req.body || {};
+    if (!name || typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name_required" });
+    const n = name.trim();
+
+    const existing = await Workspace.findOne({ name: n }).exec();
+    if (existing) return res.status(409).json({ error: "workspace_exists" });
+
+  // create workspace with a shareable ID
+  const workspace = await Workspace.create({ name: n, ownerUserId: userId, status: "active" });
+  await WorkspaceMember.create({ workspaceId: workspace._id, userId, role: "admin", status: "active" });
+
+    return res.status(201).json({ workspace: { id: String(workspace._id), name: workspace.name, status: workspace.status, shareId: workspace.shareId } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[workspaces/create]", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
+}
+
+export async function joinWorkspace(req: Request, res: Response) {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: "missing_token" });
+    const { workspaceId } = req.body || {};
+    if (!workspaceId) return res.status(400).json({ error: "workspaceId_required" });
+    // allow either Mongo _id (24hex) or shareId
+    let workspace = null as any;
+    if (/^[0-9a-fA-F]{24}$/.test(workspaceId)) {
+      workspace = await Workspace.findById(workspaceId).exec();
+    }
+    if (!workspace) {
+      workspace = await Workspace.findOne({ shareId: workspaceId }).exec();
+    }
+    if (!workspace) return res.status(404).json({ error: "workspace_not_found" });
+
+    const existingMember = await WorkspaceMember.findOne({ workspaceId: workspace._id, userId }).exec();
+    if (existingMember) return res.status(200).json({ message: existingMember.status === 'pending' ? 'request_pending' : 'already_member' });
+
+    const member = await WorkspaceMember.create({ workspaceId: workspace._id, userId, role: "member", status: "pending" });
+    return res.status(201).json({ message: 'request_submitted', member: { id: String(member._id), role: member.role, workspaceId: String(workspace._id) } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[workspaces/join]", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
+}
+
+export async function listWorkspaces(req: Request, res: Response) {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: "missing_token" });
+  const memberships = (await WorkspaceMember.find({ userId, status: 'active' }).exec()) as any[];
+  const ids = memberships.map((m: any) => m.workspaceId);
+  const workspaces = await Workspace.find({ _id: { $in: ids } }).exec();
+  return res.json({ workspaces: workspaces.map((w: any) => ({ id: String(w._id), name: w.name, status: w.status, shareId: (w as any).shareId })) });
+  } catch (err) {
+    console.error('[workspaces/list]', err);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+}
+
+export async function listJoinRequests(req: Request, res: Response) {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: "missing_token" });
+    const workspaceId = req.params.id;
+    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'admin', status: 'active' }).exec();
+    if (!admin) return res.status(403).json({ error: 'not_admin' });
+  // include requester user info (email, fullName) to help admins decide
+    const requests = await WorkspaceMember.find({ workspaceId, status: 'pending' }).populate({ path: 'userId', select: 'email fullName' }).exec();
+    return res.json({ requests: requests.map((r: any) => ({ id: String(r._id), userId: String(r.userId?._id || r.userId), role: r.role, user: r.userId ? { id: String(r.userId._id), email: r.userId.email, fullName: r.userId.fullName } : null })) });
+  } catch (err) {
+    console.error('[workspaces/requests]', err);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+}
+
+export async function listMembers(req: Request, res: Response) {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: "missing_token" });
+    const workspaceId = req.params.id;
+    const member = await WorkspaceMember.findOne({ workspaceId, userId, status: 'active' }).exec();
+    if (!member) return res.status(403).json({ error: 'not_member' });
+    const members = await WorkspaceMember.find({ workspaceId }).populate({ path: 'userId', select: 'email fullName' }).exec();
+    return res.json({ members: members.map((m:any) => ({ id: String(m._id), role: m.role, status: m.status, user: m.userId ? { id: String(m.userId._id), email: m.userId.email, fullName: m.userId.fullName } : null })) });
+  } catch (err) {
+    console.error('[workspaces/members]', err);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+}
+
+export async function updateMemberRole(req: Request, res: Response) {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: "missing_token" });
+    const { id: workspaceId, memberId } = req.params;
+    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'admin', status: 'active' }).exec();
+    if (!admin) return res.status(403).json({ error: 'not_admin' });
+    const { role, status } = req.body || {};
+    const member = await WorkspaceMember.findOne({ _id: memberId, workspaceId }).exec();
+    if (!member) return res.status(404).json({ error: 'member_not_found' });
+    if (role) member.role = role;
+    if (status) member.status = status;
+    await member.save();
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[workspaces/updateMember]', err);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+}
+
+export async function approveRequest(req: Request, res: Response) {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: "missing_token" });
+    const { id: workspaceId, memberId } = req.params;
+    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'admin', status: 'active' }).exec();
+    if (!admin) return res.status(403).json({ error: 'not_admin' });
+    const member = await WorkspaceMember.findOne({ _id: memberId, workspaceId }).exec();
+    if (!member) return res.status(404).json({ error: 'member_not_found' });
+    member.status = 'active';
+    await member.save();
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[workspaces/approve]', err);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+}
+
+export async function rejectRequest(req: Request, res: Response) {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: "missing_token" });
+    const { id: workspaceId, memberId } = req.params;
+    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'admin', status: 'active' }).exec();
+    if (!admin) return res.status(403).json({ error: 'not_admin' });
+    const member = await WorkspaceMember.findOne({ _id: memberId, workspaceId }).exec();
+    if (!member) return res.status(404).json({ error: 'member_not_found' });
+    member.status = 'rejected';
+    await member.save();
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[workspaces/reject]', err);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+}

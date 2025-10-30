@@ -1,35 +1,34 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useEffect, useState } from 'react';
+import Login from './modules/core/auth/Login';
+import Signup from './modules/core/auth/Signup';
+import Landing from './modules/core/landing/Landing';
+import CreateWorkspace from './modules/core/landing/CreateWorkspace';
+import JoinWorkspace from './modules/core/landing/JoinWorkspace';
+import Profile from './modules/core/profile/Profile';
+import WorkspacesList from './modules/core/landing/WorkspacesList';
+import WorkspaceDetail from './modules/core/landing/WorkspaceDetail';
+import './components/Layout';
+import './App.css';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [route, setRoute] = useState<string>(() => window.location.hash || "#/login");
 
-  return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+  useEffect(() => {
+    const onHash = () => setRoute(window.location.hash || "#/login");
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  // Render pages — individual pages will use Layout when needed.
+  if (route.startsWith('#/signup')) return <Signup/>;
+  if (route.startsWith('#/login')) return <Login/>;
+  if (route.startsWith('#/landing')) return <Landing/>;
+  if (route.startsWith('#/create-workspace')) return <CreateWorkspace/>;
+  if (route.startsWith('#/join-workspace')) return <JoinWorkspace/>;
+  if (route.startsWith('#/profile')) return <Profile/>;
+  if (route.startsWith('#/workspaces')) return <WorkspacesList/>;
+  if (route.startsWith('#/workspace/')) return <WorkspaceDetail/>;
+  return <Login/>;
 }
 
-export default App
+export default App;

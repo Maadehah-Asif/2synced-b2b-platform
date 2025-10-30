@@ -6,183 +6,195 @@ It’s written as a **timeline**, showing the exact sequence of what I did and h
 
 ---
 
-### 🧪 Step 13 — ML module layout, registry, and inference wiring (per-module)
+## 🕒 Timeline of setup
 
-Goal: organize ML code per module, version models safely, and expose one clean prediction path to FastAPI.
+### 🧩 Step 1 — Creating the repository and branches
 
-✅ Updated ML folder structure (and what each part is for)
+1. Repository
+    - I created the GitHub repository named **`b2b2synced-b2b-platform`**.
+    - Description used:
+       - *“AI-powered B2B marketing automation platform for SMEs to optimize leads, campaigns, and ROI.”*
 
-```text
-apps/ml/
-  api/                    # FastAPI routes (HTTP endpoints)
-  models/                 # ❗binary artifacts (gitignored)
-    m01/                  # models for Module 1
-      v1/                 # versioned model builds
-        model.joblib
-        meta.json         # (optional: metrics, features used, etc.)
-      v2/
-        model.joblib
-        meta.json
-    registry.json         # points each module to the active version
-  modules/                # per-module ML source code (tracked in git)
-    m01/
-      dataset/            # tiny sample data for tests (OK in git)
-      training/           # training scripts (Python)
-        train.py
-        eval.py
-      inference/          # code used in production inference
-        loader.py         # loads active model (reads registry.json)
-        predict.py        # transforms request → features → predict
-  notebooks/              # experiments & EDA (not production code)
-    m01/
-      EDA.ipynb
-      train_v1.ipynb
-  utils/                  # shared helpers (feature engineering, IO)
-  main.py                 # FastAPI app entry
-  requirements.txt        # locked Python dependencies
-```
+2. Default branch behavior
+    - By default, GitHub initializes a **main** branch, but since my first commit was on a new branch called `dev`, GitHub didn’t automatically create `main`.
+    - Notes:
+       - GitHub only auto-creates `main` when the repository has an initial commit (for example, a README).
+       - Since the repo started empty, I had to create `main` myself.
 
-Why this layout works
+3. Create `dev`
+    - Commands used:
 
-- `models/` keeps heavy binaries out of Git (tracked by the filesystem, not by git history).
-- `modules/m01/...` keeps code versioned and reviewable.
-- `registry.json` lets you switch model versions without changing code.
-- `api/routes.py` is a thin HTTP layer — logic stays in `modules/m01/inference`.
+       ```
+       git checkout -b dev
+       git add .
+       git commit -m "chore: initial commit"
+       git push -u origin dev
+       ```
 
-📇 `models/registry.json` — one place to pick the active model version
+    - Error encountered after the first attempt:
 
-```json
-{
-  "m01": { "active_version": "v2" }
-}
-```
+       ```
+       error: src refspec dev does not match any
+       ```
 
-What it does: tells the loader which version to load for module `m01`.
+       - Cause: I hadn’t committed anything yet.
+       - Fix: I made the first commit, then pushed again — this time it worked.
 
-Why: deploy a new model by changing a small JSON file (not code). If not: you’d hardcode paths and risk shipping the wrong version.
+4. Create `main` and set as default
+    - Commands used:
 
-🧠 `modules/m01/inference/loader.py` — safe, cached model loading
+       ```
+       git checkout -b main
+       git push -u origin main
+       ```
 
-```python
-# apps/ml/modules/m01/inference/loader.py
-import json
-from pathlib import Path
-import joblib
+    - After creating `main`, I changed the default branch in GitHub settings to `main`.
 
-ROOT = Path(__file__).resolve().parents[3]        # .../apps/ml
-MODELS_DIR = ROOT / "models"
-REGISTRY = MODELS_DIR / "registry.json"
+5. Create module branches from `dev`
+    - Commands used (repeat for modules m01 → m09):
 
-_cache = {}
+       ```
+       git checkout dev
+       git pull
+       git checkout -b modules/m01
+       git push -u origin modules/m01
+       git checkout dev
+       ```
 
-def get_active_model_path(module_key: str) -> Path:
-    with open(REGISTRY, "r", encoding="utf-8") as f:
-        reg = json.load(f)
-    active_ver = reg[module_key]["active_version"]
-    return MODELS_DIR / module_key / active_ver / "model.joblib"
-
-def load_model(module_key: str = "m01"):
-    if module_key in _cache:
-        return _cache[module_key]
-    model_path = get_active_model_path(module_key)
-    model = joblib.load(model_path)
-    _cache[module_key] = model
-    return model
-```
-
-What: reads `registry.json`, loads `model.joblib`, and caches it in memory.
-
-Why: avoids reloading the model on every request → faster predictions.
-
-🧩 `modules/m01/inference/predict.py` — one function to call from the API
-
-```python
-# apps/ml/modules/m01/inference/predict.py
-from .loader import load_model
-
-def predict_lead_score(payload: dict) -> float:
-    """
-    1) Extract features from payload
-    2) Call model.predict / predict_proba
-    3) Return a float probability/score
-    """
-    # TODO: real feature extraction (placeholder below)
-    model = load_model("m01")
-    # X = extract_features(payload)
-    # y = model.predict_proba([X])[0][1]
-    # return float(y)
-    return 0.85  # placeholder until training code is wired
-```
-
-What: stable function API for the web layer to call.
-
-Why: keeps HTTP concerns out of ML logic; easier to test.
-
-🌐 `api/routes.py` — wire the endpoint to your predictor
-
-```python
-# apps/ml/api/routes.py
-from fastapi import APIRouter
-from modules.m01.inference.predict import predict_lead_score
-
-router = APIRouter()
-
-@router.get("/health")
-def health_check():
-    return {"status": "ok"}
-
-@router.post("/predict/lead")
-def lead_score(data: dict):
-    score = predict_lead_score(data)
-    return {"lead_score": score}
-
-@router.post("/predict/intent")
-def intent(data: dict):
-    # placeholder – implement later
-    return {"intent_prediction": "high"}
-```
-
-What: thin HTTP routes that delegate to ML code.
-
-Why: clear separation: HTTP in `api/`, ML logic in `modules/`.
-
-🔒 .gitignore confirmed (why we ignore these)
-
- - `apps/ml/models/` → large binaries (use registry to choose versions)
- - `apps/ml/data/` → real datasets (use small samples under `modules/m01/dataset/` only)
- - `apps/ml/venv/`, `__pycache__/`, `*.pyc` → environment/cache files
- - `apps/ml/notebooks/.ipynb_checkpoints/` → noisy notebook autosaves
-
-If not ignored: repo gets huge, slow, and hard to clone.
-
-▶️ How I tested
-
-```powershell
-cd apps/ml
-venv\Scripts\activate
-uvicorn main:app --reload --port 8001
-# Health: http://localhost:8001/health
-# Predict (example):
-# curl -X POST http://localhost:8001/predict/lead -H "Content-Type: application/json" -d "{\"email\":\"test@example.com\"}"
-```
-
-With a real `model.joblib` at `apps/ml/models/m01/v2/model.joblib`, the loader picks v2.
-
-To switch versions, edit `models/registry.json` (change `"active_version"`).
-
-💬 Commit message I used
-
-```
-ml(m01): structure per-module ML folders; add registry file; wire loader & predict into FastAPI
-
-(Body)
-- models/: versioned artifacts; registry.json picks active version
-- modules/m01/: dataset, training, inference folders
-- loader caches model in-memory; predict stub returns placeholder score
-- routes.py calls predict_lead_score
-```
+    - Explanation:
+       - Each module branch starts from `dev`, so that when we merge, all modules follow the flow: modules → dev → main.
+       - If module branches didn’t start from `dev`, their histories would diverge and make merging harder.
 
 ---
+
+### 🧱 Step 2 — Creating the manual folder structure
+
+- Before running any npm or pip commands, I made the base folder structure manually (with `.gitkeep` files inside empty directories so Git could track them).
+
+Here’s what the project structure looked like at this point:
+
+```
+🟩 <repo-root>/
+├─ 🟩 apps/
+│  ├─ 🟩 web/
+│  │  └─ 🟩 src/
+│  │     └─ 🟩 modules/
+│  │        ├─ m01/ (.gitkeep)
+│  │        ├─ m02/ (.gitkeep)
+│  │        ├─ ...
+│  │        └─ m09/ (.gitkeep)
+│  │
+│  ├─ 🟩 api/
+│  │  └─ 🟩 src/
+│  │     ├─ 🟩 index.ts
+│  │     └─ 🟩 modules/
+│  │        ├─ m01/ (.gitkeep)
+│  │        ├─ m02/ (.gitkeep)
+│  │        ├─ ...
+│  │        └─ m09/ (.gitkeep)
+│  │
+│  └─ 🟩 ml/
+│     ├─ 🟩 api/
+│     ├─ 🟩 models/
+│     ├─ 🟩 data/
+│     ├─ 🟩 utils/
+│     └─ 🟩 notebooks/
+│        └─ (.gitkeep in each)
+│
+├─ 🟩 docs/
+│  ├─ 🟩 README.md
+│  ├─ 🟩 git-setup.md
+│  └─ 🟩 modules/
+│     ├─ m01/README.md
+│     ├─ ...
+│     └─ m09/README.md
+│
+├─ 🟩 .gitignore
+└─ 🟩 README.md
+```
+
+- I used a Copilot Agent prompt to create only the manual folders (no npm/pip installs yet). This helped keep the structure clean before any scaffolding.
+
+---
+
+### ⚛️ Step 3 — Setting up the web app (frontend: React + Vite + TypeScript)
+
+- Navigate to the web app folder:
+
+   ```
+   cd apps/web
+   ```
+
+- Create the frontend scaffold:
+
+   ```
+   npx create-vite@latest . -- --template react-ts
+   ```
+
+- When prompted during scaffold:
+   - “Current directory is not empty” → chose “Ignore files and continue”
+   - “Use Rolldown-Vite (Experimental)?” → chose No
+
+   - Explanation: choosing “Ignore files and continue” ensured manual folders (like `modules/m01..m09`) stayed safe. Rolldown-Vite is experimental; we skipped it for stability.
+
+- Install dependencies:
+
+   ```
+   npm install
+   ```
+
+- Verify the dev server:
+
+   ```
+   npm run dev
+   ```
+
+   - Result: the dev server started at http://localhost:5173.
+
+- Return to repository root:
+
+   ```
+   cd ../..
+   ```
+
+---
+
+### 🧠 Step 4 — Setting up the API (backend: Express + TypeScript)
+
+- Enter backend folder:
+
+   ```
+   cd apps/api
+   ```
+
+- Initialize npm and install dependencies:
+
+   ```
+   npm init -y
+   npm install express cors
+   npm install -D typescript @types/node @types/express @types/cors tsx
+   ```
+
+- Create TypeScript config:
+
+   ```
+   npx tsc --init --rootDir src --outDir dist --esModuleInterop --module NodeNext --target ES2020
+   ```
+
+- Create `src/index.ts`:
+
+   ```
+   import express from "express";
+   import cors from "cors";
+
+   const app = express();
+   app.use(cors());
+   app.use(express.json());
+
+   app.get("/health", (_req, res) => res.json({ ok: true }));
+
+   const PORT = process.env.PORT || 4000;
+   app.listen(PORT, () => console.log(`API running on port ${PORT}`));
    ```
 
 - Update `package.json` scripts:
@@ -552,79 +564,66 @@ git push -u origin modules/m09
 # then open PR modules/m09 -> dev on GitHub
 ```
 
-   ---
+---
 
 ### 🧪 Step 13 — ML module layout, registry, and inference wiring (per-module)
 
 Goal: organize ML code per module, version models safely, and expose one clean prediction path to FastAPI.
 
 ✅ Updated ML folder structure (and what each part is for)
+
+```text
 apps/ml/
-   api/
-      routes.py               # FastAPI routes (HTTP endpoints)
-   models/                   # ❗binary artifacts (gitignored)
-      m01/                    # models for Module 1
-         v1/                   # versioned model builds
-            model.joblib
-            meta.json           # (optiona
-   l### 🧪 Step 13 — ML module layout, registry, and inference wiring (per-module)
-
-Goal: organize ML code per module, version models safely, and expose one clean prediction path to FastAPI.
-
-✅ Updated ML folder structure (and what each part is for)
-apps/ml/
-   api/
-      routes.py               # FastAPI routes (HTTP endpoints)
-   models/                   # ❗binary artifacts (gitignored)
-      m01/                    # models for Module 1
-         v1/                   # versioned model builds
-            model.joblib
-            meta.json           # (optional: metrics, features used, etc.)
-         v2/
-            model.joblib
-            meta.json
-      registry.json           # points each module to the active version
-   modules/                  # per-module ML source code (tracked in git)
-      m01/
-         dataset/              # tiny sample data for tests (OK in git)
-         training/             # training scripts (Python)
-            train.py
-            eval.py
-         inference/            # code used in production inference
-            loader.py           # loads active model (reads registry.json)
-            predict.py          # transforms request → features → predict
-   notebooks/                # experiments & EDA (not production code)
-      m01/
-         EDA.ipynb
-         train_v1.ipynb
-   utils/                    # shared helpers (feature engineering, IO)
-   main.py                   # FastAPI app entry
-   requirements.txt          # locked Python dependencies
-
+  api/                    # FastAPI routes (HTTP endpoints)
+  models/                 # ❗binary artifacts (gitignored)
+    m01/                  # models for Module 1
+      v1/                 # versioned model builds
+        model.joblib
+        meta.json         # (optional: metrics, features used, etc.)
+      v2/
+        model.joblib
+        meta.json
+    registry.json         # points each module to the active version
+  modules/                # per-module ML source code (tracked in git)
+    m01/
+      dataset/            # tiny sample data for tests (OK in git)
+      training/           # training scripts (Python)
+        train.py
+        eval.py
+      inference/          # code used in production inference
+        loader.py         # loads active model (reads registry.json)
+        predict.py        # transforms request → features → predict
+  notebooks/              # experiments & EDA (not production code)
+    m01/
+      EDA.ipynb
+      train_v1.ipynb
+  utils/                  # shared helpers (feature engineering, IO)
+  main.py                 # FastAPI app entry
+  requirements.txt        # locked Python dependencies
+```
 
 Why this layout works
 
-models/ keeps heavy binaries out of Git (tracked by the filesystem, not by git history).
+- `models/` keeps heavy binaries out of Git (tracked by the filesystem, not by git history).
+- `modules/m01/...` keeps code versioned and reviewable.
+- `registry.json` lets you switch model versions without changing code.
+- `api/routes.py` is a thin HTTP layer — logic stays in `modules/m01/inference`.
 
-modules/m01/... keeps code versioned and reviewable.
+📇 `models/registry.json` — one place to pick the active model version
 
-registry.json lets you switch model versions without changing code.
-
-api/routes.py is a thin HTTP layer — logic stays in modules/m01/inference.
-
-📇 models/registry.json — one place to pick the active model version
+```json
 {
-   "m01": { "active_version": "v2" }
+  "m01": { "active_version": "v2" }
 }
+```
 
+What it does: tells the loader which version to load for module `m01`.
 
-What it does: tells the loader which version to load for module m01.
+Why: deploy a new model by changing a small JSON file (not code). If not: you’d hardcode paths and risk shipping the wrong version.
 
-Why: deploy a new model by changing a small JSON file (not code).
+🧠 `modules/m01/inference/loader.py` — safe, cached model loading
 
-If not: you’d hardcode paths in code and risk shipping the wrong version.
-
-🧠 modules/m01/inference/loader.py — safe, cached model loading
+```python
 # apps/ml/modules/m01/inference/loader.py
 import json
 from pathlib import Path
@@ -637,51 +636,51 @@ REGISTRY = MODELS_DIR / "registry.json"
 _cache = {}
 
 def get_active_model_path(module_key: str) -> Path:
-      with open(REGISTRY, "r", encoding="utf-8") as f:
-            reg = json.load(f)
-      active_ver = reg[module_key]["active_version"]
-      return MODELS_DIR / module_key / active_ver / "model.joblib"
+    with open(REGISTRY, "r", encoding="utf-8") as f:
+        reg = json.load(f)
+    active_ver = reg[module_key]["active_version"]
+    return MODELS_DIR / module_key / active_ver / "model.joblib"
 
 def load_model(module_key: str = "m01"):
-      if module_key in _cache:
-            return _cache[module_key]
-      model_path = get_active_model_path(module_key)
-      model = joblib.load(model_path)
-      _cache[module_key] = model
-      return model
+    if module_key in _cache:
+        return _cache[module_key]
+    model_path = get_active_model_path(module_key)
+    model = joblib.load(model_path)
+    _cache[module_key] = model
+    return model
+```
 
-
-What: reads registry.json, loads model.joblib, and caches it in memory.
+What: reads `registry.json`, loads `model.joblib`, and caches it in memory.
 
 Why: avoids reloading the model on every request → faster predictions.
 
-If not: every request would hit the filesystem → slow API.
+🧩 `modules/m01/inference/predict.py` — one function to call from the API
 
-🧩 modules/m01/inference/predict.py — one function to call from the API
+```python
 # apps/ml/modules/m01/inference/predict.py
 from .loader import load_model
 
 def predict_lead_score(payload: dict) -> float:
-      """
-      1) Extract features from payload
-      2) Call model.predict / predict_proba
-      3) Return a float probability/score
-      """
-      # TODO: real feature extraction (placeholder below)
-      model = load_model("m01")
-      # X = extract_features(payload)
-      # y = model.predict_proba([X])[0][1]
-      # return float(y)
-      return 0.85  # placeholder until training code is wired
-
+    """
+    1) Extract features from payload
+    2) Call model.predict / predict_proba
+    3) Return a float probability/score
+    """
+    # TODO: real feature extraction (placeholder below)
+    model = load_model("m01")
+    # X = extract_features(payload)
+    # y = model.predict_proba([X])[0][1]
+    # return float(y)
+    return 0.85  # placeholder until training code is wired
+```
 
 What: stable function API for the web layer to call.
 
 Why: keeps HTTP concerns out of ML logic; easier to test.
 
-If not: logic leaks into routes and becomes hard to maintain.
+🌐 `api/routes.py` — wire the endpoint to your predictor
 
-🌐 api/routes.py — wire the endpoint to your predictor
+```python
 # apps/ml/api/routes.py
 from fastapi import APIRouter
 from modules.m01.inference.predict import predict_lead_score
@@ -690,57 +689,155 @@ router = APIRouter()
 
 @router.get("/health")
 def health_check():
-      return {"status": "ok"}
+    return {"status": "ok"}
 
 @router.post("/predict/lead")
 def lead_score(data: dict):
-      score = predict_lead_score(data)
-      return {"lead_score": score}
+    score = predict_lead_score(data)
+    return {"lead_score": score}
 
 @router.post("/predict/intent")
 def intent(data: dict):
-      # placeholder – implement later
-      return {"intent_prediction": "high"}
-
+    # placeholder – implement later
+    return {"intent_prediction": "high"}
+```
 
 What: thin HTTP routes that delegate to ML code.
 
-Why: clear separation: HTTP in api/, ML logic in modules/.
+Why: clear separation: HTTP in `api/`, ML logic in `modules/`.
 
 🔒 .gitignore confirmed (why we ignore these)
 
-apps/ml/models/ → large binaries (use registry to choose versions)
-
-apps/ml/data/ → real datasets (use small samples under modules/m01/dataset/ only)
-
-apps/ml/venv/, __pycache__/, *.pyc → environment/cache files
-
-apps/ml/notebooks/.ipynb_checkpoints/ → noisy notebook autosaves
+ - `apps/ml/models/` → large binaries (use registry to choose versions)
+ - `apps/ml/data/` → real datasets (use small samples under `modules/m01/dataset/` only)
+ - `apps/ml/venv/`, `__pycache__/`, `*.pyc` → environment/cache files
+ - `apps/ml/notebooks/.ipynb_checkpoints/` → noisy notebook autosaves
 
 If not ignored: repo gets huge, slow, and hard to clone.
 
 ▶️ How I tested
+
+```powershell
 cd apps/ml
 venv\Scripts\activate
 uvicorn main:app --reload --port 8001
 # Health: http://localhost:8001/health
 # Predict (example):
 # curl -X POST http://localhost:8001/predict/lead -H "Content-Type: application/json" -d "{\"email\":\"test@example.com\"}"
+```
 
+With a real `model.joblib` at `apps/ml/models/m01/v2/model.joblib`, the loader picks v2.
 
-With a real model.joblib at apps/ml/models/m01/v2/model.joblib, the loader picks v2.
-
-To switch versions, I only edit models/registry.json ("active_version": "v1").
+To switch versions, edit `models/registry.json` (change `"active_version"`).
 
 💬 Commit message I used
+
+```
 ml(m01): structure per-module ML folders; add registry file; wire loader & predict into FastAPI
 
-
 (Body)
-
 - models/: versioned artifacts; registry.json picks active version
 - modules/m01/: dataset, training, inference folders
 - loader caches model in-memory; predict stub returns placeholder score
 - routes.py calls predict_lead_score
- ADD THIS AS STEP 13 AT THE END OF THIS GITSETUP FIEL AN DSTRCUTURE AND ARRANGE ETXT ACCORDINGLY THE ONE IM PASTIGN AND DONT HCNAGE CNYAHTING ELS EIN FILE
-: m
+```
+
+---
+
+### ?? Step 14 - Auth (API): users, workspaces, memberships, JWT
+
+Goal: add secure signup/login, multi-tenant bootstrap on signup, and basic self endpoint.
+
+Files added (API)
+
+```
+apps/api/src/modules/auth/
+  models/
+    User.ts              # users (email unique, passwordHash, providers.google)
+    Workspace.ts         # workspaces (name unique, ownerUserId, status)
+    WorkspaceMember.ts   # membership (workspaceId+userId unique, role)
+  utils/
+    password.ts          # bcrypt hashing & verify
+    jwt.ts               # sign/verify JWT (HS256), custom claims
+  controllers.ts         # signup, login, me handlers
+  routes.ts              # wires POST /signup, POST /login, GET /me to controllers
+```
+
+App wiring
+
+```
+apps/api/src/index.ts
+app.use("/auth", authRouter)
+```
+
+Dependencies installed (API)
+
+```bash
+cd apps/api
+npm i bcryptjs jsonwebtoken
+npm i -D @types/jsonwebtoken @types/bcryptjs
+```
+
+Environment (API)
+
+```
+apps/api/.env
+JWT_SECRET=<long-random-string>
+```
+
+Endpoints
+
+- POST `/auth/signup` → creates user, workspace, membership (role=admin); returns `{ token, user, workspace }`
+- POST `/auth/login` → validates credentials; returns `{ token, user, workspaceId }`
+- GET `/auth/me` → resolves user and memberships from `Authorization: Bearer <token>`
+
+Notes
+
+- For ESM + jsonwebtoken typings, used `import * as jwt from "jsonwebtoken"`.
+- Custom claims type named `AuthJwtPayload` to avoid clashes with library `JwtPayload` type.
+
+---
+
+### ?? Step 15 - Auth (Web): Login/Signup pages and assets folder
+
+Goal: minimal UI to call API and a place to drop hero/illustration images.
+
+Files added (Web)
+
+```
+apps/web/src/modules/auth/Login.tsx
+apps/web/src/modules/auth/Signup.tsx
+apps/web/src/assets/auth/.gitkeep
+apps/web/src/assets/auth/README.txt    # where to drop images used by the pages
+```
+
+Configuration (Web)
+
+```
+apps/web/.env
+VITE_API_URL=http://localhost:4000
+```
+
+Usage
+
+- Import and render `<Login />` or `<Signup />` in the app, or add routing later.
+- Place images at `apps/web/src/assets/auth/{login-illustration.png, signup-illustration.png}`.
+
+---
+
+### ?? Step 16 - Refactor: Thin routes, separate controllers
+
+Goal: keep route files concise; move logic to controllers.
+
+Changes
+
+```
+apps/api/src/modules/auth/controllers.ts   # exports signup, login, me
+apps/api/src/modules/auth/routes.ts        # wires routes to controllers only
+```
+
+Troubleshooting
+
+- If editor shows squiggles in `password.ts`, install `@types/bcryptjs`.
+- If squiggles in `jwt.ts`, ensure `@types/jsonwebtoken` is installed and prefer `import * as jwt from "jsonwebtoken"` in ESM.
+- Add `JWT_SECRET` to `apps/api/.env` and restart the dev server.

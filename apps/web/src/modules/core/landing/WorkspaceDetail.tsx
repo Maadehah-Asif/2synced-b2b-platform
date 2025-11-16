@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import Layout from '../../../components/Layout';
 import "../auth/auth.css";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
@@ -17,24 +17,32 @@ export default function WorkspaceDetail(){
   const [isAdmin, setIsAdmin] = useState(false);
   const [error, setError] = useState<string|null>(null);
   const [shareId, setShareId] = useState<string|null>(null);
+  const [selfUserId, setSelfUserId] = useState<string|null>(null);
 
   useEffect(()=>{(async()=>{
     if(!id) { setError('missing id'); setLoading(false); return; }
     try{
       const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/workspaces/${id}/requests`,{ headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      if(res.status===403){ setIsAdmin(false); setRequests([]); return; }
-      if(!res.ok) throw new Error(data?.error||'Failed');
-      setIsAdmin(true);
-      setRequests(data.requests||[]);
-      // fetch members list
+      // Try requests to determine admin; do not bail on 403
+      try{
+        const res = await fetch(`${API_URL}/workspaces/${id}/requests`,{ headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if(res.status===403){ setIsAdmin(false); setRequests([]); }
+        else if(res.ok){ setIsAdmin(true); setRequests(data.requests||[]); }
+      }catch(e){ /* ignore */ }
+      // Fetch members (any active member can view)
       try{
         const res2 = await fetch(`${API_URL}/workspaces/${id}/members`,{ headers: { Authorization: `Bearer ${token}` } });
         const d2 = await res2.json();
         if(res2.ok) setMembers(d2.members||[]);
       }catch(e){ /* ignore */ }
-      // fetch workspace shareId (quick lookup)
+      // Fetch current user id to restrict self role editing
+      try{
+        const meRes = await fetch(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` }});
+        const me = await meRes.json();
+        if(meRes.ok && me?.user?.id) setSelfUserId(me.user.id);
+      }catch(e){ /* ignore */ }
+      // Fetch workspace shareId for display
       try{
         const res3 = await fetch(`${API_URL}/workspaces`,{ headers: { Authorization: `Bearer ${token}` } });
         const d3 = await res3.json();
@@ -46,14 +54,12 @@ export default function WorkspaceDetail(){
     }catch(e:any){ setError(e.message); }
     setLoading(false);
   })()},[id]);
-
   async function act(memberId:string, action:'approve'|'reject'){
     try{
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/workspaces/${id}/requests/${memberId}/${action==='approve'?'approve':'reject'}`,{ method:'POST', headers:{ Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if(!res.ok) throw new Error(data?.error||'Failed');
-      // refresh
       setRequests(r => r.filter(x => x.id !== memberId));
     }catch(e:any){ setError(e.message); }
   }
@@ -64,7 +70,6 @@ export default function WorkspaceDetail(){
       const res = await fetch(`${API_URL}/workspaces/${id}/members/${memberId}/role`,{ method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ role: newRole }) });
       const d = await res.json();
       if(!res.ok) throw new Error(d?.error || 'Failed');
-      // refresh members
       const res2 = await fetch(`${API_URL}/workspaces/${id}/members`,{ headers: { Authorization: `Bearer ${token}` } });
       const d2 = await res2.json();
       if(res2.ok) setMembers(d2.members||[]);
@@ -73,70 +78,68 @@ export default function WorkspaceDetail(){
 
   return (
     <Layout>
-      <main style={{ flex: 1, background: '#f3f6f9' }}>
+      <main className="page-root">
         {/* Hero */}
-        <div style={{ height: 260, background: `linear-gradient(180deg, rgba(6,30,70,0.9), rgba(6,30,70,0.7)), url('/src/assets/hero-image.png') center/cover no-repeat`, color: '#fff', padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <h1 style={{ margin: 0, fontSize: 48 }}>Welcome to RevOps Platform</h1>
-          <p style={{ marginTop: 8, fontSize: 18, maxWidth: 800 }}>Your complete revenue operations suite for lead management, intent scoring, and sales intelligence.</p>
-          <div style={{ marginTop: 18, display: 'flex', gap: 12 }}>
-            <button className="auth-button" style={{ background: '#fff', color: '#0a66ff' }} onClick={() => { if(id) window.location.hash = `#/m01/upload?workspace=${id}`; }}>Upload Leads</button>
-            <button className="auth-button" style={{ background: 'rgba(255,255,255,0.15)', color: '#fff' }}>View Analytics</button>
+        <div className="hero" style={{ backgroundImage: "url('/src/assets/hero-image.png')" }}>
+          <h1>Welcome to RevOps Platform</h1>
+          <p>Your complete revenue operations suite for lead management, intent scoring, and sales intelligence.</p>
+          <div className="flex gap-12 mt-18">
+            <button className="btn-primary" onClick={() => { if(id) window.location.hash = `#/m01/upload?workspace=${id}`; }}>Upload Leads</button>
+            <button className="btn-secondary ml-8" onClick={() => { if(id) window.location.hash = `#/m01/merged?workspace=${id}`; }}>View Merged CSVs</button>
+            <button className="btn-secondary ml-8" onClick={() => { if(id) window.location.hash = `#/m01/leads?workspace=${id}`; }}>View Leads Code CSVs</button>
+            {/* Analytics entry removed as per request; keep primary flows simple */}
           </div>
         </div>
 
-        {/* Metrics cards */}
-        <section style={{ padding: 20 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-            <div style={{ background: '#fff', padding: 18, borderRadius: 10 }}>
-              <div style={{ color: '#64748b', fontSize: 13 }}>Total Leads</div>
-              <div style={{ fontSize: 28, fontWeight: 700, marginTop: 8 }}>24,582</div>
-              <div style={{ color: '#10b981', marginTop: 8 }}>↑+12.5% from last month</div>
+        {/* Info cards (static, non-dynamic) */}
+        <section className="p-20">
+          <div className="stats-grid">
+            <div className="stats-card">
+              <div className="label">Uploads</div>
+              <div className="muted">Manage source CSVs for your workspace.</div>
             </div>
-            <div style={{ background: '#fff', padding: 18, borderRadius: 10 }}>
-              <div style={{ color: '#64748b', fontSize: 13 }}>Hot Leads</div>
-              <div style={{ fontSize: 28, fontWeight: 700, marginTop: 8 }}>3,847</div>
-              <div style={{ color: '#10b981', marginTop: 8 }}>↑+8.3% this week</div>
+            <div className="stats-card">
+              <div className="label">Merged CSVs</div>
+              <div className="muted">Combine, deduplicate, and normalize columns.</div>
             </div>
-            <div style={{ background: '#fff', padding: 18, borderRadius: 10 }}>
-              <div style={{ color: '#64748b', fontSize: 13 }}>Conversion Rate</div>
-              <div style={{ fontSize: 28, fontWeight: 700, marginTop: 8 }}>23.4%</div>
-              <div style={{ color: '#10b981', marginTop: 8 }}>↑+2.1% improvement</div>
+            <div className="stats-card">
+              <div className="label">Leads Code</div>
+              <div className="muted">Generate prediction CSVs and review outputs.</div>
             </div>
-            <div style={{ background: '#fff', padding: 18, borderRadius: 10 }}>
-              <div style={{ color: '#64748b', fontSize: 13 }}>Revenue Pipeline</div>
-              <div style={{ fontSize: 28, fontWeight: 700, marginTop: 8 }}>$2.4M</div>
-              <div style={{ color: '#10b981', marginTop: 8 }}>↑+18.7% growth</div>
+            <div className="stats-card">
+              <div className="label">Members</div>
+              <div className="muted">View all members; admins can edit roles.</div>
             </div>
           </div>
         </section>
 
         {/* Share ID and Admin panels */}
-        <section style={{ padding: 20 }}>
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 13, color: '#64748b' }}>Workspace Share ID</div>
-            <div style={{ fontWeight: 700 }}>{shareId || '—' } <button style={{ marginLeft: 8 }} className="auth-button" onClick={() => shareId && navigator.clipboard?.writeText(shareId)}>Copy</button></div>
+  <section className="p-20">
+          <div className="mb-12">
+            <div className="muted" style={{ fontSize: 13 }}>Workspace Share ID</div>
+            <div className="font-700">{shareId || '—'} <button className="btn-primary btn-sm ml-8" onClick={() => shareId && navigator.clipboard?.writeText(shareId)}>Copy</button></div>
           </div>
         </section>
 
-        {/* Admin pending requests panel below the metrics */}
-        <section style={{ padding: 20 }}>
-          <div style={{ background: '#fff', padding: 18, borderRadius: 10 }}>
-            <h3 style={{ marginTop: 0 }}>Pending Join Requests</h3>
+        {/* Admin pending requests panel below the metrics (visible to admins only) */}
+        {isAdmin && (
+  <section className="p-20">
+            <div className="card p-18" style={{ borderRadius: 10 }}>
+            <h3 className="mt-0">Pending Join Requests</h3>
             {loading && <div>Loading...</div>}
             {error && <div className="auth-error">{error}</div>}
-            {!loading && !isAdmin && <div>You are not an admin for this workspace or there are no pending requests.</div>}
-            {!loading && isAdmin && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {!loading && (
+              <div className="flex-col gap-12">
                 {requests.length === 0 && <div>No pending requests</div>}
                 {requests.map((r:any) => (
-                  <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #eef2f7' }}>
+                  <div key={r.id} className="flex justify-between align-center" style={{ padding: '8px 0', borderBottom: 'var(--outline)' }}>
                     <div>
-                      <div style={{ fontWeight: 600 }}>{(r.user && (r.user.fullName || r.user.email)) || r.userId}</div>
-                      <div style={{ color: '#64748b', fontSize: 13 }}>{r.user?.email || ''}</div>
+                      <div className="font-700">{(r.user && (r.user.fullName || r.user.email)) || r.userId}</div>
+                      <div className="muted" style={{ fontSize: 13 }}>{r.user?.email || ''}</div>
                     </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="auth-button" onClick={() => act(r.id, 'approve')}>Approve</button>
-                      <button className="auth-button" onClick={() => act(r.id, 'reject')}>Reject</button>
+                    <div className="flex gap-8">
+                      <button className="btn-primary" onClick={() => act(r.id, 'approve')}>Approve</button>
+                      <button className="btn-ghost" onClick={() => act(r.id, 'reject')}>Reject</button>
                     </div>
                   </div>
                 ))}
@@ -144,28 +147,33 @@ export default function WorkspaceDetail(){
             )}
           </div>
         </section>
+        )}
 
         {/* Members list (all members) */}
-        <section style={{ padding: 20 }}>
-          <div style={{ background: '#fff', padding: 18, borderRadius: 10 }}>
+  <section className="p-20">
+          <div style={{ background: 'var(--container-bg)', padding: 18, borderRadius: 10 }}>
             <h3 style={{ marginTop: 0 }}>Workspace Members</h3>
             {members.length === 0 && <div>No members</div>}
             {members.map((m:any) => (
-              <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #eef2f7' }}>
+              <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: 'var(--outline)' }}>
                 <div>
                   <div style={{ fontWeight: 600 }}>{m.user?.fullName || m.user?.email || 'Unknown'}</div>
-                  <div style={{ color: '#64748b', fontSize: 13 }}>{m.user?.email || ''}</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{m.user?.email || ''}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <select value={m.role} onChange={(e) => updateRole(m.id, e.target.value)}>
-                    <option value="admin">admin</option>
-                    <option value="member">member</option>
-                    <option value="analyst">analyst</option>
-                    <option value="manager">manager</option>
-                    <option value="sales">sales</option>
-                    <option value="marketing">marketing</option>
-                  </select>
-                  <div style={{ color: '#64748b' }}>{m.status}</div>
+                  {/* Admins can edit other members' roles, but not their own */}
+                  {isAdmin && selfUserId && m.user?.id !== selfUserId ? (
+                    <select value={m.role} onChange={(e) => updateRole(m.id, e.target.value)}>
+                      <option value="head_manager">Head Manager</option>
+                      <option value="sales_manager">Sales Manager</option>
+                      <option value="marketing_manager">Marketing Manager</option>
+                      <option value="sales_team_member">Sales Team Member</option>
+                      <option value="marketing_team_member">Marketing Team Member</option>
+                    </select>
+                  ) : (
+                    <div className="badge" style={{ padding: '2px 8px', border: '1px solid #ddd', borderRadius: 12, fontSize: 12 }}>{(m.role||'').toString().replace(/_/g,' ').replace(/\b\w/g, (c:any)=> c.toUpperCase())}</div>
+                  )}
+                  <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{m.status}</div>
                 </div>
               </div>
             ))}
@@ -175,3 +183,5 @@ export default function WorkspaceDetail(){
     </Layout>
   );
 }
+
+

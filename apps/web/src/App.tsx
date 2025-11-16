@@ -8,6 +8,9 @@ import Profile from './modules/core/profile/Profile';
 import WorkspacesList from './modules/core/landing/WorkspacesList';
 import WorkspaceDetail from './modules/core/landing/WorkspaceDetail';
 import Upload from './modules/m01/Upload';
+import UploadPreview from './modules/m01/UploadPreview';
+import MergedList from './modules/m01/MergedList';
+import LeadsList from './modules/m01/LeadsList';
 import './components/Layout';
 import './App.css';
 
@@ -29,6 +32,11 @@ function App() {
   if (route.startsWith('#/profile')) return <Profile/>;
   if (route.startsWith('#/workspaces')) return <WorkspacesList/>;
   if (route.startsWith('#/workspace/')) return <WorkspaceDetail/>;
+  if (route.startsWith('#/m01/upload/preview')) return <UploadPreview/>;
+  if (route.startsWith('#/m01/merged/preview')) return <UploadPreview/>;
+  if (route.startsWith('#/m01/leads/preview')) return <UploadPreview/>;
+  if (route.startsWith('#/m01/merged')) return <MergedList/>;
+  if (route.startsWith('#/m01/leads')) return <LeadsList/>;
   if (route.startsWith('#/m01/upload')) return <Upload/>;
   return <Login/>;
 }

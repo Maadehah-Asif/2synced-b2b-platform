@@ -1,0 +1,49 @@
+:root {
+  /* Primary palette (blue shades) */
+  --primary-1: #48B1D9; /* accent light */
+  --primary-2: #459AD0;
+  --primary-3: #3075AC;
+  --primary-4: #194972; /* darkest */
+  --primary-5: #BDE0FC; /* very light */
+
+  /* Page & container backgrounds */
+  --page-bg: #F9FBFE;
+  --container-bg: #FFFEFF;
+
+  /* Text colors */
+  --text-primary: #0B2540; /* dark navy for text */
+  --text-muted: #6B7B8B;
+
+  /* UI surfaces */
+  --card-shadow: 0 8px 24px rgba(9,30,63,0.06);
+  --outline: 1px solid rgba(67,105,141,0.08);
+
+  /* Buttons */
+  --btn-bg: var(--primary-2);
+  --btn-bg-strong: var(--primary-3);
+  --btn-text: #ffffff;
+
+  /* Accent for graphs/visuals */
+  --accent-graph: var(--primary-1);
+}
+
+/* Utility classes used across app */
+.app-container { background: var(--page-bg); color: var(--text-primary); }
+.card { background: var(--container-bg); box-shadow: var(--card-shadow); border-radius: 12px; border: var(--outline); }
+.btn-primary { background: linear-gradient(180deg, var(--btn-bg), var(--btn-bg-strong)); color: var(--btn-text); border: 0; padding: 8px 12px; border-radius: 8px; }
+.btn-ghost { background: transparent; border: 1px solid rgba(48,117,172,0.12); color: var(--primary-4); padding: 8px 12px; border-radius: 8px; }
+
+/* compact button for header/sidebar */
+.btn-sm { padding: 6px 10px; font-size: 0.9em; border-radius: 8px; }
+
+/* sidebar specific */
+.sidebar { width: 220px; background: var(--primary-3); color: var(--container-bg); padding: 20px; display:flex; flex-direction:column; justify-content:space-between; min-height: calc(100vh - 64px); }
+.sidebar.collapsed { width: 64px; }
+.sidebar .nav-btn { background: transparent; color: var(--container-bg); border: none; padding: 8px 10px; text-align:left; border-radius: 8px; }
+.sidebar .nav-btn.active { background: rgba(255,255,255,0.08); }
+
+
+/* Small responsive helpers */
+@media (prefers-color-scheme: dark) {
+  /* For now keep the same palette in dark mode; can expand later */
+}

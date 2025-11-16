@@ -13,6 +13,10 @@ const UploadFileSchema = new Schema({
   // Keep uploader history (who uploaded the file)
   uploadedBy: { type: Schema.Types.ObjectId, ref: "User", required: false },
   metadata: { type: Schema.Types.Mixed },
+  // status: active | archived
+  status: { type: String, enum: ['active','archived'], default: 'active', index: true },
+  archivedAt: { type: Date, required: false },
+  deletedAt: { type: Date, required: false },
   createdAt: { type: Date, default: () => new Date(), index: true },
 });
 

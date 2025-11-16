@@ -45,7 +45,7 @@ export default function JoinWorkspace() {
           <label>Workspace ID or Name</label>
           <input className="auth-input" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required />
           {message && <div className="auth-error">{message}</div>}
-          <button className="auth-button" disabled={loading}>{loading ? 'Joining...' : 'Join'}</button>
+          <button className="btn-primary" disabled={loading}>{loading ? 'Joining...' : 'Join'}</button>
         </form>
       </div>
     </Layout>

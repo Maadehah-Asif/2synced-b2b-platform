@@ -39,11 +39,11 @@ export default function CreateWorkspace() {
           <label>Workspace Name</label>
           <input className="auth-input" value={name} onChange={(e) => setName(e.target.value)} required />
           {message && <div className="auth-error">{message}</div>}
-          <button className="auth-button" disabled={loading}>{loading ? 'Creating...' : 'Create'}</button>
+          <button className="btn-primary" disabled={loading}>{loading ? 'Creating...' : 'Create'}</button>
           {createdId && (
-            <div style={{ marginTop: 12, padding: 12, background: '#eef2ff', borderRadius: 6 }}>
+            <div style={{ marginTop: 12, padding: 12, background: 'var(--container-bg)', borderRadius: 6, border: 'var(--outline)', color: 'var(--text-primary)' }}>
               Workspace created. ID: <strong>{createdId}</strong>
-              <button style={{ marginLeft: 8 }} className="auth-button" onClick={() => navigator.clipboard?.writeText(createdId)}>Copy ID</button>
+              <button style={{ marginLeft: 8, background: 'var(--primary-1)' }} className="btn-primary btn-sm" onClick={() => navigator.clipboard?.writeText(createdId)}>Copy ID</button>
             </div>
           )}
         </form>

@@ -26,20 +26,20 @@ export default function Profile(){
 
   return (
     <Layout>
-      <div style={{ maxWidth: 680, margin: '0 auto' }}>
+      <div className="max-width-680">
         <form onSubmit={onChange} className="auth-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="flex justify-between align-center">
             <h2 className="auth-title">Profile</h2>
             <div>
-              <button type="button" className="auth-button" onClick={() => window.location.hash = '#/workspaces'} style={{ marginRight: 8 }}>Back</button>
-              <button type="button" className="auth-button" onClick={() => { localStorage.removeItem('token'); window.location.hash = '#/login'; }}>Logout</button>
+              <button type="button" className="btn-ghost ml-8" onClick={() => window.location.hash = '#/workspaces'}>Back</button>
+              <button type="button" className="btn-primary" onClick={() => { localStorage.removeItem('token'); window.location.hash = '#/login'; }}>Logout</button>
             </div>
           </div>
           <label>Change Password</label>
           <input className="auth-input" type="password" value={oldPass} onChange={e=>setOldPass(e.target.value)} placeholder="Current password" required />
           <input className="auth-input" type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} placeholder="New password" required />
           {message && <div className="auth-error">{message}</div>}
-          <button className="auth-button" disabled={loading}>{loading ? 'Changing...' : 'Change Password'}</button>
+          <button className="btn-primary" disabled={loading}>{loading ? 'Changing...' : 'Change Password'}</button>
         </form>
       </div>
     </Layout>

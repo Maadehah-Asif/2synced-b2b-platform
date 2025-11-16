@@ -1,0 +1,55 @@
+import mongoose from 'mongoose';
+
+const { Schema, model } = mongoose;
+
+const LeadSchema = new Schema({
+  lead_id: { type: Number, index: true },
+  id: { type: Number },
+  First_Name: { type: String },
+  Last_Name: { type: String },
+  Job_Title: { type: String },
+  Company: { type: String },
+  Company_Domain: { type: String },
+  Location: { type: String },
+  engagement_score: { type: Number },
+  created_at: { type: Date },
+  updated_at: { type: Date },
+  tier_id: { type: Number },
+  company_id: { type: Number },
+  total_emails_sent: { type: Number },
+  total_open_count: { type: Number },
+  total_click_count: { type: Number },
+  total_reply_count: { type: Number },
+  unsubscribe_rate: { type: Schema.Types.Decimal128 },
+  open_rate: { type: Schema.Types.Decimal128 },
+  click_rate: { type: Schema.Types.Decimal128 },
+  days_since_last_email: { type: Schema.Types.Decimal128 },
+  email_relationship_span_days: { type: Number },
+  total_actions: { type: Number },
+  accepted_connection_count: { type: Number },
+  last_action_type: { type: String },
+  days_since_last_action: { type: Number },
+  connection_accept_rate: { type: Schema.Types.Decimal128 },
+  intent_tier: { type: String },
+  lead_priority_flag: { type: Boolean },
+  p_low: { type: Schema.Types.Decimal128 },
+  p_medium: { type: Schema.Types.Decimal128 },
+  p_high: { type: Schema.Types.Decimal128 },
+  lead_response_time_avg: { type: Schema.Types.Decimal128 },
+  touchpoint_diversity_score: { type: Schema.Types.Decimal128 },
+  days_since_first_contact: { type: Number },
+  engagement_consistency_index: { type: Schema.Types.Decimal128 },
+  sentiment_score_recent: { type: Schema.Types.Decimal128 },
+  website_visits_last_30d: { type: Number },
+  product_demo_requested: { type: Boolean },
+  average_meeting_duration: { type: Schema.Types.Decimal128 },
+  account_activity_index: { type: Schema.Types.Decimal128 },
+  channel_call: { type: Boolean },
+  channel_email: { type: Boolean },
+  channel_linkedin: { type: Boolean },
+  // custom fields: arbitrary key/value pairs stored under `custom`
+  custom: { type: Schema.Types.Mixed, required: false },
+  _source_files: { type: String }, // semicolon separated list
+}, { timestamps: true });
+
+export default model('Lead', LeadSchema);

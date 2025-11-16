@@ -25,7 +25,8 @@ export async function createWorkspace(req: Request, res: Response) {
 
   // create workspace with a shareable ID
   const workspace = await Workspace.create({ name: n, ownerUserId: userId, status: "active" });
-  await WorkspaceMember.create({ workspaceId: workspace._id, userId, role: "admin", status: "active" });
+  // creator is the head manager for the workspace
+  await WorkspaceMember.create({ workspaceId: workspace._id, userId, role: "head_manager", status: "active" });
 
     return res.status(201).json({ workspace: { id: String(workspace._id), name: workspace.name, status: workspace.status, shareId: workspace.shareId } });
   } catch (err) {
@@ -54,7 +55,8 @@ export async function joinWorkspace(req: Request, res: Response) {
     const existingMember = await WorkspaceMember.findOne({ workspaceId: workspace._id, userId }).exec();
     if (existingMember) return res.status(200).json({ message: existingMember.status === 'pending' ? 'request_pending' : 'already_member' });
 
-    const member = await WorkspaceMember.create({ workspaceId: workspace._id, userId, role: "member", status: "pending" });
+    // default join requests are created as sales team members (pending approval)
+    const member = await WorkspaceMember.create({ workspaceId: workspace._id, userId, role: "sales_team_member", status: "pending" });
     return res.status(201).json({ message: 'request_submitted', member: { id: String(member._id), role: member.role, workspaceId: String(workspace._id) } });
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -82,7 +84,8 @@ export async function listJoinRequests(req: Request, res: Response) {
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(401).json({ error: "missing_token" });
     const workspaceId = req.params.id;
-    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'admin', status: 'active' }).exec();
+    // only head_manager can approve/reject and view join requests
+    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'head_manager', status: 'active' }).exec();
     if (!admin) return res.status(403).json({ error: 'not_admin' });
   // include requester user info (email, fullName) to help admins decide
     const requests = await WorkspaceMember.find({ workspaceId, status: 'pending' }).populate({ path: 'userId', select: 'email fullName' }).exec();
@@ -113,11 +116,15 @@ export async function updateMemberRole(req: Request, res: Response) {
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(401).json({ error: "missing_token" });
     const { id: workspaceId, memberId } = req.params;
-    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'admin', status: 'active' }).exec();
+    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'head_manager', status: 'active' }).exec();
     if (!admin) return res.status(403).json({ error: 'not_admin' });
     const { role, status } = req.body || {};
     const member = await WorkspaceMember.findOne({ _id: memberId, workspaceId }).exec();
     if (!member) return res.status(404).json({ error: 'member_not_found' });
+    // Prevent admins from changing their own role to avoid accidental lockouts
+    if (String(member.userId) === String(userId)) {
+      return res.status(400).json({ error: 'cannot_edit_own_role' });
+    }
     if (role) member.role = role;
     if (status) member.status = status;
     await member.save();
@@ -133,7 +140,7 @@ export async function approveRequest(req: Request, res: Response) {
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(401).json({ error: "missing_token" });
     const { id: workspaceId, memberId } = req.params;
-    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'admin', status: 'active' }).exec();
+    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'head_manager', status: 'active' }).exec();
     if (!admin) return res.status(403).json({ error: 'not_admin' });
     const member = await WorkspaceMember.findOne({ _id: memberId, workspaceId }).exec();
     if (!member) return res.status(404).json({ error: 'member_not_found' });
@@ -151,7 +158,7 @@ export async function rejectRequest(req: Request, res: Response) {
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(401).json({ error: "missing_token" });
     const { id: workspaceId, memberId } = req.params;
-    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'admin', status: 'active' }).exec();
+    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'head_manager', status: 'active' }).exec();
     if (!admin) return res.status(403).json({ error: 'not_admin' });
     const member = await WorkspaceMember.findOne({ _id: memberId, workspaceId }).exec();
     if (!member) return res.status(404).json({ error: 'member_not_found' });

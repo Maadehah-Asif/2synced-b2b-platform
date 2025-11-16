@@ -21,23 +21,23 @@ export default function WorkspacesList(){
 
   return (
     <Layout>
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
-        <div style={{ background: 'var(--card-bg)', padding: 24, borderRadius: 12 }}>
-          <h2 className="auth-title">Your Workspaces</h2>
+      <div className="container-centered">
+        <div className="card" style={{ padding: 24 }}>
+          <h2 style={{ marginTop: 0 }}>Your Workspaces</h2>
           {loading && <div>Loading...</div>}
           {error && <div className="auth-error">{error}</div>}
           {!loading && !error && (
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
               {list.length===0 && <div>No workspaces yet</div>}
               {list.map(w=> (
-                <div key={w.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center', padding:12, borderBottom:'1px solid rgba(255,255,255,0.02)'}}>
+                <div key={w.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center', padding:12, borderBottom:'var(--outline)'}}>
                   <div>
                     <div style={{fontWeight:600}}>{w.name}</div>
-                    <div style={{fontSize:12,color:'#64748b'}}>Share ID: <strong>{w.shareId || ''}</strong></div>
+                    <div style={{fontSize:12,color:'var(--text-muted)'}}>Share ID: <strong>{w.shareId || ''}</strong></div>
                   </div>
                   <div style={{display:'flex',gap:8}}>
-                    <button className="auth-button" onClick={()=> navigator.clipboard?.writeText(w.shareId || '')}>Copy ID</button>
-                    <button className="auth-button" onClick={()=> window.location.hash = `#/workspace/${w.id}`}>View</button>
+                    <button className="btn-primary btn-sm" onClick={()=> navigator.clipboard?.writeText(w.shareId || '')}>Copy ID</button>
+                    <button className="btn-ghost btn-sm" onClick={()=> window.location.hash = `#/workspace/${w.id}`}>View</button>
                   </div>
                 </div>
               ))}

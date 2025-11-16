@@ -10,21 +10,21 @@ export default function Landing() {
 
   return (
     <Layout>
-      <div style={{ minHeight: 'calc(100vh - 80px)', background: 'linear-gradient(180deg,#0c1725,#071228)', padding: 28 }}>
+      <div style={{ minHeight: 'calc(100vh - 80px)', background: 'var(--page-bg)', padding: 28 }}>
         <main style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ maxWidth: 1100, width: '100%', display: 'flex', gap: 24 }}>
-            <section style={{ flex: 1, padding: 24 }}>
-              <h1 style={{ marginTop: 0, color: '#fff', fontSize: 48 }}>Welcome back</h1>
-              <p style={{ fontSize: 18, color: '#9aa4b2' }}>Manage your account and workspaces here. Create a workspace or request to join an existing one using the workspace ID. Workspace admins must approve join requests.</p>
+            <section style={{ flex: 1, padding: 24, background: 'var(--container-bg)', borderRadius: 12 }}>
+              <h1 style={{ marginTop: 0, color: 'var(--text-primary)', fontSize: 48 }}>Welcome back</h1>
+              <p style={{ fontSize: 18, color: 'var(--text-muted)' }}>Manage your account and workspaces here. Create a workspace or request to join an existing one using the workspace ID. Workspace admins must approve join requests.</p>
               <div style={{ marginTop: 24, display: 'flex', gap: 12 }}>
-                <button className="auth-button" onClick={() => window.location.hash = '#/create-workspace'} style={{ width: 160 }}>Create Workspace</button>
-                <button className="auth-button" onClick={() => window.location.hash = '#/join-workspace'} style={{ width: 160 }}>Join Workspace</button>
-                <button className="auth-button" onClick={() => window.location.hash = '#/workspaces'} style={{ width: 160 }}>View My Workspaces</button>
+                <button className="btn-primary" onClick={() => window.location.hash = '#/create-workspace'} style={{ width: 160 }}>Create Workspace</button>
+                <button className="btn-primary" onClick={() => window.location.hash = '#/join-workspace'} style={{ width: 160 }}>Join Workspace</button>
+                <button className="btn-primary" onClick={() => window.location.hash = '#/workspaces'} style={{ width: 160 }}>View My Workspaces</button>
               </div>
             </section>
-            <aside style={{ width: 320, background: '#0f1724', borderRadius: 8, padding: 20 }}>
-              <h3 style={{ marginTop: 0, color: '#eef2ff' }}>Quick Links</h3>
-              <ul style={{ color: '#9aa4b2' }}>
+            <aside style={{ width: 320, background: 'var(--container-bg)', borderRadius: 8, padding: 20 }}>
+              <h3 style={{ marginTop: 0, color: 'var(--text-primary)' }}>Quick Links</h3>
+              <ul style={{ color: 'var(--text-muted)' }}>
                 <li>Profile</li>
                 <li>Manage workspaces</li>
               </ul>

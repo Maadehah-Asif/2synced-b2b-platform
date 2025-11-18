@@ -6,6 +6,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 export default function Signup(){
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [agree, setAgree] = useState(true);
   const [newsletter, setNewsletter] = useState(false);
@@ -16,12 +17,21 @@ export default function Signup(){
     e.preventDefault();
     setLoading(true); setError(null);
     try{
+      if (password !== confirmPassword) {
+        setLoading(false);
+        setError('Passwords do not match. Please re-enter them.');
+        return;
+      }
       const res = await fetch(`${API_URL}/auth/signup`,{ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
       const data = await res.json();
       if(!res.ok) throw new Error(data?.error || 'Signup failed');
       if(data?.token) localStorage.setItem('token', data.token);
       window.location.hash = '#/landing';
     }catch(err:any){ setError(err.message); } finally{ setLoading(false); }
+  }
+
+  function handleGoogleSignup() {
+    window.location.href = `${API_URL}/auth/google`;
   }
 
   return (
@@ -35,14 +45,6 @@ export default function Signup(){
           <a className="auth-back" href="#" onClick={(e)=>{ e.preventDefault(); history.back(); }}>&lt; Back</a>
           <h2 className="auth-title" style={{ color: 'var(--text)' }}>Sign up</h2>
           <p className="auth-subtitle" style={{ color: 'var(--muted)' }}>Sign up for free to access to in any of our products</p>
-
-          {/* Google signup (static) */}
-          <div style={{ marginBottom: 14 }}>
-            <button type="button" className="auth-button" style={{ background: 'transparent', color: 'var(--text)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <img src={'/src/assets/auth/google logo.png'} alt="google" style={{ height: 18 }} />
-              <span style={{ color: 'var(--text)' }}>Sign up with Google</span>
-            </button>
-          </div>
 
           <label>Email address</label>
           <input className="auth-input" type="email" value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="you@example.com" required />
@@ -59,6 +61,15 @@ export default function Signup(){
             />
             <input className="auth-input" type={showPassword ? 'text' : 'password'} value={password} onChange={(e)=>setPassword(e.target.value)} placeholder="Use 8 or more characters" required />
           </div>
+          <label style={{ marginTop: 12, display: 'block' }}>Confirm password</label>
+          <input
+            className="auth-input"
+            type={showPassword ? 'text' : 'password'}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Re-enter your password"
+            required
+          />
 
           <div style={{ marginTop: 8 }}>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -80,7 +91,21 @@ export default function Signup(){
           </div>
 
           {error && <div className="auth-error" style={{ marginTop: 12 }}>{error}</div>}
-          <button className="auth-button" type="submit" disabled={loading} style={{ marginTop: 12 }}>{loading ? 'Signing up...' : 'Sign up'}</button>
+          <button className="auth-button auth-button-primary" type="submit" disabled={loading} style={{ marginTop: 12 }}>{loading ? 'Signing up...' : 'Create an account'}</button>
+
+          <div className="auth-divider">
+            <span>OR</span>
+          </div>
+
+          {/* Google signup via backend OAuth */}
+          <button
+            type="button"
+            className="auth-button auth-button-google"
+            onClick={handleGoogleSignup}
+          >
+            <img src={'/src/assets/auth/google logo.png'} alt="google" />
+            <span>Continue with Google</span>
+          </button>
 
           <div className="auth-footer" style={{ color: 'var(--muted)' }}>
             Already have an account? <a href="#/login">Log in</a>

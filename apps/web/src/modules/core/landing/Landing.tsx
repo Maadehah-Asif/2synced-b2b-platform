@@ -4,8 +4,23 @@ import "../auth/auth.css";
 
 export default function Landing() {
   useEffect(() => {
+    // Handle Google redirect: #/landing?token=...
+    const hash = window.location.hash || '';
+    const [_, query = ''] = hash.split('?');
+    const params = new URLSearchParams(query);
+    const tokenFromUrl = params.get('token');
+
+    if (tokenFromUrl) {
+      localStorage.setItem('token', tokenFromUrl);
+      // Clean URL so token isn't visible any more
+      window.location.hash = '#/landing';
+      return;
+    }
+
     const token = localStorage.getItem('token');
-    if (!token) window.location.hash = '#/login';
+    if (!token) {
+      window.location.hash = '#/login';
+    }
   }, []);
 
   return (
@@ -24,9 +39,25 @@ export default function Landing() {
             </section>
             <aside style={{ width: 320, background: 'var(--container-bg)', borderRadius: 8, padding: 20 }}>
               <h3 style={{ marginTop: 0, color: 'var(--text-primary)' }}>Quick Links</h3>
-              <ul style={{ color: 'var(--text-muted)' }}>
-                <li>Profile</li>
-                <li>Manage workspaces</li>
+              <ul style={{ color: 'var(--text-muted)', listStyle: 'none', paddingLeft: 0 }}>
+                <li style={{ marginBottom: 8 }}>
+                  <button
+                    className="btn-ghost"
+                    style={{ width: '100%', textAlign: 'left' }}
+                    onClick={() => (window.location.hash = '#/profile')}
+                  >
+                    Profile
+                  </button>
+                </li>
+                <li>
+                  <button
+                    className="btn-ghost"
+                    style={{ width: '100%', textAlign: 'left' }}
+                    onClick={() => (window.location.hash = '#/workspaces')}
+                  >
+                    Manage workspaces
+                  </button>
+                </li>
               </ul>
             </aside>
           </div>

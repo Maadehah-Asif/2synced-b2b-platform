@@ -32,6 +32,10 @@ export default function Login() {
     }
   }
 
+  function handleGoogleSignIn() {
+    window.location.href = `${API_URL}/auth/google`;
+  }
+
   return (
     <div className="auth-layout auth-light">
       <div className="auth-brand">2-Synced</div>
@@ -43,14 +47,6 @@ export default function Login() {
           <a className="auth-back" href="#" onClick={(e) => { e.preventDefault(); history.back(); }}>&lt; Back</a>
           <h2 className="auth-title" style={{ color: 'var(--text)' }}>ACCOUNT LOGIN</h2>
           <p className="auth-subtitle" style={{ color: 'var(--muted)' }}>If you are already a member you can login with your email address and password.</p>
-
-          {/* Google signin (static) */}
-          <div style={{ marginBottom: 14 }}>
-            <button type="button" className="auth-button" style={{ background: 'transparent', color: 'var(--text)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => { /* placeholder */ }}>
-              <img src={'/src/assets/auth/google logo.png'} alt="google" style={{ height: 18 }} />
-              <span style={{ color: 'var(--text)' }}>Sign in with Google</span>
-            </button>
-          </div>
 
           <label>Email address</label>
           <input className="auth-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
@@ -72,8 +68,22 @@ export default function Login() {
             <label htmlFor="remember">Remember me</label>
           </div>
           {error && <div className="auth-error">{error}</div>}
-          <button className="auth-button" disabled={loading}>
+          <button className="auth-button auth-button-primary" disabled={loading}>
             {loading ? "Logging in..." : "Login"}
+          </button>
+
+          <div className="auth-divider">
+            <span>OR</span>
+          </div>
+
+          {/* Google signin via backend OAuth */}
+          <button
+            type="button"
+            className="auth-button auth-button-google"
+            onClick={handleGoogleSignIn}
+          >
+            <img src={'/src/assets/auth/google logo.png'} alt="google" />
+            <span>Continue with Google</span>
           </button>
           <div className="auth-footer">
             Don’t have an account? <a href="#/signup">Sign up here</a>

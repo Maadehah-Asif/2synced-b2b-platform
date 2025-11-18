@@ -177,17 +177,61 @@
   margin:10px 0;
 }
 
-/* Primary CTA */
+/* Base button */
 .auth-button{
   width:100%;
   padding:12px 14px;
+  border-radius:10px;
+  font-weight:600;
+  margin-top:12px; /* add spacing above CTA */
+}
+
+/* Primary CTA (blue) */
+.auth-button-primary{
   background:linear-gradient(180deg,var(--primary),var(--accent));
   color:#fff;
   border:0;
-  border-radius:10px;
-  font-weight:600;
   box-shadow: 0 10px 28px rgba(30,86,255,0.18);
-  margin-top:12px; /* add spacing above CTA */
+}
+
+/* OR divider */
+.auth-divider{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:18px 0;
+  color:var(--muted);
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:0.08em;
+}
+
+.auth-divider::before,
+.auth-divider::after{
+  content:"";
+  flex:1;
+  height:1px;
+  background:#e5e7eb;
+}
+
+/* Google button: white pill with dark border */
+.auth-button-google{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  width:100%;
+  background:#ffffff;
+  color:#111827;
+  border:1px solid #111827;
+  border-radius:999px;
+  padding:10px 14px;
+  box-shadow:0 1px 2px rgba(15,23,42,0.05);
+}
+
+.auth-button-google img{
+  height:18px;
+  width:18px;
 }
 
 .auth-button:disabled{ opacity:0.6; cursor:not-allowed; }

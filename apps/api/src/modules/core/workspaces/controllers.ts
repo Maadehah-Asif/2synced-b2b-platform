@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { Workspace } from "../auth/models/Workspace.js";
 import { WorkspaceMember } from "../auth/models/WorkspaceMember.js";
 import { verifyToken } from "../auth/utils/jwt.js";
+import { validateWorkspaceName } from "../utils/validation.js";
 
 function getUserIdFromReq(req: Request) {
   const auth = req.header("authorization") || "";
@@ -17,11 +18,12 @@ export async function createWorkspace(req: Request, res: Response) {
     if (!userId) return res.status(401).json({ error: "missing_token" });
 
     const { name } = req.body || {};
-    if (!name || typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name_required" });
+    const nameError = typeof name === "string" ? validateWorkspaceName(name) : "Workspace name is required.";
+    if (nameError) return res.status(400).json({ error: nameError });
     const n = name.trim();
 
-    const existing = await Workspace.findOne({ name: n }).exec();
-    if (existing) return res.status(409).json({ error: "workspace_exists" });
+    const existing = await Workspace.findOne({ ownerUserId: userId, name: n }).exec();
+    if (existing) return res.status(409).json({ error: "You already have a workspace with this name. Please choose a different name." });
 
   // create workspace with a shareable ID
   const workspace = await Workspace.create({ name: n, ownerUserId: userId, status: "active" });

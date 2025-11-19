@@ -134,6 +134,28 @@ textarea:focus {
 .brand { font-weight: 800; color: var(--container-bg); cursor: pointer; }
 .btn-ghost-light { background: var(--container-bg); color: var(--primary-3); }
 
+/* Simple dropdown menu for workspace header */
+.dropdown { position: relative; }
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 200px;
+  background: var(--container-bg);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+  padding: 6px 0;
+  z-index: 2100;
+}
+.dropdown-menu-light .dropdown-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.dropdown-item:hover {
+  background: rgba(25,73,114,0.06);
+}
+
 /* Sidebar help text */
 .sidebar-help { font-size: 13px; color: rgba(255,255,255,0.85); }
 
@@ -145,7 +167,6 @@ textarea:focus {
 /* App root/layout */
 .app-root { min-height: 100vh; width: 100vw; }
 .app-layout { display: flex; padding-top: 80px; min-height: calc(100vh - 64px); background: var(--page-bg, #F9FBFE); width: 100%; }
-.sidebar { width: 260px; min-width: 200px; height: calc(100vh - 64px); overflow: auto; box-sizing: border-box; }
 .app-main { flex: 1; padding: 20px; background: var(--page-bg, #F9FBFE); min-height: calc(100vh - 64px); overflow: auto; }
 .card-pad { padding: 18px; max-height: calc(100vh - 140px); overflow: auto; box-sizing: border-box; }
 

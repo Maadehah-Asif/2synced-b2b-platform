@@ -7,6 +7,7 @@ import CreateWorkspace from './modules/core/landing/CreateWorkspace'
 import JoinWorkspace from './modules/core/landing/JoinWorkspace'
 import WorkspacesList from './modules/core/landing/WorkspacesList'
 import WorkspaceDetail from './modules/core/landing/WorkspaceDetail'
+import WorkspaceMembers from './modules/core/landing/WorkspaceMembers'
 import Profile from './modules/core/profile/Profile'
 import Upload from './modules/m01/Upload'
 import UploadPreview from './modules/m01/UploadPreview'
@@ -34,6 +35,7 @@ function App() {
   // Workspace & landing sub-routes
   if (route.startsWith('#/create-workspace')) return <CreateWorkspace />
   if (route.startsWith('#/join-workspace')) return <JoinWorkspace />
+  if (route.startsWith('#/workspace/') && route.includes('/members')) return <WorkspaceMembers />
   if (route.startsWith('#/workspace/')) return <WorkspaceDetail />
   if (route.startsWith('#/workspaces')) return <WorkspacesList />
 

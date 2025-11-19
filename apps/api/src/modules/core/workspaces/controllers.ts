@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { Workspace } from "../auth/models/Workspace.js";
 import { WorkspaceMember } from "../auth/models/WorkspaceMember.js";
+import { User } from "../auth/models/User.js";
 import { verifyToken } from "../auth/utils/jwt.js";
 import { validateWorkspaceName } from "../utils/validation.js";
 
@@ -10,6 +11,24 @@ function getUserIdFromReq(req: Request) {
   if (!token) return null;
   const payload = verifyToken(token);
   return payload.sub;
+}
+
+const ADMIN_ROLES = ["head_manager", "sales_manager", "marketing_manager"] as const;
+
+function isManagerRole(role: string | undefined) {
+  return role === "head_manager" || role === "sales_manager" || role === "marketing_manager";
+}
+
+async function ensureManagerExistsForTeamRole(workspaceId: string, role: string | undefined) {
+  if (role === "sales_team_member") {
+    const sm = await WorkspaceMember.findOne({ workspaceId, role: "sales_manager", status: "active" }).exec();
+    if (!sm) return "sales_manager_required";
+  }
+  if (role === "marketing_team_member") {
+    const mm = await WorkspaceMember.findOne({ workspaceId, role: "marketing_manager", status: "active" }).exec();
+    if (!mm) return "marketing_manager_required";
+  }
+  return null;
 }
 
 export async function createWorkspace(req: Request, res: Response) {
@@ -86,8 +105,9 @@ export async function listJoinRequests(req: Request, res: Response) {
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(401).json({ error: "missing_token" });
     const workspaceId = req.params.id;
-    // only head_manager can approve/reject and view join requests
-    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'head_manager', status: 'active' }).exec();
+    if (!workspaceId) return res.status(400).json({ error: "workspaceId_required" });
+    // only managers can approve/reject and view join requests
+    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: { $in: ADMIN_ROLES }, status: 'active' }).exec();
     if (!admin) return res.status(403).json({ error: 'not_admin' });
   // include requester user info (email, fullName) to help admins decide
     const requests = await WorkspaceMember.find({ workspaceId, status: 'pending' }).populate({ path: 'userId', select: 'email fullName' }).exec();
@@ -103,6 +123,7 @@ export async function listMembers(req: Request, res: Response) {
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(401).json({ error: "missing_token" });
     const workspaceId = req.params.id;
+    if (!workspaceId) return res.status(400).json({ error: "workspaceId_required" });
     const member = await WorkspaceMember.findOne({ workspaceId, userId, status: 'active' }).exec();
     if (!member) return res.status(403).json({ error: 'not_member' });
     const members = await WorkspaceMember.find({ workspaceId }).populate({ path: 'userId', select: 'email fullName' }).exec();
@@ -118,7 +139,9 @@ export async function updateMemberRole(req: Request, res: Response) {
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(401).json({ error: "missing_token" });
     const { id: workspaceId, memberId } = req.params;
-    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'head_manager', status: 'active' }).exec();
+    if (!workspaceId) return res.status(400).json({ error: "workspaceId_required" });
+    if (!memberId) return res.status(400).json({ error: "memberId_required" });
+    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: { $in: ADMIN_ROLES }, status: 'active' }).exec();
     if (!admin) return res.status(403).json({ error: 'not_admin' });
     const { role, status } = req.body || {};
     const member = await WorkspaceMember.findOne({ _id: memberId, workspaceId }).exec();
@@ -127,7 +150,28 @@ export async function updateMemberRole(req: Request, res: Response) {
     if (String(member.userId) === String(userId)) {
       return res.status(400).json({ error: 'cannot_edit_own_role' });
     }
-    if (role) member.role = role;
+    if (role) {
+      // Only managers can assign roles; already enforced above.
+      // Enforce single sales/marketing manager per workspace
+      if (role === 'sales_manager' || role === 'marketing_manager') {
+        const existingManager = await WorkspaceMember.findOne({
+          workspaceId,
+          role,
+          status: 'active',
+          _id: { $ne: memberId },
+        }).exec();
+        if (existingManager) {
+          return res.status(409).json({ error: `${role}_already_assigned` });
+        }
+      }
+
+      const managerRequirementError = await ensureManagerExistsForTeamRole(workspaceId, role);
+      if (managerRequirementError) {
+        return res.status(400).json({ error: managerRequirementError });
+      }
+
+      member.role = role;
+    }
     if (status) member.status = status;
     await member.save();
     return res.json({ ok: true });
@@ -142,10 +186,18 @@ export async function approveRequest(req: Request, res: Response) {
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(401).json({ error: "missing_token" });
     const { id: workspaceId, memberId } = req.params;
-    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'head_manager', status: 'active' }).exec();
+    if (!workspaceId) return res.status(400).json({ error: "workspaceId_required" });
+    if (!memberId) return res.status(400).json({ error: "memberId_required" });
+    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: { $in: ADMIN_ROLES }, status: 'active' }).exec();
     if (!admin) return res.status(403).json({ error: 'not_admin' });
     const member = await WorkspaceMember.findOne({ _id: memberId, workspaceId }).exec();
     if (!member) return res.status(404).json({ error: 'member_not_found' });
+
+    const managerRequirementError = await ensureManagerExistsForTeamRole(workspaceId, member.role);
+    if (managerRequirementError) {
+      return res.status(400).json({ error: managerRequirementError });
+    }
+
     member.status = 'active';
     await member.save();
     return res.json({ ok: true });
@@ -160,7 +212,9 @@ export async function rejectRequest(req: Request, res: Response) {
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(401).json({ error: "missing_token" });
     const { id: workspaceId, memberId } = req.params;
-    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: 'head_manager', status: 'active' }).exec();
+    if (!workspaceId) return res.status(400).json({ error: "workspaceId_required" });
+    if (!memberId) return res.status(400).json({ error: "memberId_required" });
+    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: { $in: ADMIN_ROLES }, status: 'active' }).exec();
     if (!admin) return res.status(403).json({ error: 'not_admin' });
     const member = await WorkspaceMember.findOne({ _id: memberId, workspaceId }).exec();
     if (!member) return res.status(404).json({ error: 'member_not_found' });
@@ -169,6 +223,78 @@ export async function rejectRequest(req: Request, res: Response) {
     return res.json({ ok: true });
   } catch (err) {
     console.error('[workspaces/reject]', err);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+}
+
+export async function inviteByEmail(req: Request, res: Response) {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: 'missing_token' });
+    const workspaceId = req.params.id;
+    if (!workspaceId) return res.status(400).json({ error: 'workspaceId_required' });
+    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: { $in: ADMIN_ROLES }, status: 'active' }).exec();
+    if (!admin) return res.status(403).json({ error: 'not_admin' });
+
+    const { email, role } = req.body || {};
+    if (!email || typeof email !== 'string') return res.status(400).json({ error: 'email_required' });
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const user = await User.findOne({ email: normalizedEmail }).exec();
+    if (!user) return res.status(404).json({ error: 'user_not_found' });
+
+    const existingMember = await WorkspaceMember.findOne({ workspaceId, userId: user._id }).exec();
+    if (existingMember) {
+      return res.status(200).json({
+        message: existingMember.status === 'pending' ? 'request_pending' : 'already_member',
+      });
+    }
+
+    let targetRole = role || 'sales_team_member';
+
+    if (targetRole === 'sales_manager' || targetRole === 'marketing_manager') {
+      const existingManager = await WorkspaceMember.findOne({ workspaceId, role: targetRole, status: 'active' }).exec();
+      if (existingManager) {
+        return res.status(409).json({ error: `${targetRole}_already_assigned` });
+      }
+    }
+
+    const managerRequirementError = await ensureManagerExistsForTeamRole(workspaceId, targetRole);
+    if (managerRequirementError) {
+      return res.status(400).json({ error: managerRequirementError });
+    }
+
+    const member = await WorkspaceMember.create({ workspaceId, userId: user._id, role: targetRole, status: 'pending' });
+    return res.status(201).json({
+      message: 'invited',
+      member: { id: String(member._id), workspaceId: String(member.workspaceId), role: member.role, status: member.status },
+    });
+  } catch (err) {
+    console.error('[workspaces/inviteByEmail]', err);
+    return res.status(500).json({ error: 'internal_error' });
+  }
+}
+
+export async function removeMember(req: Request, res: Response) {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: 'missing_token' });
+    const { id: workspaceId, memberId } = req.params;
+    if (!workspaceId) return res.status(400).json({ error: 'workspaceId_required' });
+    if (!memberId) return res.status(400).json({ error: 'memberId_required' });
+    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: { $in: ADMIN_ROLES }, status: 'active' }).exec();
+    if (!admin) return res.status(403).json({ error: 'not_admin' });
+
+    const member = await WorkspaceMember.findOne({ _id: memberId, workspaceId }).exec();
+    if (!member) return res.status(404).json({ error: 'member_not_found' });
+    if (String(member.userId) === String(userId)) {
+      return res.status(400).json({ error: 'cannot_remove_self' });
+    }
+
+    await WorkspaceMember.deleteOne({ _id: memberId, workspaceId }).exec();
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[workspaces/removeMember]', err);
     return res.status(500).json({ error: 'internal_error' });
   }
 }

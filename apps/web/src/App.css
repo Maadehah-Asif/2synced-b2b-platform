@@ -1,8 +1,8 @@
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: left;
 }
 
 .logo {
@@ -12,10 +12,11 @@
   transition: filter 300ms;
 }
 .logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
+  /* use primary color drop shadow */
+  filter: drop-shadow(0 0 2em rgba(69,154,208,0.66)); /* var(--primary-2) */
 }
 .logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+  filter: drop-shadow(0 0 2em rgba(72,177,217,0.66)); /* var(--primary-1) */
 }
 
 @keyframes logo-spin {
@@ -40,3 +41,25 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Ensure anchor colors follow the project's theme variables and override any starter defaults
+   App.css is imported after index.css, so placing the link rules here prevents the Vite starter
+   purple link color from bleeding into the app. Use theme variables defined in styles/theme.css. */
+a, a:link, a:visited {
+  color: var(--primary-2);
+  text-decoration: inherit;
+}
+a:hover {
+  color: var(--primary-3);
+}
+
+/* Keep anchor rules that use theme variables. Avoid heavy-handed !important overrides so
+  browser extensions or third-party tools don't get masked — prefer diagnosing the root cause.
+  If necessary, more specific app-level selectors can be added later without global !important. */
+/* Note: the earlier defensive !important rules were removed after confirming the visual issue was
+  caused by a browser extension. The app now relies on the canonical theme variables in
+  `src/styles/theme.css`. */
+
+/* (Existing light-weight anchor rules above already set colors. We intentionally avoid global
+  !important fallbacks here.) */
+

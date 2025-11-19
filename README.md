@@ -167,7 +167,27 @@ ML lead score (example):
 curl -X POST http://localhost:8001/predict/lead -H "Content-Type: application/json" -d '{"email":"test@example.com"}'
 # -> {"lead_score":0.85} (placeholder)
 ```
+🗄️ Backend API (MongoDB + Express)
+Folder structure
+apps/api/
+ ├─ src/
+ │  ├─ index.ts          # main Express server
+ │  ├─ config/
+ │  │  ├─ env.ts         # loads .env and validates variables
+ │  │  └─ db.ts          # MongoDB connection logic
+ │  └─ modules/          # feature folders (m01..m09)
+ ├─ .env                 # secrets (not committed)
+ ├─ package.json
+ ├─ tsconfig.json
+ └─ node_modules/
 
+Environment file (create this manually)
+
+apps/api/.env
+
+PORT=4000
+MONGO_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net
+DB_NAME=twosynced_dev
 ## Environment variables
 
 Create `.env` files (they are gitignored):

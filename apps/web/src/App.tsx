@@ -17,6 +17,8 @@ import MergeCSV from './modules/m01/MergeCSV'
 import Module7Dropdown from './modules/m07/Module7Dropdown'
 import Element1Page from './modules/m07/Element1Page'
 import Element2Page from './modules/m07/Element2Page'
+import Element3Page from './modules/m07/Element3Page'
+import Element4Page from './modules/m07/Element4Page'
 
 function App() {
   const [route, setRoute] = useState<string>(window.location.hash || '#/login')
@@ -39,8 +41,10 @@ function App() {
   if (route.startsWith('#/create-workspace')) return <CreateWorkspace />
   if (route.startsWith('#/join-workspace')) return <JoinWorkspace />
   if (route.startsWith('#/workspace/') && route.includes('/members')) return <WorkspaceMembers />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/element3')) return <Element3Page />
   if (route.startsWith('#/workspace/') && route.includes('/m07/element2')) return <Element2Page />
   if (route.startsWith('#/workspace/') && route.includes('/m07/element1')) return <Element1Page />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/element4')) return <Element4Page />
   if (route.startsWith('#/workspace/') && route.includes('/m07/')) return <Element1Page />
   if (route.startsWith('#/workspace/')) return <WorkspaceDetail />
   if (route.startsWith('#/workspaces')) return <WorkspacesList />

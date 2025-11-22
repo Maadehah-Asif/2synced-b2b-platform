@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { stats, deleteCampaign, deleteDeal } from './controllers.js';
 import { runAttribution } from './controllers.js';
 import { previewDeals } from './controllers.js';
-import { getRunResults } from './controllers.js';
+import { getRunResults, roiDashboard, forecast } from './controllers.js';
 import { seedHttp, demoProjects } from './seedController.js';
 
 const router = Router();
@@ -19,6 +19,8 @@ router.get('/demo-projects', demoProjects);
 router.post('/run', runAttribution);
 router.get('/preview', previewDeals);
 router.get('/run/:id/results', getRunResults);
+router.get('/roi', roiDashboard);
+router.get('/forecast', forecast);
 // Protected deletions (workspace query param expected for role scoping)
 router.delete('/campaigns/:id', deleteCampaign);
 router.delete('/deals/:id', deleteDeal);

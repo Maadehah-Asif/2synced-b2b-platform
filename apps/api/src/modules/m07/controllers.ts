@@ -363,3 +363,249 @@ export async function previewDeals(req: Request, res: Response) {
     return res.status(500).json({ error: 'internal' });
   }
 }
+
+// ROI dashboard data for Page 3
+export async function roiDashboard(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+
+    // parse filters
+    const channelFilter = (req.query.channel as string) || null; // single channel or comma-separated
+    const startMonth = (req.query.start as string) || null; // YYYY-MM
+    const endMonth = (req.query.end as string) || null; // YYYY-MM
+    const minSpend = req.query.minSpend ? Number(req.query.minSpend) : null;
+    const minROI = req.query.minROI ? Number(req.query.minROI) : null;
+
+    // Precondition: ensure attribution results exist for this project
+    const hasAttrib = await AttributionResult.findOne({ project_id: projectOid }).lean();
+    if (!hasAttrib) return res.status(400).json({ error: 'no_attribution', message: 'No attribution results found. Please run attribution (Page 2) first.' });
+
+    // Precondition: ensure there are campaigns with spend (required to compute ROI)
+    const campaignsWithSpend = await Campaign.find({ project_id: projectOid, spend: { $gt: 0 } }).lean();
+    if (!campaignsWithSpend || campaignsWithSpend.length === 0) return res.status(400).json({ error: 'no_campaign_spend', message: 'No campaigns with spend found for this project. Add campaign spend to compute ROI.' });
+
+    // Build attributed sums per campaign, optionally limited to a date range (by deal.closed_at)
+    const matchStage: any = { project_id: projectOid };
+    // We'll join deals to filter by closed_at when start/end provided
+    let attribByCampaign: any[] = [];
+    if (startMonth || endMonth) {
+      const startDate = startMonth ? new Date(startMonth + '-01') : new Date('1970-01-01');
+      // set end to last day of month
+      const endDate = endMonth ? new Date(new Date(endMonth + '-01').getFullYear(), new Date(endMonth + '-01').getMonth() + 1, 0, 23, 59, 59, 999) : new Date();
+      attribByCampaign = await AttributionResult.aggregate([
+        { $match: matchStage },
+        { $lookup: { from: 'deals', localField: 'deal_id', foreignField: '_id', as: 'deal' } },
+        { $unwind: { path: '$deal', preserveNullAndEmptyArrays: false } },
+        { $match: { 'deal.closed_at': { $gte: startDate, $lte: endDate } } },
+        { $group: { _id: '$campaign_id', attributed: { $sum: '$revenue_share' } } }
+      ]).exec();
+    } else {
+      attribByCampaign = await AttributionResult.aggregate([
+        { $match: matchStage },
+        { $group: { _id: '$campaign_id', attributed: { $sum: '$revenue_share' } } }
+      ]).exec();
+    }
+
+    const campaignIds = attribByCampaign.map((r:any) => r._id).filter((id:any) => mongoose.isValidObjectId(id)).map((id:any) => new mongoose.Types.ObjectId(id));
+
+    // 2) campaign details
+    const campaigns = await Campaign.find({ project_id: projectOid }).lean();
+    const campaignMap: Record<string, any> = {};
+    for (const c of campaigns) campaignMap[String(c._id)] = c;
+
+    // Build campaign metrics array
+    const campaignsMetrics = attribByCampaign.map((r:any) => {
+      const cid = String(r._id);
+      const camp = campaignMap[cid] || null;
+      const spend = camp ? (Number(camp.spend) || 0) : 0;
+      const attributed = Number(r.attributed) || 0;
+      const profit = attributed - spend;
+      const roi = spend === 0 ? null : ((attributed - spend) / (spend || 1)) * 100;
+      return { campaign_id: cid, name: camp?.name || null, channel: camp?.channel || 'other', spend, attributed, profit, roi };
+    });
+
+    // Include campaigns with spend but zero attribution
+    for (const c of campaigns) {
+      const cid = String(c._id);
+      if (!campaignsMetrics.find((m:any) => m.campaign_id === cid)) {
+        const spend = Number(c.spend) || 0;
+        campaignsMetrics.push({ campaign_id: cid, name: c.name, channel: c.channel || 'other', spend, attributed: 0, profit: -spend, roi: spend === 0 ? null : ((0 - spend) / spend) * 100 });
+      }
+    }
+
+    // Apply filters: channel, minSpend, minROI
+    let filteredCampaigns = campaignsMetrics;
+    if (channelFilter) {
+      const chans = channelFilter.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      filteredCampaigns = filteredCampaigns.filter((c:any) => chans.includes(String(c.channel).toLowerCase()));
+    }
+    if (minSpend !== null) filteredCampaigns = filteredCampaigns.filter((c:any) => (c.spend||0) >= minSpend);
+    if (minROI !== null) filteredCampaigns = filteredCampaigns.filter((c:any) => (c.roi === null ? -Infinity : c.roi) >= minROI);
+
+    // Totals (after filters)
+    const totalAttributed = filteredCampaigns.reduce((s:any,m:any) => s + (m.attributed||0), 0);
+    const totalSpend = filteredCampaigns.reduce((s:any,m:any) => s + (m.spend||0), 0);
+    const netProfit = totalAttributed - totalSpend;
+    const overallROI = totalSpend === 0 ? null : ((totalAttributed - totalSpend) / (totalSpend || 1)) * 100;
+
+    // Monthly attributed revenue series (by deal.closed_at)
+    const monthlyPipeline: any[] = [
+      { $match: { project_id: projectOid } },
+      { $lookup: { from: 'deals', localField: 'deal_id', foreignField: '_id', as: 'deal' } },
+      { $unwind: { path: '$deal', preserveNullAndEmptyArrays: false } },
+      { $project: { revenue_share: 1, ym: { $dateToString: { format: '%Y-%m', date: '$deal.closed_at' } }, closed_at: '$deal.closed_at', campaign_id: '$campaign_id' } }
+    ];
+    // apply date filter if provided
+    if (startMonth || endMonth) {
+      const startDate = startMonth ? new Date(startMonth + '-01') : new Date('1970-01-01');
+      const endDate = endMonth ? new Date(new Date(endMonth + '-01').getFullYear(), new Date(endMonth + '-01').getMonth() + 1, 0, 23, 59, 59, 999) : new Date();
+      monthlyPipeline.push({ $match: { closed_at: { $gte: startDate, $lte: endDate } } });
+    }
+    // if channel filter provided, join campaigns and filter by channel
+    if (channelFilter) {
+      monthlyPipeline.push({ $lookup: { from: 'campaigns', localField: 'campaign_id', foreignField: '_id', as: 'campaign' } });
+      monthlyPipeline.push({ $unwind: { path: '$campaign', preserveNullAndEmptyArrays: false } });
+      const chans = channelFilter.split(',').map((s:string) => s.trim().toLowerCase()).filter(Boolean);
+      monthlyPipeline.push({ $match: { 'campaign.channel': { $in: chans } } });
+    }
+    monthlyPipeline.push({ $group: { _id: '$ym', attributed: { $sum: '$revenue_share' } } });
+    monthlyPipeline.push({ $sort: { _id: 1 } });
+    const monthlyAttribAgg = await AttributionResult.aggregate(monthlyPipeline).exec();
+    const monthlySeries = monthlyAttribAgg.map((r:any) => ({ month: r._id, attributed: r.attributed }));
+
+    // Channel contribution (from filtered campaigns)
+    const channelMap: Record<string, number> = {};
+    for (const m of filteredCampaigns) {
+      const ch = m.channel || 'other';
+      channelMap[ch] = (channelMap[ch] || 0) + (m.attributed || 0);
+    }
+    const channelContribution = Object.keys(channelMap).map(k => ({ channel: k, attributed: channelMap[k] }));
+
+    // Top/bottom lists
+    const sortedByROI = [...filteredCampaigns].sort((a:any,b:any)=> {
+      const ra = a.roi === null ? -Infinity : a.roi;
+      const rb = b.roi === null ? -Infinity : b.roi;
+      return rb - ra;
+    });
+    const top5 = sortedByROI.slice(0,5);
+    const bottom5 = sortedByROI.slice(-5).reverse();
+
+    return res.json({ ok: true, totalAttributed, totalSpend, netProfit, overallROI, campaigns: filteredCampaigns, monthlySeries, channelContribution, top5, bottom5 });
+  } catch (e) {
+    console.error('[m07/roiDashboard]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+// Forecasting endpoint for Page 4 (ROI Forecasting Dashboard)
+export async function forecast(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+
+    // months ahead to forecast (default 6)
+    const monthsAhead = req.query.months ? Math.max(1, Math.min(12, Number(req.query.months))) : 6;
+    const targetROI = req.query.target ? Number(req.query.target) : null; // optional alert threshold (percent)
+
+    // Get historical monthly attributed revenue (same as roiDashboard monthlySeries)
+    const monthlyPipeline: any[] = [
+      { $match: { project_id: projectOid } },
+      { $lookup: { from: 'deals', localField: 'deal_id', foreignField: '_id', as: 'deal' } },
+      { $unwind: { path: '$deal', preserveNullAndEmptyArrays: false } },
+      { $project: { revenue_share: 1, ym: { $dateToString: { format: '%Y-%m', date: '$deal.closed_at' } }, closed_at: '$deal.closed_at' } },
+      { $group: { _id: '$ym', attributed: { $sum: '$revenue_share' } } },
+      { $sort: { _id: 1 } }
+    ];
+    const monthlyAttribAgg = await AttributionResult.aggregate(monthlyPipeline).exec();
+    const monthlySeries = monthlyAttribAgg.map((r:any) => ({ month: r._id, attributed: Number(r.attributed || 0) }));
+
+    if (!monthlySeries || monthlySeries.length < 6) {
+      return res.status(400).json({ error: 'insufficient_history', message: 'Need at least 6 months of historical attributed revenue to forecast.' });
+    }
+
+    // Compute total spend for the project (used to approximate monthly spend)
+    const campaigns = await Campaign.find({ project_id: projectOid }).lean();
+    const totalSpend = campaigns.reduce((s:any, c:any) => s + (Number(c.spend) || 0), 0);
+    const monthsCount = monthlySeries.length;
+    const approxMonthlySpend = monthsCount > 0 ? (totalSpend / monthsCount) : 0;
+
+    // Build arrays for regression: x = 0..n-1, y = attributed revenue
+    const xs: number[] = monthlySeries.map((_, i) => i);
+    const ys: number[] = monthlySeries.map((p:any) => p.attributed);
+    const n = xs.length;
+    const xMean = xs.reduce((a,b) => a+b, 0)/n;
+    const yMean = ys.reduce((a,b) => a+b, 0)/n;
+    const Sxx = xs.reduce((s, xi) => s + Math.pow(xi - xMean, 2), 0);
+    // slope and intercept (simple linear regression)
+    const slope = Sxx === 0 ? 0 : xs.reduce((s, xi, i) => s + (xi - xMean) * ((ys[i] || 0) - yMean), 0) / Sxx;
+    const intercept = yMean - slope * xMean;
+
+    // residuals & standard error
+    const residuals = xs.map((xi, i) => (ys[i] || 0) - (intercept + slope * xi));
+    const rss = residuals.reduce((s, r) => s + r*r, 0);
+    const sigma2 = n > 2 ? rss / (n - 2) : 0;
+    const sigma = Math.sqrt(Math.max(0, sigma2));
+
+    // z for 80% CI (approx)
+    const z80 = 1.28155;
+
+    // Predict next months (month labels continue by adding months)
+    const lastIdx = Math.max(0, monthlySeries.length - 1);
+    const lastEntry = monthlySeries[lastIdx] || { month: '1970-01', attributed: 0 };
+    const lastMonthStr = String(lastEntry.month || '1970-01'); // 'YYYY-MM'
+    const parts = lastMonthStr.split('-');
+    const lastYear = Number(parts[0]) || 1970;
+    const lastM = Number(parts[1]) || 1;
+
+    const predictions: any[] = [];
+    for (let k = 1; k <= monthsAhead; k++) {
+      const xi = n - 1 + k;
+      const predY = intercept + slope * xi; // predicted attributed revenue
+      // standard error for prediction
+      const se_pred = Math.sqrt(sigma2 * (1 + (1/n) + Math.pow(xi - xMean, 2) / (Sxx || 1)));
+      const minY = predY - z80 * se_pred;
+      const maxY = predY + z80 * se_pred;
+
+      // compute month label
+      const date = new Date(lastYear, lastM -1 + k, 1);
+      const mlabel = date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0');
+
+      // future spend by default equals approxMonthlySpend; allow scenario param 'spendMultiplier' to scale
+      const spendMultiplier = req.query.spendMultiplier ? Number(req.query.spendMultiplier) : 1;
+      const futureSpend = approxMonthlySpend * (spendMultiplier || 1);
+
+      const roi = futureSpend === 0 ? null : ((predY - futureSpend) / (futureSpend || 1)) * 100;
+      const roiMin = futureSpend === 0 ? null : ((minY - futureSpend) / (futureSpend || 1)) * 100;
+      const roiMax = futureSpend === 0 ? null : ((maxY - futureSpend) / (futureSpend || 1)) * 100;
+
+      predictions.push({ month: mlabel, attributed: predY, attributed_min: minY, attributed_max: maxY, spend: futureSpend, roi, roi_min: roiMin, roi_max: roiMax });
+    }
+
+    // model accuracy metrics (on historical attribution predictions)
+    const predsHistorical = xs.map(xi => intercept + slope * xi);
+    const errors = ys.map((y,i)=> (y || 0) - (predsHistorical[i] || 0));
+    const mae = errors.reduce((s,e)=> s + Math.abs(e), 0) / n;
+    const mse = errors.reduce((s,e)=> s + e*e, 0) / n;
+
+    // Alerts: if any future predicted ROI falls below targetROI parameter
+    const alerts: string[] = [];
+    if (targetROI !== null) {
+      const below = predictions.filter(p => p.roi !== null && p.roi < targetROI);
+      if (below.length > 0) alerts.push(`Forecasted ROI drops below target (${targetROI}%) in ${below.length} month(s).`);
+    }
+    // Trend indicator based on average of next 3 months vs previous 3 months
+    const last3 = ys.slice(-3).reduce((s,v)=> s+v,0)/3;
+    const next3 = predictions.slice(0,3).reduce((s:any,p:any)=> s + (p.attributed||0),0) / Math.min(3,predictions.length);
+    let trend: 'up' | 'down' | 'stable' = 'stable';
+    if (next3 > last3 * 1.02) trend = 'up';
+    else if (next3 < last3 * 0.98) trend = 'down';
+
+    return res.json({ ok: true, model: { name: 'linear_regression', trained_at: new Date(), mae, mse }, historical: monthlySeries, approxMonthlySpend, totalSpend, predictions, alerts, trend });
+  } catch (e) {
+    console.error('[m07/forecast]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}

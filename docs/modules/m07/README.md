@@ -109,4 +109,57 @@ Notes and next improvements
 - Add pagination or filtering to the results endpoint for very large runs.
 - Add a UI page to list past runs and inspect them (run history), and an option to re-run with the same parameters.
 
+## Element 3 — ROI Dashboard (Page 3)
+
+Implemented features
+- Purpose: historical ROI analysis and campaign-level performance. Consumes attribution results (from Element 2) and campaign spend to compute ROI, profit, and channel contributions.
+- Endpoint: `GET /m07/roi?projectId=<id>[&channel=&start=&end=&minSpend=&minROI=]` returns campaign metrics, monthly attributed series, channel contributions, and top/bottom lists.
+- Frontend: `apps/web/src/modules/m07/Element3Page.tsx` displays tiles (total attributed, spend, ROI), a campaign ROI table, top/bottom performers, a monthly trend chart, and basic filtering controls.
+
+Validation & constraints (Element 3)
+- Requires attribution results to exist for the project. If none are found the endpoint returns `400 { error: 'no_attribution' }` with a message instructing to run attribution first.
+- Requires at least one campaign with `spend > 0`. If no campaigns report spend the endpoint returns `400 { error: 'no_campaign_spend' }` and a message to add campaign spend.
+- Filters: `channel` (single or comma-separated), `start` and `end` (YYYY-MM), `minSpend` (numeric), `minROI` (percent). These are applied server-side when computing the campaigns list and monthly series.
+
+## Element 4 — ROI Forecasting Dashboard (Page 4)
+
+Implemented features
+- Purpose: single-page forecasting dashboard that projects future ROI (3–6 months by default), shows confidence intervals, provides alerts when forecasts cross targets, and supports simple scenario testing (spend multiplier).
+- Endpoint: `GET /m07/forecast?projectId=<id>&months=6&spendMultiplier=1&target=20` returns:
+	- `historical`: array of `{ month, attributed }` (monthly attributed revenue)
+	- `approxMonthlySpend`: approximation of monthly campaign spend (total campaign spend divided by number of historical months)
+	- `predictions`: array of future months with `{ month, attributed, attributed_min, attributed_max, spend, roi, roi_min, roi_max }`
+	- `model`: metadata (`name`, `trained_at`, `mae`, `mse`)
+	- `alerts`: list of textual warnings (e.g., forecast drops below `target`)
+	- `trend`: `up|down|stable` indicator
+- Frontend: `apps/web/src/modules/m07/Element4Page.tsx` (new) contains:
+	- Summary tiles: projected ROI next month, trend indicator, 80% confidence range, model accuracy tile.
+	- Model Control Panel: shows current model, last trained date, and a placeholder "Retrain" button.
+	- Forecast Chart: simple SVG chart plotting historical ROI and predicted ROI with a shaded confidence band.
+	- Forecast Table: month-by-month predicted ROI with CI and trend arrows.
+	- Alerts & Insights: automated insights (e.g., "ROI projected to fall below target in 2 months").
+	- Scenario Testing (basic): change `spendMultiplier` and re-run to see impact; UI exposes months-ahead and multiplier inputs.
+	- Actions: Download CSV and link back to ROI Dashboard (Page 3).
+
+How forecasting works (plain language)
+- The endpoint reads historical monthly attributed revenue (built from `AttributionResult` joined with `Deal.closed_at`).
+- It requires at least 6 months of history; otherwise it returns `400 { error: 'insufficient_history' }`.
+- It fits a simple linear regression to attributed revenue (time → attributed revenue), predicts future attributed revenue for the selected months ahead, and computes ROI for future months as `(predicted_attributed - approx_monthly_spend) / approx_monthly_spend * 100`.
+- Confidence intervals (80%) are computed from regression residuals and returned per-month. Alerts are raised when predicted ROI falls below the `target` query parameter.
+
+Validation & constraints (Element 4)
+- REQUIRED: At least 6 months of historical attributed revenue must exist. If not, the endpoint returns `400 { error: 'insufficient_history' }`.
+- Project-level spend is approximated as total campaign `spend` divided evenly across historical months. For campaign-level forecasting users should provide campaign-level monthly spend history (not currently implemented) — the approximation is documented in the UI.
+- The forecasting model provided is a simple linear regression used for quick, explainable predictions. This is a safe default for a demo/preview; production should replace with ARIMA/Prophet or trained ML models, stored model metadata, and recorded training accuracy.
+
+Next improvements (suggested)
+- Persist training and model artifacts (serialize model, store accuracy metrics and last trained date) and enable server-side retrain with a dedicated job worker.
+- Add campaign-level historical spend and attributed time-series to support campaign-level forecasts and better scenario testing (pause campaign, shift budget).
+- Add more robust forecasting models (Prophet/ARIMA) and expose a model selector in the UI that maps to server-side implementations.
+
+Usage notes
+- Start by ensuring Page 2 (Attribution) has been run recently and campaigns have proper `spend` values.
+- Visit `#/workspace/<workspaceId>/m07/element4` to see the Forecasting Dashboard.
+
+
 

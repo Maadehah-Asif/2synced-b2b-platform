@@ -1,0 +1,13 @@
+.m7-rounded {
+  background: linear-gradient(180deg, #65A1BF 0%, #5E94B9 100%);
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 999px;
+  box-shadow: 0 6px 14px rgba(94,148,185,0.18);
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+  font-weight: 600;
+}
+.m7-rounded:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(94,148,185,0.22); }
+.m7-rounded:active { transform: translateY(0); }

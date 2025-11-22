@@ -14,6 +14,9 @@ import UploadPreview from './modules/m01/UploadPreview'
 import MergedList from './modules/m01/MergedList'
 import LeadsList from './modules/m01/LeadsList'
 import MergeCSV from './modules/m01/MergeCSV'
+import Module7Dropdown from './modules/m07/Module7Dropdown'
+import Element1Page from './modules/m07/Element1Page'
+import Element2Page from './modules/m07/Element2Page'
 
 function App() {
   const [route, setRoute] = useState<string>(window.location.hash || '#/login')
@@ -36,6 +39,9 @@ function App() {
   if (route.startsWith('#/create-workspace')) return <CreateWorkspace />
   if (route.startsWith('#/join-workspace')) return <JoinWorkspace />
   if (route.startsWith('#/workspace/') && route.includes('/members')) return <WorkspaceMembers />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/element2')) return <Element2Page />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/element1')) return <Element1Page />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/')) return <Element1Page />
   if (route.startsWith('#/workspace/')) return <WorkspaceDetail />
   if (route.startsWith('#/workspaces')) return <WorkspacesList />
 
@@ -47,7 +53,12 @@ function App() {
   if (route.startsWith('#/m01/upload')) return <Upload />
 
   // Fallback
-  return <Login />
+  return (
+    <>
+      <Module7Dropdown />
+      <Login />
+    </>
+  )
 }
 
 export default App

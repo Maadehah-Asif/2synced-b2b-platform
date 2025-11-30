@@ -20,6 +20,13 @@ export default function Module7Dropdown() {
     setOpen(false);
   }
 
+  function go(path: string){
+    const wid = getWorkspaceId();
+    if(!wid) return;
+    window.location.hash = `#/workspace/${wid}${path}`;
+    setOpen(false);
+  }
+
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (!ref.current) return
@@ -39,6 +46,13 @@ export default function Module7Dropdown() {
         </div>
         <div style={{ marginTop: 8 }}>
           <Page1Stats />
+        </div>
+        <div style={{ marginTop: 12, display:'grid', gap:6 }}>
+          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m07/campaigns/manage')}>Campaign Manager</button>
+          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m07/campaigns')}>View Campaigns</button>
+          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m07/touches/input')}>Add Touches</button>
+          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m07/touches')}>Campaign Touches</button>
+          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m07/journeys')}>Journey Preview</button>
         </div>
       </div>
     </div>

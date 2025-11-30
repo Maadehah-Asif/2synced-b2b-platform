@@ -19,6 +19,13 @@ import Element1Page from './modules/m07/Element1Page'
 import Element2Page from './modules/m07/Element2Page'
 import Element3Page from './modules/m07/Element3Page'
 import Element4Page from './modules/m07/Element4Page'
+import CampaignManager from './modules/m07/CampaignManager'
+import ViewCampaigns from './modules/m07/ViewCampaigns'
+import CampaignTouchInput from './modules/m07/CampaignTouchInput'
+import CampaignTouchViewer from './modules/m07/CampaignTouchViewer'
+import DealInput from './modules/m07/DealInput'
+import DealViewer from './modules/m07/DealViewer'
+import JourneyPreview from './modules/m07/JourneyPreview'
 
 function App() {
   const [route, setRoute] = useState<string>(window.location.hash || '#/login')
@@ -44,6 +51,13 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m07/element3')) return <Element3Page />
   if (route.startsWith('#/workspace/') && route.includes('/m07/element2')) return <Element2Page />
   if (route.startsWith('#/workspace/') && route.includes('/m07/element1')) return <Element1Page />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/campaigns/manage')) return <CampaignManager />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/campaigns')) return <ViewCampaigns />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/touches/input')) return <CampaignTouchInput />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/touches')) return <CampaignTouchViewer />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/deals/input')) return <DealInput />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/deals')) return <DealViewer />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/journeys')) return <JourneyPreview />
   if (route.startsWith('#/workspace/') && route.includes('/m07/element4')) return <Element4Page />
   if (route.startsWith('#/workspace/') && route.includes('/m07/')) return <Element1Page />
   if (route.startsWith('#/workspace/')) return <WorkspaceDetail />

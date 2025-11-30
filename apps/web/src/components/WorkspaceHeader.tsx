@@ -3,7 +3,7 @@ import '../styles/components.css';
 
 function getWorkspaceIdFromHash(){
   const hash = window.location.hash || '';
-  const m = hash.match(/workspace\/([^?]+)/);
+  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
   if (m) return m[1];
   const m2 = hash.match(/workspace=([a-f0-9]+)/i);
   return m2 ? m2[1] : null;
@@ -99,6 +99,14 @@ export default function WorkspaceHeader(){
                 <div className="dropdown-item" onClick={() => { setOpenMenu(null); go(`#/workspace/${workspaceId}/m07/element2`); }}>Element 2</div>
                 <div className="dropdown-item" onClick={() => { setOpenMenu(null); go(`#/workspace/${workspaceId}/m07/element3`); }}>Element 3</div>
                 <div className="dropdown-item" onClick={() => { setOpenMenu(null); go(`#/workspace/${workspaceId}/m07/element4`); }}>Element 4</div>
+                  <div className="dropdown-item" onClick={() => { setOpenMenu(null); go(`#/workspace/${workspaceId}/m07/campaigns`); }}>Campaigns</div>
+                  <div className="dropdown-item" onClick={() => { setOpenMenu(null); go(`#/workspace/${workspaceId}/m07/campaigns/manage`); }}>Add Campaign</div>
+                  <div className="dropdown-item" onClick={() => { setOpenMenu(null); go(`#/workspace/${workspaceId}/m07/touches`); }}>Campaign Touches</div>
+                  <div className="dropdown-item" onClick={() => { setOpenMenu(null); go(`#/workspace/${workspaceId}/m07/touches/input`); }}>Add Touches</div>
+                  <div className="dropdown-item" onClick={() => { setOpenMenu(null); go(`#/workspace/${workspaceId}/m07/deals`); }}>Deals</div>
+                  <div className="dropdown-item" onClick={() => { setOpenMenu(null); go(`#/workspace/${workspaceId}/m07/deals/input`); }}>Add Deals</div>
+                  <div className="dropdown-item" onClick={() => { setOpenMenu(null); go(`#/workspace/${workspaceId}/m07/journeys`); }}>Journey Preview</div>
+                {/* Import handled from Campaigns page — removed redundant menu item */}
               </div>
             )}
           </div>

@@ -21,7 +21,7 @@ Key backend pieces:
   - Uses GridFS buckets for file storage: `m01_uploads`, `m01_merged`, `m01_leads`, `m01_leads_inputs`, `m01_leads_outputs`.
   - Merge flow: uploads -> preview -> mapping templates -> merge -> save merged CSV -> generate ML input -> run local Python script -> persist model outputs -> create leads CSV.
 
-- Module M07 (attribution & revenue): `apps/api/src/modules/m07/` — new models and APIs for `Deal`, `Campaign`, `CampaignTouch`, `AttributionRun`, `AttributionResult`, plus `GET /m07/stats` for Page 1 aggregates and protected delete endpoints.
+- Module M06 (attribution & revenue): `apps/api/src/modules/m06/` — new models and APIs for `Deal`, `Campaign`, `CampaignTouch`, `AttributionRun`, `AttributionResult`, plus `GET /m06/stats` for Page 1 aggregates and protected delete endpoints.
 
 Security & Auth:
 - JWT signing/verification: `apps/api/src/modules/core/auth/utils/jwt.ts` — uses `ENV.JWT_SECRET`.

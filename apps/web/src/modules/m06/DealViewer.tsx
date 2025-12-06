@@ -1,4 +1,5 @@
 import Layout from '../../components/Layout';
+import ModuleBackButton from '../../components/ModuleBackButton';
 import { useEffect, useState } from 'react';
 import Autocomplete from '../../components/Autocomplete';
 import { listDeals, updateDeal, archiveDeal, deleteDealPermanent, searchLeads } from './services/deals';
@@ -103,6 +104,7 @@ export default function DealViewer(){
   return (
     <Layout>
       <main className="page-root">
+        <ModuleBackButton toSuffix="/m06" />
         <h2 style={{ marginTop:16 }}>Deals</h2>
         <div style={{ fontSize:12, color:'#555' }}>View, filter, edit, archive or delete deals.</div>
         <div style={{ marginTop:12, display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:12 }}>

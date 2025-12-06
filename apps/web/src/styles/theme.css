@@ -25,13 +25,17 @@
 
   /* Accent for graphs/visuals */
   --accent-graph: var(--primary-1);
+
+  /* Header colors provided by user */
+  --header-primary: #010872; /* main header */
+  --header-secondary: #727AB2; /* secondary header / workspace header */
 }
 
 /* Utility classes used across app */
 .app-container { background: var(--page-bg); color: var(--text-primary); }
 .card { background: var(--container-bg); box-shadow: var(--card-shadow); border-radius: 12px; border: var(--outline); }
-.btn-primary { background: linear-gradient(180deg, var(--btn-bg), var(--btn-bg-strong)); color: var(--btn-text); border: 0; padding: 8px 12px; border-radius: 8px; }
-.btn-ghost { background: transparent; border: 1px solid rgba(48,117,172,0.12); color: var(--primary-4); padding: 8px 12px; border-radius: 8px; }
+.btn-primary { background: var(--header-primary); color: var(--btn-text); border: 0; padding: 8px 12px; border-radius: 8px; }
+.btn-ghost { background: transparent; border: 1px solid rgba(16,8,114,0.18); color: var(--header-primary); padding: 8px 12px; border-radius: 8px; }
 
 /* compact button for header/sidebar */
 .btn-sm { padding: 6px 10px; font-size: 0.9em; border-radius: 8px; }

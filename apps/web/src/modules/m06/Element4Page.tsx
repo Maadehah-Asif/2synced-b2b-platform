@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import Layout from '../../components/Layout'
-import './module7.css'
+import ModuleBackButton from '../../components/ModuleBackButton'
+import './module6.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
@@ -36,7 +37,7 @@ export default function Element4Page(){
       params.set('months', String(monthsAhead));
       if(spendMultiplier) params.set('spendMultiplier', String(spendMultiplier));
       if(targetROI !== null) params.set('target', String(targetROI));
-      const res = await fetch(`${API_URL}/m07/forecast?${params.toString()}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+      const res = await fetch(`${API_URL}/m06/forecast?${params.toString()}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
       const j = await res.json();
       if(!res.ok) { setError(j && j.message ? String(j.message) : (j && j.error ? String(j.error) : 'error')); setData(null); }
       else setData(j);
@@ -116,6 +117,9 @@ export default function Element4Page(){
     <Layout>
       <main className="page-root">
         <div style={{ display: 'flex', gap: 16 }}>
+          <div style={{ position: 'absolute', left: 20, top: 84 }}>
+            <ModuleBackButton toSuffix="/m06" />
+          </div>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', gap: 12 }}>
               <div style={{ padding: 12, borderRadius: 8, background: '#fff', boxShadow: '0 4px 8px rgba(0,0,0,0.04)' }}>
@@ -141,7 +145,7 @@ export default function Element4Page(){
                 <div style={{ fontWeight: 700 }}>Forecast Chart</div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button className="btn-ghost" onClick={exportCSV}>Download CSV</button>
-                  <button className="btn-primary" onClick={()=> window.location.hash = `#/workspace/${workspaceId}/m07/element3`}>Back to ROI</button>
+                  <button className="btn-primary" onClick={()=> window.location.hash = `#/workspace/${workspaceId}/m06/element3`}>Back to ROI</button>
                 </div>
               </div>
 
@@ -241,7 +245,7 @@ export default function Element4Page(){
               <div style={{ fontWeight: 700 }}>Actions</div>
               <div style={{ marginTop: 8 }}>
                 <button className="btn-primary" onClick={exportCSV}>Download Forecast CSV</button>
-                <div style={{ marginTop: 8 }}><button className="btn-ghost" onClick={()=> window.location.hash = `#/workspace/${workspaceId}/m07/element3`}>Back to ROI Dashboard</button></div>
+                <div style={{ marginTop: 8 }}><button className="btn-ghost" onClick={()=> window.location.hash = `#/workspace/${workspaceId}/m06/element3`}>Back to ROI Dashboard</button></div>
               </div>
             </div>
           </div>

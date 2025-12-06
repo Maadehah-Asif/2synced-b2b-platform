@@ -75,7 +75,7 @@ export async function seedHttp(req: Request, res: Response) {
 
     return res.json({ ok: true, inserted: { campaigns: createdCampaigns.length, deals: createdDeals.length, results: results.length }, totalRevenue, totalAttributed, unattributed: totalRevenue - totalAttributed });
   } catch (e) {
-    console.error('[m07/seedHttp]', e);
+    console.error('[m06/seedHttp]', e);
     return res.status(500).json({ ok: false, error: 'internal' });
   }
 }
@@ -89,7 +89,7 @@ export async function demoProjects(_req: Request, res: Response) {
     const ids = (projects || []).map((p: any) => String(p));
     return res.json({ ok: true, projects: ids });
   } catch (e) {
-    console.error('[m07/demoProjects]', e);
+    console.error('[m06/demoProjects]', e);
     return res.status(500).json({ ok: false, error: 'internal' });
   }
 }

@@ -16,7 +16,7 @@ async function tryImport(base: string) {
 }
 
 async function run() {
-  console.log('[m07/seed] Preparing to connect to DB...');
+  console.log('[m06/seed] Preparing to connect to DB...');
 
   // load modules dynamically
   const dbMod = await tryImport('../../config/db');
@@ -35,7 +35,7 @@ async function run() {
   const AttributionResult = modelsResult.AttributionResult;
   const CampaignTouch = modelsTouch.CampaignTouch;
 
-  console.log('[m07/seed] Connecting to DB...');
+  console.log('[m06/seed] Connecting to DB...');
   await connectDB();
 
   const workspaceId = process.argv[2] || process.env.WORKSPACE_ID || '691d42a6f7055cb3eb370bc6';
@@ -46,13 +46,13 @@ async function run() {
   }
   const projectId = new mongoose.Types.ObjectId(workspaceId);
 
-  console.log('[m07/seed] Seeding demo data for workspace', workspaceId);
+  console.log('[m06/seed] Seeding demo data for workspace', workspaceId);
   // If a seed file is provided, load data from it. Otherwise generate sample data.
   let campaignsData: any[] = [];
   let dealsData: any[] = [];
   if (seedFile) {
     const p = path.isAbsolute(seedFile) ? seedFile : path.join(process.cwd(), seedFile);
-    console.log('[m07/seed] Loading seed file:', p);
+    console.log('[m06/seed] Loading seed file:', p);
     const raw = fs.readFileSync(p, 'utf-8');
     const parsed = JSON.parse(raw);
     campaignsData = (parsed.campaigns || []).map((c: any) => ({ ...c, project_id: projectId }));
@@ -87,10 +87,10 @@ async function run() {
   }
 
   const createdCampaigns = await Campaign.insertMany(campaignsData);
-  console.log('[m07/seed] Created campaigns:', createdCampaigns.map((c:any) => ({ id: String(c._id), name: c.name })));
+  console.log('[m06/seed] Created campaigns:', createdCampaigns.map((c:any) => ({ id: String(c._id), name: c.name })));
 
   const createdDeals = await Deal.insertMany(dealsData);
-  console.log('[m07/seed] Created deals:', createdDeals.map((d:any) => ({ id: String(d._id), revenue: d.revenue })));
+  console.log('[m06/seed] Created deals:', createdDeals.map((d:any) => ({ id: String(d._id), revenue: d.revenue })));
 
   // Create an attribution run
   const run = await AttributionRun.create({
@@ -102,7 +102,7 @@ async function run() {
     meta: { demo: true },
   });
 
-  console.log('[m07/seed] Created run:', { id: String(run._id), run_id: run.run_id });
+  console.log('[m06/seed] Created run:', { id: String(run._id), run_id: run.run_id });
 
   // For each deal, assign revenue across 1-2 campaigns
   const results: any[] = [];
@@ -127,7 +127,7 @@ async function run() {
   }
 
   const createdResults = await AttributionResult.insertMany(results);
-  console.log('[m07/seed] Created attribution results:', createdResults.length);
+  console.log('[m06/seed] Created attribution results:', createdResults.length);
 
   // Create CampaignTouch entries that correspond to attribution results (one touch per attribution row)
   const touchesToCreate: any[] = [];
@@ -141,20 +141,20 @@ async function run() {
   }
   if (touchesToCreate.length > 0) {
     const createdTouches = await CampaignTouch.insertMany(touchesToCreate);
-    console.log('[m07/seed] Created campaign touches:', createdTouches.length);
+    console.log('[m06/seed] Created campaign touches:', createdTouches.length);
   }
 
   // Summary
   const totalRevenue = createdDeals.reduce((s: number, d: any) => s + (d.revenue || 0), 0);
   const totalAttributed = createdResults.reduce((s: number, r: any) => s + (r.revenue_share || 0), 0);
 
-  console.log('[m07/seed] Summary: totalRevenue=', totalRevenue, ' totalAttributed=', totalAttributed, ' unattributed=', totalRevenue - totalAttributed);
+  console.log('[m06/seed] Summary: totalRevenue=', totalRevenue, ' totalAttributed=', totalAttributed, ' unattributed=', totalRevenue - totalAttributed);
 
-  console.log('[m07/seed] Done.');
+  console.log('[m06/seed] Done.');
   process.exit(0);
 }
 
 run().catch(err => {
-  console.error('[m07/seed] Error:', err);
+  console.error('[m06/seed] Error:', err);
   process.exit(1);
 });

@@ -1,4 +1,5 @@
 import Layout from '../../components/Layout';
+import ModuleBackButton from '../../components/ModuleBackButton';
 import { useEffect, useState } from 'react';
 import { listTouchesByCampaign, listTouchesByLead, updateTouch, archiveTouch, deleteTouchPermanent, searchCampaigns, searchLeads } from './services/touches';
 import Autocomplete from '../../components/Autocomplete';
@@ -119,6 +120,7 @@ export default function CampaignTouchViewer(){
   return (
     <Layout>
       <main className="page-root">
+        <ModuleBackButton toSuffix="/m06" />
         <h2 style={{ marginTop:16 }}>Campaign Touches</h2>
         <div style={{ fontSize:12, color:'#555' }}>View & manage interaction events. Toggle mode to switch context.</div>
         <div style={{ marginTop:12, display:'flex', gap:12 }}>

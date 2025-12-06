@@ -33,14 +33,14 @@ import { createDeal, listDeals, updateDeal, archiveDeal, deleteDealPermanent, im
 const router = Router();
 
 // Basic module routes
-router.get('/', (_req, res) => res.json({ ok: true, module: 'm07' }));
-// GET /m07/stats?projectId=...  (projectId may be workspaceId)
+router.get('/', (_req, res) => res.json({ ok: true, module: 'm06' }));
+// GET /m06/stats?projectId=...  (projectId may be workspaceId)
 router.get('/stats', stats);
-// POST /m07/seed  -> run demo seeder (safe, non-destructive by default)
+// POST /m06/seed  -> run demo seeder (safe, non-destructive by default)
 router.post('/seed', seedHttp);
-// GET /m07/demo-projects -> list projects with demo data
+// GET /m06/demo-projects -> list projects with demo data
 router.get('/demo-projects', demoProjects);
-// POST /m07/run -> run attribution for a project (body: { projectId, modelType })
+// POST /m06/run -> run attribution for a project (body: { projectId, modelType })
 router.post('/run', runAttribution);
 router.get('/preview', previewDeals);
 router.get('/journey/:id', journeyDetail);

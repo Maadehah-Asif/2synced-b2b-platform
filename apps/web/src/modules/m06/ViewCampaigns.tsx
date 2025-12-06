@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../../components/Layout';
+import ModuleBackButton from '../../components/ModuleBackButton';
 // Using local API_URL to match CampaignManager pattern
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -54,7 +55,7 @@ export default function ViewCampaigns(){
         startFrom,
         startTo,
       });
-      const res = await fetch(`${API_URL}/m07/campaigns?${params.toString()}`);
+      const res = await fetch(`${API_URL}/m06/campaigns?${params.toString()}`);
       const j = await res.json();
       if(!res.ok) { setError(j && j.error ? j.error : 'error'); setCampaigns([]); }
       else setCampaigns(j.campaigns || []);
@@ -69,7 +70,7 @@ export default function ViewCampaigns(){
     const ok = window.confirm(`Archive campaign "${c.name}"?`);
     if(!ok) return;
     try{
-      const res = await fetch(`${API_URL}/m07/campaigns/${c.id}/archive`, { method: 'POST' });
+      const res = await fetch(`${API_URL}/m06/campaigns/${c.id}/archive`, { method: 'POST' });
       const j = await res.json();
       if(!res.ok){ setToast({ msg: j && j.error ? j.error : 'Failed to archive', type: 'error' }); }
       else { fetchCampaigns(); setToast({ msg: 'Campaign archived', type: 'success' }); }
@@ -81,7 +82,7 @@ export default function ViewCampaigns(){
     const ok = window.prompt(`Type the campaign name to confirm permanent delete:\n${c.name}`);
     if(ok !== c.name) return;
     try{
-      const res = await fetch(`${API_URL}/m07/campaigns/${c.id}/permanent`, { method: 'DELETE' });
+      const res = await fetch(`${API_URL}/m06/campaigns/${c.id}/permanent`, { method: 'DELETE' });
       const j = await res.json();
       if(!res.ok){
         const msg = j && j.error ? j.error : 'Failed to delete';
@@ -111,7 +112,7 @@ export default function ViewCampaigns(){
       const payload:any = { name: editName, channel: editChannel };
       if(editStart) payload.start_date = editStart;
       if(editEnd) payload.end_date = editEnd;
-      const res = await fetch(`${API_URL}/m07/campaigns/${editing.id}`, {
+      const res = await fetch(`${API_URL}/m06/campaigns/${editing.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -126,6 +127,9 @@ export default function ViewCampaigns(){
     <Layout>
       <main className="page-root">
         <h2 style={{ marginTop: 16 }}>Campaigns</h2>
+        <div style={{ marginTop: 8 }}>
+          <ModuleBackButton toSuffix="/m06" />
+        </div>
         {!workspaceId && <div style={{ fontSize: 13 }}>Open a workspace to manage campaigns.</div>}
         <div style={{ marginTop: 12 }}>
           {/* Filters */}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import './module7.css';
+import './module6.css';
 import PieChart from './PieChart';
 import TimelineChart from './TimelineChart';
 import type { TimelinePoint } from './TimelineChart';
@@ -32,7 +32,7 @@ export default function Page1Stats({ compact = false }: Page1StatsProps) {
       try {
         const token = localStorage.getItem('token');
         const res = await fetch(
-          `${API_URL}/m07/stats?projectId=${encodeURIComponent(workspaceId)}`,
+          `${API_URL}/m06/stats?projectId=${encodeURIComponent(workspaceId)}`,
           {
             headers: {
               Authorization: token ? `Bearer ${token}` : '',
@@ -48,10 +48,10 @@ export default function Page1Stats({ compact = false }: Page1StatsProps) {
           setFetchError(
             `API ${res.status} ${res.statusText}: ${JSON.stringify(json)}`
           );
-          console.error('m07/stats error', res.status, json);
+          console.error('m06/stats error', res.status, json);
         }
       } catch (e: any) {
-        console.error('m07/stats fetch failed', e);
+        console.error('m06/stats fetch failed', e);
         setData(null);
       }
       setLoading(false);
@@ -64,14 +64,14 @@ export default function Page1Stats({ compact = false }: Page1StatsProps) {
       if (!workspaceId) return;
       if (!data || (data && data.totalRevenue === 0 && data.campaignCount === 0)) {
         try {
-          const res = await fetch(`${API_URL}/m07/demo-projects`);
+          const res = await fetch(`${API_URL}/m06/demo-projects`);
           const json = await res.json();
           if (res.ok && Array.isArray(json.projects) && json.projects.length > 0) {
             const p = json.projects[0];
             setAutoProject(p);
             const token = localStorage.getItem('token');
             const r2 = await fetch(
-              `${API_URL}/m07/stats?projectId=${encodeURIComponent(p)}`,
+              `${API_URL}/m06/stats?projectId=${encodeURIComponent(p)}`,
               { headers: { Authorization: token ? `Bearer ${token}` : '' } }
             );
             const j2 = await r2.json();
@@ -95,7 +95,7 @@ export default function Page1Stats({ compact = false }: Page1StatsProps) {
       <div style={{ fontSize: 13 }}>
         <div>No data</div>
         <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
-          API: {API_URL}/m07/stats?projectId={workspaceId}
+          API: {API_URL}/m06/stats?projectId={workspaceId}
         </div>
         {fetchError && (
           <div style={{ marginTop: 8, color: 'crimson' }}>Error: {fetchError}</div>

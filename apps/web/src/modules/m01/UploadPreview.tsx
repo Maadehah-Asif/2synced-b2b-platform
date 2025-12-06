@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Layout from '../../components/Layout';
+import ModuleBackButton from '../../components/ModuleBackButton';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -92,10 +93,10 @@ export default function UploadPreview(){
   return (
     <Layout>
       <div className="p-20">
-          <div className="mb-12">
-            <button type="button" className="btn-ghost" onClick={goBack}>Back</button>
+          <div className="mb-12" style={{ display: 'flex', alignItems: 'center' }}>
+            <ModuleBackButton toSuffix="/m01" />
+            <h2 style={{ margin: 0 }}>Preview {kind === 'merged' ? 'Merged' : (kind==='leads' ? 'Leads Code' : 'Upload')}</h2>
           </div>
-          <h2>Preview {kind === 'merged' ? 'Merged' : (kind==='leads' ? 'Leads Code' : 'Upload')}</h2>
         {message && <div className="mt-8 muted">{message}</div>}
 
         <div className="mt-8 mb-8">

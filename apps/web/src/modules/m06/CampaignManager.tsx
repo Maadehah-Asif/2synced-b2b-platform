@@ -1,4 +1,5 @@
 import Layout from '../../components/Layout'
+import ModuleBackButton from '../../components/ModuleBackButton'
 import { useEffect, useMemo, useState } from 'react'
 function Toast({ message, type, onClose }:{ message:string, type:'success'|'error', onClose:()=>void }){
   return (
@@ -68,7 +69,7 @@ export default function CampaignManager(){
         startFrom,
         startTo,
       });
-      const res = await fetch(`${API_URL}/m07/campaigns?${params.toString()}`);
+      const res = await fetch(`${API_URL}/m06/campaigns?${params.toString()}`);
       const j = await res.json();
       if(!res.ok) { setError(j && j.error ? j.error : 'error'); setCampaigns([]); }
       else setCampaigns(j.campaigns || []);
@@ -161,7 +162,7 @@ export default function CampaignManager(){
     form.append('startRow', String(startRow||1));
     if(endRow) form.append('endRow', String(endRow));
     try{
-      const res = await fetch(`${API_URL}/m07/campaigns/import/csv`, { method: 'POST', body: form });
+      const res = await fetch(`${API_URL}/m06/campaigns/import/csv`, { method: 'POST', body: form });
       const j = await res.json();
       if(!res.ok){ setSubmitStatus(j && j.error ? String(j.error) : 'Import failed'); }
       else {
@@ -188,7 +189,7 @@ export default function CampaignManager(){
     if(Object.keys(errs).length) return;
     const payload: any = { name: form.name, channel: form.channel, startDate: form.startDate || undefined, endDate: form.endDate || undefined, description: form.description || undefined, tags: form.tags ? form.tags.split(',').map((s:string)=>s.trim()).filter(Boolean) : [], spend: form.spend ? Number(form.spend) : 0 };
     try{
-      const url = selected ? `${API_URL}/m07/campaigns/${selected.id}` : `${API_URL}/m07/campaigns`;
+      const url = selected ? `${API_URL}/m06/campaigns/${selected.id}` : `${API_URL}/m06/campaigns`;
       const method = selected ? 'PUT' : 'POST';
       const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
       const j = await res.json();
@@ -201,9 +202,9 @@ export default function CampaignManager(){
 
   async function openEdit(c:any){ setSelected(c); setForm({ name: c.name||'', channel: c.channel||'email', startDate: c.start_date? new Date(c.start_date).toISOString().slice(0,10):'', endDate: c.end_date? new Date(c.end_date).toISOString().slice(0,10):'', description: c.description||'', tags: (c.tags||[]).join(', '), spend: c.spend||0 }); setShowForm(true); }
 
-  async function archive(c:any){ if(!confirm('Archive this campaign?')) return; const res = await fetch(`${API_URL}/m07/campaigns/${encodeURIComponent(c.id)}/archive`, { method: 'POST' }); if(res.ok) fetchCampaigns(); }
+  async function archive(c:any){ if(!confirm('Archive this campaign?')) return; const res = await fetch(`${API_URL}/m06/campaigns/${encodeURIComponent(c.id)}/archive`, { method: 'POST' }); if(res.ok) fetchCampaigns(); }
 
-  async function addSpend(c:any){ const date = prompt('Enter date (YYYY-MM-DD)'); const amount = prompt('Amount'); if(!date || !amount) return; const res = await fetch(`${API_URL}/m07/campaigns/${encodeURIComponent(c.id)}/spend`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ date, amount }) }); if(res.ok) fetchCampaigns(); else { const j = await res.json(); alert('Error: ' + (j && j.error)); } }
+  async function addSpend(c:any){ const date = prompt('Enter date (YYYY-MM-DD)'); const amount = prompt('Amount'); if(!date || !amount) return; const res = await fetch(`${API_URL}/m06/campaigns/${encodeURIComponent(c.id)}/spend`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ date, amount }) }); if(res.ok) fetchCampaigns(); else { const j = await res.json(); alert('Error: ' + (j && j.error)); } }
 
   // per-campaign CSV paste was removed — use 'Add Spend' for single entries or the workspace import below
 
@@ -213,7 +214,7 @@ export default function CampaignManager(){
     setImportResult(null);
     const payload:any = { csv: multiCsvText, campaignColumn: mapCampaignCol || null, dateColumn: mapDateCol || null, amountColumn: mapAmountCol || null, startRow: Number(startRow), projectId: workspaceId };
     try{
-      const res = await fetch(`${API_URL}/m07/campaigns/spend/csv`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const res = await fetch(`${API_URL}/m06/campaigns/spend/csv`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
       const j = await res.json();
       if(!res.ok) { alert('Import error: ' + (j && j.error)); setImportResult({ error: j && j.error }); return; }
       setImportResult(j);
@@ -226,6 +227,9 @@ export default function CampaignManager(){
     <Layout>
       <main className="page-root">
         <h2 style={{ marginTop: 16 }}>Add Campaigns</h2>
+        <div style={{ marginTop: 8 }}>
+          <ModuleBackButton toSuffix="/m06" />
+        </div>
         {!workspaceId && <div style={{ fontSize: 13 }}>Open a workspace to manage campaigns.</div>}
         <div style={{ marginTop: 12 }}>
           <div style={{ marginBottom: 8 }}>

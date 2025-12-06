@@ -1,4 +1,5 @@
 import Layout from '../../components/Layout';
+import ModuleBackButton from '../../components/ModuleBackButton';
 import { useEffect, useState } from 'react';
 import Autocomplete from '../../components/Autocomplete';
 import { previewJourneys, getJourney } from './services/journeys';
@@ -81,6 +82,7 @@ export default function JourneyPreview(){
   return (
     <Layout>
       <main className="page-root">
+        <ModuleBackButton toSuffix="/m06" />
         <h2 style={{ marginTop:16 }}>Journey Preview</h2>
         <div style={{ fontSize:12, color:'#555' }}>Inspect journeys for deals within an analysis window (pre-attribution).</div>
         <div style={{ marginTop:12, display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12 }}>

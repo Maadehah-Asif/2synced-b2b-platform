@@ -99,7 +99,7 @@ export async function stats(req: Request, res: Response) {
       monthlyAttributed,
     });
   } catch (e) {
-    console.error('[m07/stats]', e);
+    console.error('[m06/stats]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -148,7 +148,7 @@ export async function getRunResults(req: Request, res: Response) {
     const out = rows.map(r => ({ deal_id: String(r.deal_id), deal_external_id: dealMap[String(r.deal_id)]?.deal_id || null, campaign_id: String(r.campaign_id), campaignName: campaignMap[String(r.campaign_id)]?.name || null, revenue_share: r.revenue_share }));
     return res.json({ ok: true, results: out });
   } catch (e) {
-    console.error('[m07/getRunResults]', e);
+    console.error('[m06/getRunResults]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -186,7 +186,7 @@ export async function createCampaignTouch(req: Request, res: Response) {
     });
     return res.status(201).json({ ok: true, touch: { id: String(touch._id) } });
   } catch (e) {
-    console.error('[m07/createCampaignTouch]', e);
+    console.error('[m06/createCampaignTouch]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -215,7 +215,7 @@ export async function listCampaignTouchesByCampaign(req: Request, res: Response)
     const rows = await CampaignTouch.find(match).sort({ touched_at: -1 }).limit(500).lean();
     return res.json({ ok: true, touches: rows.map(r => ({ id: String(r._id), lead_id: String(r.lead_id), campaign_id: String(r.campaign_id), channel: r.channel, type: r.type, touched_at: r.touched_at, status: r.status })) });
   } catch (e) {
-    console.error('[m07/listCampaignTouchesByCampaign]', e);
+    console.error('[m06/listCampaignTouchesByCampaign]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -244,7 +244,7 @@ export async function listCampaignTouchesByLead(req: Request, res: Response) {
     const rows = await CampaignTouch.find(match).sort({ touched_at: -1 }).limit(500).lean();
     return res.json({ ok: true, touches: rows.map(r => ({ id: String(r._id), lead_id: String(r.lead_id), campaign_id: String(r.campaign_id), channel: r.channel, type: r.type, touched_at: r.touched_at, status: r.status })) });
   } catch (e) {
-    console.error('[m07/listCampaignTouchesByLead]', e);
+    console.error('[m06/listCampaignTouchesByLead]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -267,7 +267,7 @@ export async function updateCampaignTouch(req: Request, res: Response) {
     await touch.save();
     return res.json({ ok: true });
   } catch (e) {
-    console.error('[m07/updateCampaignTouch]', e);
+    console.error('[m06/updateCampaignTouch]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -282,7 +282,7 @@ export async function archiveCampaignTouch(req: Request, res: Response) {
     await touch.save();
     return res.json({ ok: true });
   } catch (e) {
-    console.error('[m07/archiveCampaignTouch]', e);
+    console.error('[m06/archiveCampaignTouch]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -297,7 +297,7 @@ export async function deleteCampaignTouchPermanent(req: Request, res: Response) 
     await CampaignTouch.deleteOne({ _id: id }).exec();
     return res.json({ ok: true, deleted: true });
   } catch (e) {
-    console.error('[m07/deleteCampaignTouchPermanent]', e);
+    console.error('[m06/deleteCampaignTouchPermanent]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -312,7 +312,7 @@ export async function importCampaignTouches(req: Request, res: Response) {
     const summary = await importCampaignTouchesCSV({ projectId, csv, map, startRow, endRow, campaignIdentifier, duplicatePolicy });
     return res.json({ ok: true, ...summary });
   } catch (e) {
-    console.error('[m07/importCampaignTouches]', e);
+    console.error('[m06/importCampaignTouches]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -356,7 +356,7 @@ export async function listCampaigns(req: Request, res: Response) {
     const camps = await Campaign.find(match).sort({ createdAt: -1 }).lean();
     return res.json({ ok: true, campaigns: camps.map((c:any)=> ({ id: String(c._id), campaign_id: c.campaign_id, name: c.name, channel: c.channel, start_date: c.start_date, end_date: c.end_date, spend: c.spend || 0, status: c.status || 'active', created_at: c.createdAt, description: c.description || null, tags: c.tags || [] })) });
   } catch (e) {
-    console.error('[m07/listCampaigns]', e);
+    console.error('[m06/listCampaigns]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -368,10 +368,10 @@ export async function createCampaign(req: Request, res: Response) {
     const { name, channel, startDate, endDate, description, tags, spend } = req.body || {};
     if (!name || !channel) return res.status(400).json({ error: 'name_channel_required' });
     const projectOid = new mongoose.Types.ObjectId(projectId);
-    const campaign = await Campaign.create({ campaign_id: `camp-${Date.now()}`, project_id: projectOid, channel, name: name.trim(), description: description || null, tags: Array.isArray(tags) ? tags : [], start_date: startDate ? new Date(startDate) : undefined, end_date: endDate ? new Date(endDate) : undefined, spend: Number(spend) || 0 });
+    const campaign = await Campaign.create({ campaign_id: `camp-${Date.now()}`, project_id: projectOid, channel, name: name.trim(), description: description || null, tags: Array.isArray(tags) ? tags : [], start_date: startDate ? new Date(startDate) : null, end_date: endDate ? new Date(endDate) : null, spend: Number(spend) || 0 });
     return res.status(201).json({ ok: true, campaign: { id: String(campaign._id), name: campaign.name } });
   } catch (e) {
-    console.error('[m07/createCampaign]', e);
+    console.error('[m06/createCampaign]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -386,14 +386,14 @@ export async function updateCampaign(req: Request, res: Response) {
     if (name) camp.name = name;
     if (channel) camp.channel = channel;
     if (description !== undefined) camp.description = description;
-    if (tags !== undefined) camp.tags = Array.isArray(tags) ? tags : camp.tags;
-    if (startDate !== undefined) camp.start_date = startDate ? new Date(startDate) : undefined;
-    if (endDate !== undefined) camp.end_date = endDate ? new Date(endDate) : undefined;
+    if (tags !== undefined) camp.tags = Array.isArray(tags) ? (tags as string[]) : null;
+    if (startDate !== undefined) camp.start_date = startDate ? new Date(startDate) : null;
+    if (endDate !== undefined) camp.end_date = endDate ? new Date(endDate) : null;
     if (status) camp.status = status;
     await camp.save();
     return res.json({ ok: true });
   } catch (e) {
-    console.error('[m07/updateCampaign]', e);
+    console.error('[m06/updateCampaign]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -408,7 +408,7 @@ export async function archiveCampaign(req: Request, res: Response) {
     await camp.save();
     return res.json({ ok: true });
   } catch (e) {
-    console.error('[m07/archiveCampaign]', e);
+    console.error('[m06/archiveCampaign]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -429,7 +429,7 @@ export async function addSpendEntry(req: Request, res: Response) {
     await camp.save();
     return res.status(201).json({ ok: true, spend: { id: String(spend._id), date: spend.date, amount: spend.amount } });
   } catch (e) {
-    console.error('[m07/addSpendEntry]', e);
+    console.error('[m06/addSpendEntry]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -443,7 +443,7 @@ export async function uploadSpendCSV(req: Request, res: Response) {
     if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
     const lines = csv.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     if (lines.length < 2) return res.status(400).json({ error: 'csv_no_rows' });
-    const header = lines[0].split(',').map(h => h.trim());
+    const header = (lines[0] || '').split(',').map(h => h.trim());
     const dcol = dateColumn ? header.indexOf(dateColumn) : 0;
     const acol = amountColumn ? header.indexOf(amountColumn) : 1;
     if (dcol < 0 || acol < 0) return res.status(400).json({ error: 'columns_not_found', header });
@@ -452,10 +452,10 @@ export async function uploadSpendCSV(req: Request, res: Response) {
     let inserted = 0;
     const srow = startRow ? Number(startRow) : 1;
     for (let i = srow; i < lines.length; i++) {
-      const cols = lines[i].split(',').map(c => c.trim());
+      const cols = (lines[i] || '').split(',').map(c => c.trim());
       const d = cols[dcol];
       const a = parseFloat((cols[acol] || '0').replace(/[^0-9.-]/g, '')) || 0;
-      const date = new Date(d);
+      const date = new Date(String(d));
       if (isNaN(date.getTime())) continue;
       await CampaignSpend.create({ campaign_id: camp._id, project_id: camp.project_id, date, amount: a, source: 'csv' });
       camp.spend = (Number(camp.spend) || 0) + a;
@@ -464,7 +464,7 @@ export async function uploadSpendCSV(req: Request, res: Response) {
     await camp.save();
     return res.json({ ok: true, inserted });
   } catch (e) {
-    console.error('[m07/uploadSpendCSV]', e);
+    console.error('[m06/uploadSpendCSV]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -479,7 +479,7 @@ export async function uploadSpendCSVMulti(req: Request, res: Response) {
     if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
     const lines = csv.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     if (lines.length < 2) return res.status(400).json({ error: 'csv_no_rows' });
-    const header = lines[0].split(',').map(h => h.trim());
+    const header = (lines[0] || '').split(',').map(h => h.trim());
 
     // determine columns
     const ccol = typeof campaignColumn === 'string' && campaignColumn ? header.indexOf(campaignColumn) : header.findIndex(h => /campaign|campaign_id|campaign name|campaignname/i.test(h));
@@ -496,7 +496,7 @@ export async function uploadSpendCSVMulti(req: Request, res: Response) {
     const campaignMap: Record<string, any> = {};
 
     for (let i = srow; i < lines.length; i++) {
-      const cols = lines[i].split(',').map(c => c.trim());
+      const cols = (lines[i] || '').split(',').map(c => c.trim());
       const campVal = (cols[campaignCol] || '').trim();
       const d = cols[dateCol];
       const aRaw = cols[amountCol] || '0';
@@ -529,7 +529,7 @@ export async function uploadSpendCSVMulti(req: Request, res: Response) {
 
     return res.json({ ok: true, inserted, campaigns: Object.keys(campaignMap).length });
   } catch (e) {
-    console.error('[m07/uploadSpendCSVMulti]', e);
+    console.error('[m06/uploadSpendCSVMulti]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -541,7 +541,7 @@ export async function listSpendEntries(req: Request, res: Response) {
     const rows = await CampaignSpend.find({ campaign_id: id }).sort({ date: -1 }).lean();
     return res.json({ ok: true, rows: rows.map((r:any)=> ({ id: String(r._id), date: r.date, amount: r.amount, source: r.source, note: r.note })) });
   } catch (e) {
-    console.error('[m07/listSpendEntries]', e);
+    console.error('[m06/listSpendEntries]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -559,7 +559,7 @@ export async function deleteCampaign(req: Request, res: Response) {
     await AttributionResult.deleteMany({ campaign_id: id }).exec();
     return res.json({ ok: true, deleted: true });
   } catch (e) {
-    console.error('[m07/deleteCampaign]', e);
+    console.error('[m06/deleteCampaign]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -582,7 +582,7 @@ export async function deleteCampaignPermanent(req: Request, res: Response) {
     await CampaignSpend.deleteMany({ campaign_id: id }).exec();
     return res.json({ ok: true, deleted: true });
   } catch (e) {
-    console.error('[m07/deleteCampaignPermanent]', e);
+    console.error('[m06/deleteCampaignPermanent]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -599,7 +599,7 @@ export async function importCampaignsCSV(req: Request, res: Response) {
 
     const lines = csv.split(/\r?\n/).filter(l => l.trim().length > 0);
     if (lines.length < 2) return res.status(400).json({ error: 'csv_no_rows' });
-    const header = lines[0].split(',').map(h => h.trim());
+    const header = (lines[0] || '').split(',').map(h => h.trim());
 
     function idx(name: string | null | undefined, fallback: number | null = null) {
       if (!name) return fallback;
@@ -628,7 +628,7 @@ export async function importCampaignsCSV(req: Request, res: Response) {
 
     for (let i = startRow; i <= endRow; i++) {
       const rowNum = i + 1; // account for header
-      const cols = lines[i].split(',').map(c => c.trim());
+      const cols = (lines[i] || '').split(',').map(c => c.trim());
       const name = cols[nameIdx] || '';
       const channel = (cols[channelIdx] || '').toLowerCase();
       const start = startIdx !== null ? cols[startIdx] : '';
@@ -671,7 +671,7 @@ export async function importCampaignsCSV(req: Request, res: Response) {
 
     return res.json({ ok: true, created, skipped, errors, selected: (endRow - startRow + 1) });
   } catch (e) {
-    console.error('[m07/importCampaignsCSV]', e);
+    console.error('[m06/importCampaignsCSV]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -687,7 +687,7 @@ export async function deleteDeal(req: Request, res: Response) {
     await AttributionResult.deleteMany({ deal_id: id }).exec();
     return res.json({ ok: true, deleted: true });
   } catch (e) {
-    console.error('[m07/deleteDeal]', e);
+    console.error('[m06/deleteDeal]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -724,7 +724,7 @@ export async function createDeal(req: Request, res: Response) {
     });
     return res.status(201).json({ ok: true, deal: { id: String(doc._id) } });
   } catch (e) {
-    console.error('[m07/createDeal]', e);
+    console.error('[m06/createDeal]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -760,7 +760,7 @@ export async function listDeals(req: Request, res: Response) {
     const rows = await Deal.find(match).sort({ closed_at: -1, createdAt: -1 }).limit(500).lean();
     return res.json(rows.map(r => ({ _id: String(r._id), deal_id: r.deal_id, lead_id: String(r.lead_id), amount: r.revenue, currency: (r as any).currency || 'USD', closed_won: r.closed_won, closed_at: r.closed_at, stage: (r as any).stage || undefined, notes: (r as any).notes || undefined, status: (r as any).status || 'active' })));
   } catch (e) {
-    console.error('[m07/listDeals]', e);
+    console.error('[m06/listDeals]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -785,7 +785,7 @@ export async function updateDeal(req: Request, res: Response) {
         if (isNaN(dt.getTime())) return res.status(400).json({ error: 'closed_at_invalid' });
         d.closed_at = dt;
       } else {
-        d.closed_at = undefined;
+        d.closed_at = null;
       }
     }
     if (stage !== undefined) (d as any).stage = stage || undefined;
@@ -793,7 +793,7 @@ export async function updateDeal(req: Request, res: Response) {
     await d.save();
     return res.json({ ok: true });
   } catch (e) {
-    console.error('[m07/updateDeal]', e);
+    console.error('[m06/updateDeal]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -808,7 +808,7 @@ export async function archiveDeal(req: Request, res: Response) {
     await d.save();
     return res.json({ ok: true });
   } catch (e) {
-    console.error('[m07/archiveDeal]', e);
+    console.error('[m06/archiveDeal]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -828,7 +828,7 @@ export async function deleteDealPermanent(req: Request, res: Response) {
     await AttributionResult.deleteMany({ deal_id: id }).exec();
     return res.json({ ok: true, deleted: true });
   } catch (e) {
-    console.error('[m07/deleteDealPermanent]', e);
+    console.error('[m06/deleteDealPermanent]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -842,7 +842,7 @@ export async function importDealsCSV(req: Request, res: Response) {
     if (!map || typeof map !== 'object') return res.status(400).json({ error: 'mapping_required' });
     const lines = csv.split(/\r?\n/).filter(l => l.trim().length > 0);
     if (lines.length < 2) return res.status(400).json({ error: 'csv_no_rows' });
-    const header = lines[0].split(',').map(h => h.trim());
+    const header = (lines[0] || '').split(',').map(h => h.trim());
 
     function idx(name: string | null | undefined, fallback: number | null = null) {
       if (!name) return fallback;
@@ -889,7 +889,7 @@ export async function importDealsCSV(req: Request, res: Response) {
     for (let i = srow; i <= erow; i++) {
       processed++;
       const rowNum = i + 1;
-      const cols = lines[i].split(',').map(c => c.trim());
+      const cols = (lines[i] || '').split(',').map(c => c.trim());
       const dealId = dealIdIdx !== null ? (cols[dealIdIdx] || '') : '';
       const leadVal = (cols[leadIdx] || '').trim();
       const amountRaw = amountIdx !== null ? (cols[amountIdx] || '') : '';
@@ -957,7 +957,7 @@ export async function importDealsCSV(req: Request, res: Response) {
 
     return res.json({ ok: true, processed, inserted, failed, duplicates, failedRows });
   } catch (e) {
-    console.error('[m07/importDealsCSV]', e);
+    console.error('[m06/importDealsCSV]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -965,29 +965,58 @@ export async function importDealsCSV(req: Request, res: Response) {
 export async function runAttribution(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    const modelType = (req.body && req.body.modelType) || (req.query.modelType as string) || 'linear';
     if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
     const projectOid = new mongoose.Types.ObjectId(projectId);
+
+    const modelType = (req.body && req.body.model_type) || req.body?.modelType || (req.query.modelType as string) || 'linear';
+    const dateFromRaw = req.body?.date_from || req.query.date_from;
+    const dateToRaw = req.body?.date_to || req.query.date_to;
+    const closedWonOnly = req.body?.closedWonOnly === true || req.query.closedWonOnly === 'true';
+    const minAmount = req.body?.minAmount !== undefined ? Number(req.body.minAmount) : (req.query.minAmount !== undefined ? Number(req.query.minAmount) : undefined);
+    const includeArchived = req.body?.includeArchived === true || req.query.includeArchived === 'true';
+
+    if (!dateFromRaw || !dateToRaw) return res.status(400).json({ error: 'date_range_required' });
+    const dateFrom = new Date(dateFromRaw);
+    const dateTo = new Date(dateToRaw);
+    if (isNaN(dateFrom.getTime()) || isNaN(dateTo.getTime())) return res.status(400).json({ error: 'invalid_dates' });
+    if (dateFrom.getTime() > dateTo.getTime()) return res.status(400).json({ error: 'start_after_end' });
+
+    // prevent overlapping running run for same project
+    const existingRunning = await AttributionRun.findOne({ project_id: projectOid, status: 'running' }).lean();
+    if (existingRunning) return res.status(409).json({ error: 'run_in_progress' });
 
     const allowed = ['first_touch', 'last_touch', 'linear'];
     const model = allowed.includes(modelType) ? modelType : 'linear';
 
-    // create a run stub
-    const run = await AttributionRun.create({ run_id: `run-${Date.now()}`, project_id: projectOid, model_type: model as any, timestamp: new Date(), status: 'running', meta: { initiatedBy: 'api' } });
+    // filter deals in window
+    const dealMatch: any = { project_id: projectOid };
+    dealMatch.closed_at = { $gte: dateFrom, $lte: dateTo };
+    if (closedWonOnly) dealMatch.closed_won = true;
+    if (minAmount !== undefined) dealMatch.revenue = { $gte: minAmount };
+    if (!includeArchived) dealMatch.status = { $ne: 'archived' };
 
-    // Gather campaigns for this project
+    const deals = await Deal.find(dealMatch).lean();
+    if (!deals || deals.length === 0) return res.status(400).json({ error: 'no_deals_in_window' });
+
+    // create run stub first
+    const run = await AttributionRun.create({
+      run_id: `run-${Date.now()}`,
+      project_id: projectOid,
+      model_type: model as any,
+      timestamp: new Date(),
+      status: 'running',
+      date_from: dateFrom,
+      date_to: dateTo,
+      meta: { initiatedBy: 'api', filters: { closedWonOnly, minAmount, includeArchived } }
+    });
+
+    // campaigns
     const campaigns = await Campaign.find({ project_id: projectOid }).lean();
     const campaignIdSet = new Set(campaigns.map((c: any) => String(c._id)));
 
-    // Gather deals (closed_won)
-    const deals = await Deal.find({ project_id: projectOid, closed_won: true }).lean();
-    const dealIds = deals.map(d => String(d._id));
+    // touches grouped by lead, restricted to touches before deal closed_at
     const leadIds = Array.from(new Set(deals.map(d => String(d.lead_id))));
-
-    // Gather touches for these leads that reference campaigns in this project
     const touches = await CampaignTouch.find({ lead_id: { $in: leadIds }, campaign_id: { $in: Array.from(campaignIdSet) } }).sort({ touched_at: 1 }).lean();
-
-    // Group touches by lead
     const touchesByLead: Record<string, Array<any>> = {};
     for (const t of touches) {
       const lid = String(t.lead_id);
@@ -995,40 +1024,26 @@ export async function runAttribution(req: Request, res: Response) {
       touchesByLead[lid].push(t);
     }
 
-    const results: Array<any> = [];
-    let dealsProcessed = 0;
     let totalRevenue = 0;
     let totalAttributed = 0;
-    let validationErrors = 0;
+    let dealsWithJourneys = 0;
+    let dealsWithoutJourneys = 0;
+    const results: any[] = [];
 
     for (const deal of deals) {
-      dealsProcessed++;
       const revenue = Number(deal.revenue) || 0;
       totalRevenue += revenue;
-      const leadId = String(deal.lead_id);
-      let touchesForLead = touchesByLead[leadId] || [];
-
-      // If there are no campaign touches for this lead, try to fall back to any existing AttributionResult rows for the deal
-      if (!touchesForLead || touchesForLead.length === 0) {
-        const prev = await AttributionResult.find({ project_id: projectOid, deal_id: deal._id }).lean();
-        if (prev && prev.length > 0) {
-          // build touchesForLead from previous attribution rows (use deal.closed_at as touched_at)
-          const seqPrev = Array.from(new Set(prev.map(p => String(p.campaign_id))));
-          touchesForLead = seqPrev.map((cid: string) => ({ campaign_id: cid, touched_at: deal.closed_at || new Date(), type: 'other' }));
-        } else {
-          // still no touches -> unattributed
-          continue;
-        }
-      }
-
-      // derive ordered unique campaign sequence
+      const lid = String(deal.lead_id);
+      const rawTouches = (touchesByLead[lid] || []).filter(t => deal.closed_at ? new Date(t.touched_at).getTime() <= new Date(deal.closed_at as any).getTime() : true);
+      if (!rawTouches || rawTouches.length === 0) { dealsWithoutJourneys++; continue; }
+      // unique campaign sequence preserving order (remove consecutive duplicates)
       const seq: string[] = [];
-      for (const t of touchesForLead) {
+      for (const t of rawTouches) {
         const cid = String(t.campaign_id);
         if (seq.length === 0 || seq[seq.length - 1] !== cid) seq.push(cid);
       }
-
-      if (seq.length === 0) continue;
+      if (seq.length === 0) { dealsWithoutJourneys++; continue; }
+      dealsWithJourneys++;
 
       if (model === 'first_touch') {
         const cid = seq[0];
@@ -1040,11 +1055,9 @@ export async function runAttribution(req: Request, res: Response) {
         const campRef = mongoose.isValidObjectId(cid) ? new mongoose.Types.ObjectId(cid) : cid;
         results.push({ run_id: run._id, project_id: projectOid, deal_id: deal._id, campaign_id: campRef, revenue_share: revenue });
         totalAttributed += revenue;
-      } else {
-        // linear
+      } else { // linear
         const n = seq.length;
         const per = n > 0 ? (revenue / n) : 0;
-        // accumulate and correct rounding on last
         let acc = 0;
         for (let i = 0; i < seq.length; i++) {
           const cid = seq[i];
@@ -1054,32 +1067,174 @@ export async function runAttribution(req: Request, res: Response) {
           results.push({ run_id: run._id, project_id: projectOid, deal_id: deal._id, campaign_id: campRef, revenue_share: share });
           totalAttributed += share;
         }
-        // validate per-deal rounding
-        const assigned = results.filter(r => String(r.deal_id) === String(deal._id)).reduce((s, r) => s + (r.revenue_share || 0), 0);
-        if (Math.abs(assigned - revenue) > 0.5) {
-          validationErrors++;
-        }
       }
     }
 
-    // Bulk insert results
     if (results.length > 0) {
-      try {
-        await AttributionResult.insertMany(results);
-      } catch (ie) {
-        console.error('[m07/runAttribution] insertMany error', ie);
-      }
+      try { await AttributionResult.insertMany(results); } catch (ie) { console.error('[m06/runAttribution] insertMany error', ie); }
     }
 
-    // update run status
-    const finalStatus = validationErrors > 0 ? 'error' : 'success';
-    run.status = finalStatus as any;
-    run.meta = { dealsProcessed, totalRevenue, totalAttributed, resultCount: results.length, validationErrors };
+    const unattributed = totalRevenue - totalAttributed;
+    const campaignCount = new Set(results.map(r => String(r.campaign_id))).size;
+    run.status = 'success';
+    run.deal_count = deals.length;
+    run.deals_with_journeys = dealsWithJourneys;
+    run.deals_without_journeys = dealsWithoutJourneys;
+    run.total_revenue = Number(totalRevenue.toFixed(2));
+    run.attributed_revenue = Number(totalAttributed.toFixed(2));
+    run.unattributed_revenue = Number(unattributed.toFixed(2));
+    run.campaign_count = campaignCount;
+    run.meta = { ...(run.meta || {}), model, dealsProcessed: deals.length, touches_used: results.length } as any;
     await run.save();
 
-    return res.json({ ok: true, runId: String(run._id), runName: run.run_id, dealsProcessed, totalRevenue, totalAttributed, resultCount: results.length, validationErrors });
+    return res.json({
+      ok: true,
+      runId: String(run._id),
+      runName: run.run_id,
+      model,
+      date_from: run.date_from,
+      date_to: run.date_to,
+      deal_count: run.deal_count,
+      deals_with_journeys: run.deals_with_journeys,
+      deals_without_journeys: run.deals_without_journeys,
+      total_revenue: run.total_revenue,
+      attributed_revenue: run.attributed_revenue,
+      unattributed_revenue: run.unattributed_revenue,
+      campaign_count: run.campaign_count,
+      touches_used: run.meta?.touches_used || results.length
+    });
   } catch (e) {
-    console.error('[m07/runAttribution]', e);
+    console.error('[m06/runAttribution]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+// GET /m06/runs
+export async function listAttributionRuns(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const runs = await AttributionRun.find({ project_id: projectOid })
+      .sort({ timestamp: -1 })
+      .select('run_id model_type status timestamp date_from date_to deal_count deals_with_journeys deals_without_journeys total_revenue attributed_revenue unattributed_revenue campaign_count')
+      .lean();
+    return res.json({ ok: true, runs });
+  } catch (e) {
+    console.error('[m06/listAttributionRuns]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+// GET /m06/run/:id/summary
+export async function getAttributionRunSummary(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    const runId = req.params.id;
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!runId || !mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'runId_required' });
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const runOid = new mongoose.Types.ObjectId(runId);
+    const run = await AttributionRun.findOne({ _id: runOid, project_id: projectOid }).lean();
+    if (!run) return res.status(404).json({ error: 'run_not_found' });
+
+    // aggregate campaign revenue table for this run
+    const campaignAgg = await AttributionResult.aggregate([
+      { $match: { project_id: projectOid, run_id: runOid } },
+      { $group: { _id: '$campaign_id', revenue: { $sum: '$revenue_share' }, deals: { $addToSet: '$deal_id' } } },
+      { $project: { campaign_id: '$_id', revenue: 1, deal_count: { $size: '$deals' } } },
+      { $sort: { revenue: -1 } },
+      { $limit: 10 }
+    ]);
+
+    // touches used for this run
+    const touchesUsedAgg = await AttributionResult.aggregate([
+      { $match: { project_id: projectOid, run_id: runOid } },
+      { $count: 'count' }
+    ]);
+    const touches_used = touchesUsedAgg.length ? touchesUsedAgg[0].count : 0;
+
+    // build sample allocations: pick up to 10 deals from this run (top by total), with allocation items and deal enrichment
+    const sampleDeals = await AttributionResult.aggregate([
+      { $match: { project_id: projectOid, run_id: runOid } },
+      { $group: { _id: '$deal_id', total: { $sum: '$revenue_share' }, items: { $push: { campaign_id: '$campaign_id', share: '$revenue_share' } } } },
+      { $sort: { total: -1 } },
+      { $limit: 10 },
+      { $lookup: { from: 'deals', localField: '_id', foreignField: '_id', as: 'deal' } },
+      { $unwind: { path: '$deal', preserveNullAndEmptyArrays: true } },
+      { $project: { _id: 1, total: 1, items: 1, deal_amount: '$deal.revenue', lead_id: '$deal.lead_id' } }
+    ]);
+
+    // attempt unattributed example: find a deal in window with no result rows
+    const windowDeals = await Deal.find({ project_id: projectOid, closed_at: { $gte: run.date_from, $lte: run.date_to } }).select('_id revenue lead_id closed_at').lean();
+    const resultDealIds = new Set((await AttributionResult.find({ project_id: projectOid, run_id: runOid }).select('deal_id').lean()).map(r => String(r.deal_id)));
+    const unattributedExample = windowDeals.find(d => !resultDealIds.has(String(d._id)));
+
+    return res.json({
+      ok: true,
+      run: {
+        id: String(run._id),
+        run_id: run.run_id,
+        model_type: run.model_type,
+        status: run.status,
+        timestamp: run.timestamp,
+        date_from: run.date_from,
+        date_to: run.date_to,
+        deal_count: run.deal_count,
+        deals_with_journeys: run.deals_with_journeys,
+        deals_without_journeys: run.deals_without_journeys,
+        total_revenue: run.total_revenue,
+        attributed_revenue: run.attributed_revenue,
+        unattributed_revenue: run.unattributed_revenue,
+        campaign_count: run.campaign_count,
+        campaigns_with_credit: campaignAgg.length,
+        touches_used
+      },
+      campaigns: campaignAgg,
+      samples: sampleDeals,
+      unattributed_sample: unattributedExample ? { deal_id: unattributedExample._id, revenue: unattributedExample.revenue, closed_at: unattributedExample.closed_at } : null
+    });
+  } catch (e) {
+    console.error('[m06/getAttributionRunSummary]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+// GET /m06/roi
+// Optional: ?runId=... to restrict to a specific run
+export async function getROI(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const runId = (req.query.runId as string) || (req.body?.runId as string);
+
+    const match: any = { project_id: projectOid };
+    if (runId) {
+      if (!mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'invalid_runId' });
+      match.run_id = new mongoose.Types.ObjectId(runId);
+    }
+
+    // ROI: aggregate revenue per campaign and compute share vs total
+    const agg = await AttributionResult.aggregate([
+      { $match: match },
+      { $group: { _id: '$campaign_id', revenue: { $sum: '$revenue_share' } } },
+      { $sort: { revenue: -1 } }
+    ]);
+
+    const total = agg.reduce((s: number, r: any) => s + (r.revenue || 0), 0);
+    const campaigns = await Campaign.find({ project_id: projectOid, _id: { $in: agg.map(a => a._id) } }).select('_id name channel').lean();
+    const nameById = new Map(campaigns.map(c => [String(c._id), c]));
+    const rows = agg.map((r: any) => {
+      const cid = String(r._id);
+      const meta = nameById.get(cid);
+      const share = total > 0 ? Number(((r.revenue / total) * 100).toFixed(2)) : 0;
+      return { campaign_id: r._id, name: meta?.name || 'Unknown', channel: meta?.channel || 'unknown', revenue: Number(r.revenue.toFixed(2)), share_percent: share };
+    });
+
+    return res.json({ ok: true, total: Number(total.toFixed(2)), rows });
+  } catch (e) {
+    console.error('[m06/getROI]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -1195,7 +1350,7 @@ export async function previewDeals(req: Request, res: Response) {
 
     return res.json({ ok: true, page, limit, total, rows: summaries });
   } catch (e) {
-    console.error('[m07/previewDeals]', e);
+    console.error('[m06/previewDeals]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -1239,7 +1394,7 @@ export async function journeyDetail(req: Request, res: Response) {
 
     return res.json({ ok: true, deal: { id: String(d._id), external_id: (d as any).deal_id || null, amount: d.revenue, closed_at: d.closed_at, status: d.closed_won ? 'closed_won' : 'other' }, lead, journey });
   } catch (e) {
-    console.error('[m07/journeyDetail]', e);
+    console.error('[m06/journeyDetail]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -1374,7 +1529,7 @@ export async function roiDashboard(req: Request, res: Response) {
 
     return res.json({ ok: true, totalAttributed, totalSpend, netProfit, overallROI, campaigns: filteredCampaigns, monthlySeries, channelContribution, top5, bottom5 });
   } catch (e) {
-    console.error('[m07/roiDashboard]', e);
+    console.error('[m06/roiDashboard]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -1485,7 +1640,7 @@ export async function forecast(req: Request, res: Response) {
 
     return res.json({ ok: true, model: { name: 'linear_regression', trained_at: new Date(), mae, mse }, historical: monthlySeries, approxMonthlySpend, totalSpend, predictions, alerts, trend });
   } catch (e) {
-    console.error('[m07/forecast]', e);
+    console.error('[m06/forecast]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }

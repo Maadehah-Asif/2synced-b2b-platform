@@ -14,18 +14,21 @@ import UploadPreview from './modules/m01/UploadPreview'
 import MergedList from './modules/m01/MergedList'
 import LeadsList from './modules/m01/LeadsList'
 import MergeCSV from './modules/m01/MergeCSV'
-import Module7Dropdown from './modules/m07/Module7Dropdown'
-import Element1Page from './modules/m07/Element1Page'
-import Element2Page from './modules/m07/Element2Page'
-import Element3Page from './modules/m07/Element3Page'
-import Element4Page from './modules/m07/Element4Page'
-import CampaignManager from './modules/m07/CampaignManager'
-import ViewCampaigns from './modules/m07/ViewCampaigns'
-import CampaignTouchInput from './modules/m07/CampaignTouchInput'
-import CampaignTouchViewer from './modules/m07/CampaignTouchViewer'
-import DealInput from './modules/m07/DealInput'
-import DealViewer from './modules/m07/DealViewer'
-import JourneyPreview from './modules/m07/JourneyPreview'
+import Module6Dropdown from './modules/m06/Module6Dropdown'
+import Element1Page from './modules/m06/Element1Page'
+import Module6Home from './modules/m06/Module6Home'
+import Module1Home from './modules/m01/Module1Home'
+import Element2Page from './modules/m06/Element2Page'
+import Element3Page from './modules/m06/Element3Page'
+import Element4Page from './modules/m06/Element4Page'
+import CampaignManager from './modules/m06/CampaignManager'
+import ViewCampaigns from './modules/m06/ViewCampaigns'
+import CampaignTouchInput from './modules/m06/CampaignTouchInput'
+import CampaignTouchViewer from './modules/m06/CampaignTouchViewer'
+import DealInput from './modules/m06/DealInput'
+import DealViewer from './modules/m06/DealViewer'
+import JourneyPreview from './modules/m06/JourneyPreview'
+import RunAttributionScreen from './modules/m06/RunAttributionScreen'
 
 function App() {
   const [route, setRoute] = useState<string>(window.location.hash || '#/login')
@@ -48,18 +51,29 @@ function App() {
   if (route.startsWith('#/create-workspace')) return <CreateWorkspace />
   if (route.startsWith('#/join-workspace')) return <JoinWorkspace />
   if (route.startsWith('#/workspace/') && route.includes('/members')) return <WorkspaceMembers />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/element3')) return <Element3Page />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/element2')) return <Element2Page />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/element1')) return <Element1Page />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/campaigns/manage')) return <CampaignManager />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/campaigns')) return <ViewCampaigns />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/touches/input')) return <CampaignTouchInput />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/touches')) return <CampaignTouchViewer />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/deals/input')) return <DealInput />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/deals')) return <DealViewer />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/journeys')) return <JourneyPreview />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/element4')) return <Element4Page />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/')) return <Element1Page />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/element3')) return <Element3Page />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/element2')) return <Element2Page />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/element1')) return <Element1Page />
+  // Module 6 workspace home (no trailing slash)
+  if (route.startsWith('#/workspace/') && route.includes('/m06') && !route.includes('/m06/')) return <Module6Home />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/campaigns/manage')) return <CampaignManager />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/campaigns')) return <ViewCampaigns />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/touches/input')) return <CampaignTouchInput />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/touches')) return <CampaignTouchViewer />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/deals/input')) return <DealInput />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/deals')) return <DealViewer />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/journeys')) return <JourneyPreview />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/run-attribution')) return <RunAttributionScreen />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/element4')) return <Element4Page />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/')) return <Element1Page />
+  // Module 1 workspace routes and home
+  if (route.startsWith('#/workspace/') && route.includes('/m01/merge-columns')) return <MergeCSV />
+  if (route.startsWith('#/workspace/') && route.includes('/m01/leads/preview')) return <UploadPreview />
+  if (route.startsWith('#/workspace/') && route.includes('/m01/merged')) return <MergedList />
+  if (route.startsWith('#/workspace/') && route.includes('/m01/leads')) return <LeadsList />
+  if (route.startsWith('#/workspace/') && route.includes('/m01/upload')) return <Upload />
+  // Module 1 workspace home (no trailing slash)
+  if (route.startsWith('#/workspace/') && route.includes('/m01') && !route.includes('/m01/')) return <Module1Home />
   if (route.startsWith('#/workspace/')) return <WorkspaceDetail />
   if (route.startsWith('#/workspaces')) return <WorkspacesList />
 
@@ -73,7 +87,7 @@ function App() {
   // Fallback
   return (
     <>
-      <Module7Dropdown />
+      <Module6Dropdown />
       <Login />
     </>
   )

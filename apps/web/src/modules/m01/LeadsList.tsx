@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
+import ModuleBackButton from '../../components/ModuleBackButton';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -59,20 +60,17 @@ export default function LeadsList(){
     setCreating(false);
   }
 
-  function goBack(){
-    if(workspace) window.location.hash = `#/m01/upload?workspace=${workspace}`;
-    else window.location.hash = '#/m01/upload';
-  }
+  // Back navigation now handled by ModuleBackButton (to module home)
 
   const sorted = useMemo(() => items, [items]);
 
   return (
     <Layout>
       <div className="p-20">
-        <div className="mb-12">
-          <button type="button" className="btn-ghost" onClick={goBack}>Back</button>
+        <div className="mb-12" style={{ display: 'flex', alignItems: 'center' }}>
+          <ModuleBackButton toSuffix="/m01" />
+          <h2 style={{ margin: 0 }}>Leads Code CSVs</h2>
         </div>
-        <h2>Leads Code CSVs</h2>
 
         {/* Create new Leads Code */}
         <div className="card p-12 mt-12" style={{ display:'flex', gap:12, alignItems:'center' }}>

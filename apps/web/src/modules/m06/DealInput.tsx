@@ -1,4 +1,5 @@
 import Layout from '../../components/Layout';
+import ModuleBackButton from '../../components/ModuleBackButton';
 import { useState, useEffect } from 'react';
 import Autocomplete from '../../components/Autocomplete';
 import { createDeal, importDealsCSV, searchLeads } from './services/deals';
@@ -122,6 +123,7 @@ export default function DealInput(){
   return (
     <Layout>
       <main className="page-root">
+        <ModuleBackButton toSuffix="/m06" />
         <h2 style={{ marginTop:16 }}>Deal Input</h2>
         <div style={{ fontSize:12, color:'#555' }}>Upload closed deals from your CRM.</div>
         <div style={{ marginTop:16, display:'flex', gap:12 }}>

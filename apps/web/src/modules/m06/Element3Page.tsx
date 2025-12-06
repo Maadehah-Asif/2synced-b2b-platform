@@ -1,6 +1,7 @@
 import Layout from '../../components/Layout'
 import { useEffect, useState } from 'react'
-import './module7.css'
+import './module6.css'
+import ModuleBackButton from '../../components/ModuleBackButton'
 import TimelineChart from './TimelineChart'
 import BarChart from './BarChart'
 
@@ -38,7 +39,7 @@ export default function Element3Page(){
       if(endMonth) params.set('end', endMonth);
       if(minSpend) params.set('minSpend', minSpend);
       if(minROI) params.set('minROI', minROI);
-      const res = await fetch(`${API_URL}/m07/roi?${params.toString()}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+      const res = await fetch(`${API_URL}/m06/roi?${params.toString()}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
       const j = await res.json();
       if(!res.ok) { setError(j && j.message ? String(j.message) : (j && j.error ? String(j.error) : 'error')); setData(null); }
       else setData(j);
@@ -89,7 +90,10 @@ export default function Element3Page(){
   return (
     <Layout>
       <main className="page-root">
-        <h2 style={{ marginTop: 16 }}>Module 7 — ROI Dashboard (Page 3)</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <ModuleBackButton toSuffix="/m06" />
+          <h2 style={{ marginTop: 16, marginBottom: 0 }}>Module 6 — ROI Dashboard (Page 3)</h2>
+        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 20 }}>
           <div>

@@ -11,7 +11,7 @@ export async function searchCampaigns(q: string){
   const usp = new URLSearchParams();
   if(workspaceId) usp.set('projectId', workspaceId);
   if(q) usp.set('search', q);
-  const res = await fetch(`${API_BASE}/m07/campaigns?${usp.toString()}`);
+  const res = await fetch(`${API_BASE}/m06/campaigns?${usp.toString()}`);
   if(!res.ok) throw new Error('campaign_search_failed');
   const data = await res.json();
   // normalize to minimal structure

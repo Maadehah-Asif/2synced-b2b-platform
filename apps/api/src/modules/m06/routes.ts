@@ -20,13 +20,22 @@ import {
 	archiveCampaignTouch,
 	deleteCampaignTouchPermanent,
 	importCampaignTouches,
+	runAttribution,
+	previewDeals,
+	allocationByCampaign,
+	allocationByDeal,
+	allocationDealsForCampaign,
+	allocationCampaignsForDeal,
+	listAttributionRuns,
+	getAttributionRunSummary,
+	getRunResults,
+	roiDashboard,
+	roiByRun,
+	forecast,
+	journeyDetail,
 } from './controllers.js';
 import mongoose from 'mongoose';
 import Lead from '../m01/models/Lead.js';
-import { runAttribution } from './controllers.js';
-import { previewDeals } from './controllers.js';
-import { getRunResults, roiDashboard, forecast } from './controllers.js';
-import { journeyDetail } from './controllers.js';
 import { seedHttp, demoProjects } from './seedController.js';
 import { createDeal, listDeals, updateDeal, archiveDeal, deleteDealPermanent, importDealsCSV } from './controllers.js';
 
@@ -42,10 +51,17 @@ router.post('/seed', seedHttp);
 router.get('/demo-projects', demoProjects);
 // POST /m06/run -> run attribution for a project (body: { projectId, modelType })
 router.post('/run', runAttribution);
+router.get('/runs', listAttributionRuns);
 router.get('/preview', previewDeals);
+router.get('/allocation/campaigns', allocationByCampaign);
+router.get('/allocation/deals', allocationByDeal);
+router.get('/allocation/campaign-deals', allocationDealsForCampaign);
+router.get('/allocation/deal-campaigns', allocationCampaignsForDeal);
+router.get('/run/:id/summary', getAttributionRunSummary);
 router.get('/journey/:id', journeyDetail);
 router.get('/run/:id/results', getRunResults);
 router.get('/roi', roiDashboard);
+router.get('/roi-by-run', roiByRun);
 router.get('/forecast', forecast);
 // Campaign management
 router.get('/campaigns', listCampaigns);

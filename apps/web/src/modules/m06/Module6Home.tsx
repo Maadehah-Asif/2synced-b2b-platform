@@ -22,7 +22,8 @@ export default function Module6Home(){
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/element1`)}>Page 1 Stats</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/element2`)}>Page 2</button>
-          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/element3`)}>Page 3</button>
+          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/roi-calc`)}>ROI Calculation</button>
+          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/roi`)}>ROI Dashboard</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/element4`)}>Page 4</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/campaigns`)}>View Campaigns</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/campaigns/manage`)}>Add Campaign</button>
@@ -32,6 +33,7 @@ export default function Module6Home(){
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/deals/input`)}>Add Deals</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/journeys`)}>Journey Preview</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/run-attribution`)}>Run Attribution</button>
+          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/allocation`)}>Allocation Dashboard</button>
         </div>
       </main>
     </Layout>

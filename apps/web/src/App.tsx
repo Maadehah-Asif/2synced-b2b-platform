@@ -19,7 +19,7 @@ import Element1Page from './modules/m06/Element1Page'
 import Module6Home from './modules/m06/Module6Home'
 import Module1Home from './modules/m01/Module1Home'
 import Element2Page from './modules/m06/Element2Page'
-import Element3Page from './modules/m06/Element3Page'
+import RoiDashboard from './modules/m06/RoiDashboard'
 import Element4Page from './modules/m06/Element4Page'
 import CampaignManager from './modules/m06/CampaignManager'
 import ViewCampaigns from './modules/m06/ViewCampaigns'
@@ -29,6 +29,8 @@ import DealInput from './modules/m06/DealInput'
 import DealViewer from './modules/m06/DealViewer'
 import JourneyPreview from './modules/m06/JourneyPreview'
 import RunAttributionScreen from './modules/m06/RunAttributionScreen'
+import AllocationDashboard from './modules/m06/AllocationDashboard'
+import RoiCalculation from './modules/m06/RoiCalculation'
 
 function App() {
   const [route, setRoute] = useState<string>(window.location.hash || '#/login')
@@ -51,7 +53,10 @@ function App() {
   if (route.startsWith('#/create-workspace')) return <CreateWorkspace />
   if (route.startsWith('#/join-workspace')) return <JoinWorkspace />
   if (route.startsWith('#/workspace/') && route.includes('/members')) return <WorkspaceMembers />
-  if (route.startsWith('#/workspace/') && route.includes('/m06/element3')) return <Element3Page />
+  // ROI routes: check roi-calc before roi dashboard to avoid substring clashes
+  if (route.startsWith('#/workspace/') && route.includes('/m06/roi-calc')) return <RoiCalculation />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/roi')) return <RoiDashboard />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/element3')) return <RoiDashboard />
   if (route.startsWith('#/workspace/') && route.includes('/m06/element2')) return <Element2Page />
   if (route.startsWith('#/workspace/') && route.includes('/m06/element1')) return <Element1Page />
   // Module 6 workspace home (no trailing slash)
@@ -64,6 +69,7 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m06/deals')) return <DealViewer />
   if (route.startsWith('#/workspace/') && route.includes('/m06/journeys')) return <JourneyPreview />
   if (route.startsWith('#/workspace/') && route.includes('/m06/run-attribution')) return <RunAttributionScreen />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/allocation')) return <AllocationDashboard />
   if (route.startsWith('#/workspace/') && route.includes('/m06/element4')) return <Element4Page />
   if (route.startsWith('#/workspace/') && route.includes('/m06/')) return <Element1Page />
   // Module 1 workspace routes and home

@@ -9,11 +9,177 @@ import { AttributionResult } from './models/AttributionResult.js';
 import { CampaignSpend } from './models/CampaignSpend.js';
 import { WorkspaceMember } from '../core/auth/models/WorkspaceMember.js';
 import Lead from '../m01/models/Lead.js';
+import { CHANNEL_SET } from './constants.js';
 
 // Helper: get project id from query (accept projectId or workspaceId)
 function getProjectId(req: Request) {
   const q = (req.query.projectId as string) || (req.query.workspaceId as string) || (req.body && req.body.projectId) || null;
   return q;
+}
+
+const MAX_ALLOCATIONS_LIMIT = 100;
+
+function sanitizeRegex(input: string) {
+  return input.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+}
+
+function parseDateInput(value?: string | null) {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date;
+}
+
+type AllocationPipelineOptions = {
+  projectOid: mongoose.Types.ObjectId;
+  runOid: mongoose.Types.ObjectId;
+  minShare?: number;
+  channel?: string | null;
+  closedFrom?: Date;
+  closedTo?: Date;
+  leadRegex?: RegExp | null;
+  minDealAmount?: number;
+  maxDealAmount?: number;
+  status?: 'closed_won' | 'all' | 'open';
+};
+
+function buildAllocationBasePipeline(options: AllocationPipelineOptions, initialMatch: Record<string, any> = {}) {
+  const baseMatch: Record<string, any> = {
+    project_id: options.projectOid,
+    run_id: options.runOid,
+    ...initialMatch,
+  };
+
+  if (options.minShare !== undefined && !Number.isNaN(options.minShare)) {
+    baseMatch.revenue_share = { $gte: options.minShare };
+  }
+
+  const pipeline: any[] = [
+    { $match: baseMatch },
+    { $lookup: { from: 'deals', localField: 'deal_id', foreignField: '_id', as: 'deal' } },
+    { $unwind: '$deal' },
+    { $lookup: { from: 'campaigns', localField: 'campaign_id', foreignField: '_id', as: 'campaign' } },
+    { $unwind: { path: '$campaign', preserveNullAndEmptyArrays: true } },
+    {
+      $addFields: {
+        campaign_channel: {
+          $toLower: {
+            $ifNull: ['$campaign.channel', 'other']
+          }
+        }
+      }
+    }
+  ];
+
+  if (options.closedFrom || options.closedTo) {
+    const closedMatch: Record<string, Date> = {};
+    if (options.closedFrom) closedMatch.$gte = options.closedFrom;
+    if (options.closedTo) closedMatch.$lte = options.closedTo;
+    pipeline.push({ $match: { 'deal.closed_at': closedMatch } });
+  }
+
+  if (options.minDealAmount !== undefined && !Number.isNaN(options.minDealAmount)) {
+    pipeline.push({ $match: { 'deal.revenue': { $gte: options.minDealAmount } } });
+  }
+
+  if (options.maxDealAmount !== undefined && !Number.isNaN(options.maxDealAmount)) {
+    pipeline.push({ $match: { 'deal.revenue': { $lte: options.maxDealAmount } } });
+  }
+
+  if (options.status && options.status !== 'all') {
+    if (options.status === 'closed_won') pipeline.push({ $match: { 'deal.closed_won': true } });
+    else if (options.status === 'open') pipeline.push({ $match: { 'deal.closed_won': false } });
+  }
+
+  if (options.channel) {
+    pipeline.push({ $match: { campaign_channel: options.channel } });
+  }
+
+  pipeline.push(
+    { $lookup: { from: 'leads', localField: 'deal.lead_id', foreignField: '_id', as: 'lead' } },
+    { $unwind: { path: '$lead', preserveNullAndEmptyArrays: true } }
+  );
+
+  if (options.leadRegex) {
+    pipeline.push({
+      $match: {
+        $or: [
+          { 'lead.First_Name': options.leadRegex },
+          { 'lead.Last_Name': options.leadRegex },
+          { 'lead.Email': options.leadRegex },
+          { 'lead.Company': options.leadRegex }
+        ]
+      }
+    });
+  }
+
+  return pipeline;
+}
+
+// Drill-down: deals for a specific campaign within a run
+export async function allocationDealsForCampaign(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    const runId = req.query.runId as string | undefined;
+    const campaignId = req.query.campaignId as string | undefined;
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!runId || !mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'runId_required' });
+    if (!campaignId || !mongoose.isValidObjectId(campaignId)) return res.status(400).json({ error: 'campaignId_required' });
+
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const runOid = new mongoose.Types.ObjectId(runId);
+    const campaignOid = new mongoose.Types.ObjectId(campaignId);
+
+    const pipeline = buildAllocationBasePipeline({ projectOid, runOid }, { campaign_id: campaignOid });
+    pipeline.push({ $limit: MAX_ALLOCATIONS_LIMIT });
+
+    const rows = await AttributionResult.aggregate(pipeline).exec();
+    const out = rows.map((r: any) => ({
+      deal_id: String(r.deal._id),
+      deal_amount: r.deal.revenue || 0,
+      revenue_share: r.revenue_share || 0,
+      closed_at: r.deal.closed_at,
+      lead_name: r.lead ? `${r.lead.First_Name || ''} ${r.lead.Last_Name || ''}`.trim() || null : null,
+      lead_email: r.lead?.Email || null,
+    }));
+
+    return res.json({ ok: true, allocations: out });
+  } catch (e) {
+    console.error('[m06/allocationDealsForCampaign]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+// Drill-down: campaigns for a specific deal within a run
+export async function allocationCampaignsForDeal(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    const runId = req.query.runId as string | undefined;
+    const dealId = req.query.dealId as string | undefined;
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!runId || !mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'runId_required' });
+    if (!dealId || !mongoose.isValidObjectId(dealId)) return res.status(400).json({ error: 'dealId_required' });
+
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const runOid = new mongoose.Types.ObjectId(runId);
+    const dealOid = new mongoose.Types.ObjectId(dealId);
+
+    const pipeline = buildAllocationBasePipeline({ projectOid, runOid }, { deal_id: dealOid });
+    pipeline.push({ $limit: MAX_ALLOCATIONS_LIMIT });
+
+    const rows = await AttributionResult.aggregate(pipeline).exec();
+    const out = rows.map((r: any) => ({
+      campaign_id: String(r.campaign?._id || r.campaign_id),
+      campaign_name: r.campaign?.name || null,
+      channel: r.campaign_channel || null,
+      revenue_share: r.revenue_share || 0,
+    }));
+
+    return res.json({ ok: true, allocations: out });
+  } catch (e) {
+    console.error('[m06/allocationCampaignsForDeal]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
 }
 
 export async function stats(req: Request, res: Response) {
@@ -100,6 +266,203 @@ export async function stats(req: Request, res: Response) {
     });
   } catch (e) {
     console.error('[m06/stats]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+// GET /m06/allocation/campaigns?projectId=...&runId=...
+export async function allocationByCampaign(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    const runId = req.query.runId as string | undefined;
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!runId || !mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'runId_required' });
+
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const runOid = new mongoose.Types.ObjectId(runId);
+
+    const minShare = req.query.minShare !== undefined ? Number(req.query.minShare) : undefined;
+    const channel = (req.query.channel as string | undefined) || null;
+    const closedFrom = parseDateInput(req.query.closedFrom as string | undefined);
+    const closedTo = parseDateInput(req.query.closedTo as string | undefined);
+    const leadSearch = (req.query.lead as string | undefined) || '';
+    const statusParam = (req.query.status as string | undefined) || 'all';
+    const status = statusParam === 'closed_won' || statusParam === 'open' ? statusParam : 'all';
+
+    const page = req.query.page !== undefined ? Math.max(1, Number(req.query.page)) : 1;
+    const limit = req.query.limit !== undefined ? Math.min(MAX_ALLOCATIONS_LIMIT, Math.max(1, Number(req.query.limit))) : 50;
+
+    const leadRegex = leadSearch
+      ? new RegExp(sanitizeRegex(leadSearch.trim()), 'i')
+      : null;
+
+    const options: AllocationPipelineOptions = {
+      projectOid,
+      runOid,
+      minShare,
+      channel,
+      closedFrom,
+      closedTo,
+      leadRegex,
+      status,
+    };
+
+    const basePipeline = buildAllocationBasePipeline(options);
+
+    const summaryPipeline = [
+      ...basePipeline,
+      {
+        $group: {
+          _id: '$campaign._id',
+          campaign_id: { $first: '$campaign._id' },
+          name: { $first: '$campaign.name' },
+          channel: { $first: '$campaign_channel' },
+          total_revenue: { $sum: '$revenue_share' },
+          deal_ids: { $addToSet: '$deal._id' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          campaign_id: { $toString: '$campaign_id' },
+          name: 1,
+          channel: 1,
+          total_revenue: 1,
+          deal_count: { $size: '$deal_ids' },
+          avg_revenue_per_deal: {
+            $cond: [{ $gt: [{ $size: '$deal_ids' }, 0] }, { $divide: ['$total_revenue', { $size: '$deal_ids' }] }, 0],
+          },
+        },
+      },
+      { $sort: { total_revenue: -1 } },
+      { $limit: MAX_ALLOCATIONS_LIMIT },
+    ];
+
+    const totalAgg = await AttributionResult.aggregate([
+      ...basePipeline,
+      { $group: { _id: '$campaign._id' } },
+      { $count: 'total' },
+    ]).exec();
+    const total = totalAgg[0]?.total || 0;
+
+    // Apply pagination to summary
+    const pagedPipeline = [
+      ...summaryPipeline,
+      { $skip: (page - 1) * limit },
+      { $limit: limit },
+    ];
+
+    const summary = await AttributionResult.aggregate(pagedPipeline).exec();
+
+    return res.json({ ok: true, campaigns: summary || [], page, limit, total });
+  } catch (e) {
+    console.error('[m06/allocationByCampaign]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+// GET /m06/allocation/deals?projectId=...&runId=...
+export async function allocationByDeal(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    const runId = req.query.runId as string | undefined;
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!runId || !mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'runId_required' });
+
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const runOid = new mongoose.Types.ObjectId(runId);
+
+    const minShare = req.query.minShare !== undefined ? Number(req.query.minShare) : undefined;
+    const channel = (req.query.channel as string | undefined) || null;
+    const closedFrom = parseDateInput(req.query.closedFrom as string | undefined);
+    const closedTo = parseDateInput(req.query.closedTo as string | undefined);
+    const leadSearch = (req.query.lead as string | undefined) || '';
+    const statusParam = (req.query.status as string | undefined) || 'all';
+    const status = statusParam === 'closed_won' || statusParam === 'open' ? statusParam : 'all';
+    const minDealAmount = req.query.minDealAmount !== undefined ? Number(req.query.minDealAmount) : undefined;
+    const maxDealAmount = req.query.maxDealAmount !== undefined ? Number(req.query.maxDealAmount) : undefined;
+
+    const page = req.query.page !== undefined ? Math.max(1, Number(req.query.page)) : 1;
+    const limit = req.query.limit !== undefined ? Math.min(MAX_ALLOCATIONS_LIMIT, Math.max(1, Number(req.query.limit))) : 50;
+
+    const leadRegex = leadSearch
+      ? new RegExp(sanitizeRegex(leadSearch.trim()), 'i')
+      : null;
+
+    const options: AllocationPipelineOptions = {
+      projectOid,
+      runOid,
+      minShare,
+      channel,
+      closedFrom,
+      closedTo,
+      leadRegex,
+      minDealAmount,
+      maxDealAmount,
+      status,
+    };
+
+    const basePipeline = buildAllocationBasePipeline(options);
+
+    const summaryPipeline = [
+      ...basePipeline,
+      {
+        $group: {
+          _id: '$deal._id',
+          deal_id: { $first: '$deal._id' },
+          amount: { $first: '$deal.revenue' },
+          closed_at: { $first: '$deal.closed_at' },
+          closed_won: { $first: '$deal.closed_won' },
+          lead: { $first: '$lead' },
+          total_attributed: { $sum: '$revenue_share' },
+          campaign_count: { $addToSet: '$campaign._id' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          deal_id: { $toString: '$deal_id' },
+          amount: 1,
+          closed_at: 1,
+          closed_won: 1,
+          lead_name: {
+            $trim: {
+              input: {
+                $concat: [
+                  { $ifNull: ['$lead.First_Name', ''] },
+                  ' ',
+                  { $ifNull: ['$lead.Last_Name', ''] },
+                ],
+              },
+            },
+          },
+          lead_email: '$lead.Email',
+          total_attributed: 1,
+          unattributed: { $max: [{ $subtract: ['$amount', '$total_attributed'] }, 0] },
+          campaign_count: { $size: '$campaign_count' },
+        },
+      },
+      { $sort: { amount: -1 } },
+      { $limit: MAX_ALLOCATIONS_LIMIT },
+    ];
+
+    const totalAgg = await AttributionResult.aggregate([
+      ...basePipeline,
+      { $group: { _id: '$deal._id' } },
+      { $count: 'total' },
+    ]).exec();
+    const total = totalAgg[0]?.total || 0;
+
+    const pagedPipeline = [
+      ...summaryPipeline,
+      { $skip: (page - 1) * limit },
+      { $limit: limit },
+    ];
+
+    const deals = await AttributionResult.aggregate(pagedPipeline).exec();
+    return res.json({ ok: true, deals, page, limit, total });
+  } catch (e) {
+    console.error('[m06/allocationByDeal]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -968,6 +1331,14 @@ export async function runAttribution(req: Request, res: Response) {
     if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
     const projectOid = new mongoose.Types.ObjectId(projectId);
 
+    const toArray = (input: unknown): string[] => {
+      if (Array.isArray(input)) return input.map(val => String(val));
+      if (typeof input === 'string') {
+        return input.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      return [];
+    };
+
     const modelType = (req.body && req.body.model_type) || req.body?.modelType || (req.query.modelType as string) || 'linear';
     const dateFromRaw = req.body?.date_from || req.query.date_from;
     const dateToRaw = req.body?.date_to || req.query.date_to;
@@ -975,133 +1346,244 @@ export async function runAttribution(req: Request, res: Response) {
     const minAmount = req.body?.minAmount !== undefined ? Number(req.body.minAmount) : (req.query.minAmount !== undefined ? Number(req.query.minAmount) : undefined);
     const includeArchived = req.body?.includeArchived === true || req.query.includeArchived === 'true';
 
+    const channelInput = req.body?.requiredChannels
+      ?? req.body?.channels
+      ?? req.query.channels
+      ?? req.query.channel;
+    const requiredChannelSet = new Set(
+      toArray(channelInput)
+        .map(ch => ch.toLowerCase())
+        .filter(ch => CHANNEL_SET.has(ch))
+    );
+
+    const campaignInput = req.body?.requiredCampaignIds
+      ?? req.body?.campaignIds
+      ?? req.query.campaignIds
+      ?? req.query.campaignId;
+    const rawCampaignIds = new Set(
+      toArray(campaignInput)
+        .map(id => id.trim())
+        .filter(id => mongoose.isValidObjectId(id))
+    );
+
     if (!dateFromRaw || !dateToRaw) return res.status(400).json({ error: 'date_range_required' });
     const dateFrom = new Date(dateFromRaw);
     const dateTo = new Date(dateToRaw);
-    if (isNaN(dateFrom.getTime()) || isNaN(dateTo.getTime())) return res.status(400).json({ error: 'invalid_dates' });
+    if (Number.isNaN(dateFrom.getTime()) || Number.isNaN(dateTo.getTime())) return res.status(400).json({ error: 'invalid_dates' });
     if (dateFrom.getTime() > dateTo.getTime()) return res.status(400).json({ error: 'start_after_end' });
 
-    // prevent overlapping running run for same project
     const existingRunning = await AttributionRun.findOne({ project_id: projectOid, status: 'running' }).lean();
     if (existingRunning) return res.status(409).json({ error: 'run_in_progress' });
 
-    const allowed = ['first_touch', 'last_touch', 'linear'];
-    const model = allowed.includes(modelType) ? modelType : 'linear';
+    const allowedModels = ['first_touch', 'last_touch', 'linear'];
+    const model = allowedModels.includes(modelType) ? modelType : 'linear';
 
-    // filter deals in window
-    const dealMatch: any = { project_id: projectOid };
-    dealMatch.closed_at = { $gte: dateFrom, $lte: dateTo };
+    const dealMatch: any = { project_id: projectOid, closed_at: { $gte: dateFrom, $lte: dateTo } };
     if (closedWonOnly) dealMatch.closed_won = true;
-    if (minAmount !== undefined) dealMatch.revenue = { $gte: minAmount };
+    if (minAmount !== undefined && !Number.isNaN(minAmount)) dealMatch.revenue = { $gte: minAmount };
     if (!includeArchived) dealMatch.status = { $ne: 'archived' };
 
     const deals = await Deal.find(dealMatch).lean();
     if (!deals || deals.length === 0) return res.status(400).json({ error: 'no_deals_in_window' });
 
-    // create run stub first
-    const run = await AttributionRun.create({
-      run_id: `run-${Date.now()}`,
-      project_id: projectOid,
-      model_type: model as any,
-      timestamp: new Date(),
-      status: 'running',
-      date_from: dateFrom,
-      date_to: dateTo,
-      meta: { initiatedBy: 'api', filters: { closedWonOnly, minAmount, includeArchived } }
-    });
-
-    // campaigns
     const campaigns = await Campaign.find({ project_id: projectOid }).lean();
-    const campaignIdSet = new Set(campaigns.map((c: any) => String(c._id)));
-
-    // touches grouped by lead, restricted to touches before deal closed_at
-    const leadIds = Array.from(new Set(deals.map(d => String(d.lead_id))));
-    const touches = await CampaignTouch.find({ lead_id: { $in: leadIds }, campaign_id: { $in: Array.from(campaignIdSet) } }).sort({ touched_at: 1 }).lean();
-    const touchesByLead: Record<string, Array<any>> = {};
-    for (const t of touches) {
-      const lid = String(t.lead_id);
-      touchesByLead[lid] = touchesByLead[lid] || [];
-      touchesByLead[lid].push(t);
+    const campaignMap: Record<string, any> = {};
+    const projectCampaignIds = new Set<string>();
+    for (const campaign of campaigns) {
+      const id = String(campaign._id);
+      campaignMap[id] = campaign;
+      projectCampaignIds.add(id);
     }
 
+    const requiredCampaignIds = Array.from(rawCampaignIds).filter(id => projectCampaignIds.has(id));
+    const requiredCampaignSet = new Set(requiredCampaignIds);
+    const filtersApplied = requiredChannelSet.size > 0 || requiredCampaignSet.size > 0;
+
+    const leadIds = Array.from(new Set(deals.map(d => String(d.lead_id))));
+    const touches = await CampaignTouch.find({
+      lead_id: { $in: leadIds },
+      campaign_id: { $in: Array.from(projectCampaignIds) }
+    }).sort({ touched_at: 1 }).lean();
+    const touchesByLead: Record<string, Array<any>> = {};
+    for (const touch of touches) {
+      const lid = String(touch.lead_id);
+      touchesByLead[lid] = touchesByLead[lid] || [];
+      touchesByLead[lid].push(touch);
+    }
+
+    const runObjectId = new mongoose.Types.ObjectId();
     let totalRevenue = 0;
     let totalAttributed = 0;
     let dealsWithJourneys = 0;
     let dealsWithoutJourneys = 0;
+    let dealsIncluded = 0;
+    let excludedByChannel = 0;
+    let excludedByCampaign = 0;
+    let excludedNoTouches = 0;
     const results: any[] = [];
+
+    const getTouchChannel = (touch: any): string => {
+      const fromTouch = typeof touch.channel === 'string' ? touch.channel.toLowerCase() : '';
+      if (fromTouch && CHANNEL_SET.has(fromTouch)) return fromTouch;
+      const campaignId = String(touch.campaign_id);
+      const campaignChannel = (campaignMap[campaignId]?.channel || '').toLowerCase();
+      return CHANNEL_SET.has(campaignChannel) ? campaignChannel : 'other';
+    };
 
     for (const deal of deals) {
       const revenue = Number(deal.revenue) || 0;
-      totalRevenue += revenue;
-      const lid = String(deal.lead_id);
-      const rawTouches = (touchesByLead[lid] || []).filter(t => deal.closed_at ? new Date(t.touched_at).getTime() <= new Date(deal.closed_at as any).getTime() : true);
-      if (!rawTouches || rawTouches.length === 0) { dealsWithoutJourneys++; continue; }
-      // unique campaign sequence preserving order (remove consecutive duplicates)
-      const seq: string[] = [];
-      for (const t of rawTouches) {
-        const cid = String(t.campaign_id);
-        if (seq.length === 0 || seq[seq.length - 1] !== cid) seq.push(cid);
+      const leadId = String(deal.lead_id);
+      const allTouches = (touchesByLead[leadId] || []).filter(t => {
+        if (!deal.closed_at) return true;
+        return new Date(t.touched_at).getTime() <= new Date(deal.closed_at as any).getTime();
+      });
+
+      if (!allTouches.length) {
+        if (filtersApplied) {
+          excludedNoTouches++;
+          continue;
+        }
+        totalRevenue += revenue;
+        dealsWithoutJourneys++;
+        continue;
       }
-      if (seq.length === 0) { dealsWithoutJourneys++; continue; }
+
+      const hasRequiredChannel = requiredChannelSet.size === 0
+        || allTouches.some(touch => requiredChannelSet.has(getTouchChannel(touch)));
+      if (!hasRequiredChannel) {
+        if (filtersApplied) excludedByChannel++;
+        continue;
+      }
+
+      const hasRequiredCampaign = requiredCampaignSet.size === 0
+        || allTouches.some(touch => requiredCampaignSet.has(String(touch.campaign_id)));
+      if (!hasRequiredCampaign) {
+        if (filtersApplied) excludedByCampaign++;
+        continue;
+      }
+
+      totalRevenue += revenue;
+      dealsIncluded++;
+
+      const sequence: string[] = [];
+      for (const touch of allTouches) {
+        const campaignId = String(touch.campaign_id);
+        if (!projectCampaignIds.has(campaignId)) continue;
+        if (sequence.length === 0 || sequence[sequence.length - 1] !== campaignId) {
+          sequence.push(campaignId);
+        }
+      }
+
+      if (!sequence.length) {
+        dealsWithoutJourneys++;
+        continue;
+      }
+
       dealsWithJourneys++;
 
       if (model === 'first_touch') {
-        const cid = seq[0];
-        const campRef = mongoose.isValidObjectId(cid) ? new mongoose.Types.ObjectId(cid) : cid;
-        results.push({ run_id: run._id, project_id: projectOid, deal_id: deal._id, campaign_id: campRef, revenue_share: revenue });
+        const cid = sequence[0];
+        results.push({ run_id: runObjectId, project_id: projectOid, deal_id: deal._id, campaign_id: new mongoose.Types.ObjectId(cid), revenue_share: revenue });
         totalAttributed += revenue;
       } else if (model === 'last_touch') {
-        const cid = seq[seq.length - 1];
-        const campRef = mongoose.isValidObjectId(cid) ? new mongoose.Types.ObjectId(cid) : cid;
-        results.push({ run_id: run._id, project_id: projectOid, deal_id: deal._id, campaign_id: campRef, revenue_share: revenue });
+        const cid = sequence[sequence.length - 1];
+        results.push({ run_id: runObjectId, project_id: projectOid, deal_id: deal._id, campaign_id: new mongoose.Types.ObjectId(cid), revenue_share: revenue });
         totalAttributed += revenue;
-      } else { // linear
-        const n = seq.length;
-        const per = n > 0 ? (revenue / n) : 0;
-        let acc = 0;
-        for (let i = 0; i < seq.length; i++) {
-          const cid = seq[i];
-          const share = i === seq.length - 1 ? Number((revenue - acc).toFixed(2)) : Number(per.toFixed(2));
-          acc += share;
-          const campRef = mongoose.isValidObjectId(cid) ? new mongoose.Types.ObjectId(cid) : cid;
-          results.push({ run_id: run._id, project_id: projectOid, deal_id: deal._id, campaign_id: campRef, revenue_share: share });
+      } else {
+        const n = sequence.length;
+        const perShare = n > 0 ? revenue / n : 0;
+        let allocated = 0;
+        for (let i = 0; i < sequence.length; i++) {
+          const cid = sequence[i];
+          const isLast = i === sequence.length - 1;
+          const share = isLast ? Number((revenue - allocated).toFixed(2)) : Number(perShare.toFixed(2));
+          allocated += share;
+          results.push({ run_id: runObjectId, project_id: projectOid, deal_id: deal._id, campaign_id: new mongoose.Types.ObjectId(cid), revenue_share: share });
           totalAttributed += share;
         }
       }
     }
 
-    if (results.length > 0) {
-      try { await AttributionResult.insertMany(results); } catch (ie) { console.error('[m06/runAttribution] insertMany error', ie); }
+    const dealCountForRun = dealsIncluded + dealsWithoutJourneys;
+
+    if (filtersApplied && dealCountForRun === 0) {
+      return res.status(400).json({
+        error: 'no_deals_after_filters',
+        details: {
+          excludedByFilters: {
+            channels: excludedByChannel,
+            campaigns: excludedByCampaign,
+            noTouches: excludedNoTouches
+          }
+        }
+      });
     }
 
+    const touchesUsed = results.length;
     const unattributed = totalRevenue - totalAttributed;
     const campaignCount = new Set(results.map(r => String(r.campaign_id))).size;
-    run.status = 'success';
-    run.deal_count = deals.length;
-    run.deals_with_journeys = dealsWithJourneys;
-    run.deals_without_journeys = dealsWithoutJourneys;
-    run.total_revenue = Number(totalRevenue.toFixed(2));
-    run.attributed_revenue = Number(totalAttributed.toFixed(2));
-    run.unattributed_revenue = Number(unattributed.toFixed(2));
-    run.campaign_count = campaignCount;
-    run.meta = { ...(run.meta || {}), model, dealsProcessed: deals.length, touches_used: results.length } as any;
-    await run.save();
+
+    const runDoc = await AttributionRun.create({
+      _id: runObjectId,
+      run_id: `run-${Date.now()}`,
+      project_id: projectOid,
+      model_type: model as any,
+      timestamp: new Date(),
+      status: 'success',
+      date_from: dateFrom,
+      date_to: dateTo,
+      deal_count: dealCountForRun,
+      deals_with_journeys: dealsWithJourneys,
+      deals_without_journeys: dealsWithoutJourneys,
+      total_revenue: Number(totalRevenue.toFixed(2)),
+      attributed_revenue: Number(totalAttributed.toFixed(2)),
+      unattributed_revenue: Number(unattributed.toFixed(2)),
+      campaign_count: campaignCount,
+      meta: {
+        initiatedBy: 'api',
+        model,
+        filters: {
+          closedWonOnly,
+          minAmount: Number.isFinite(minAmount) ? minAmount : undefined,
+          includeArchived,
+          requiredChannels: Array.from(requiredChannelSet),
+          requiredCampaignIds
+        },
+        excludedByFilters: filtersApplied ? {
+          channels: excludedByChannel,
+          campaigns: excludedByCampaign,
+          noTouches: excludedNoTouches
+        } : undefined,
+        dealsProcessed: dealCountForRun,
+        touches_used: touchesUsed
+      }
+    });
+
+    if (touchesUsed > 0) {
+      try {
+        await AttributionResult.insertMany(results);
+      } catch (insertErr) {
+        console.error('[m06/runAttribution] insertMany error', insertErr);
+      }
+    }
 
     return res.json({
       ok: true,
-      runId: String(run._id),
-      runName: run.run_id,
+      runId: String(runDoc._id),
+      runName: runDoc.run_id,
       model,
-      date_from: run.date_from,
-      date_to: run.date_to,
-      deal_count: run.deal_count,
-      deals_with_journeys: run.deals_with_journeys,
-      deals_without_journeys: run.deals_without_journeys,
-      total_revenue: run.total_revenue,
-      attributed_revenue: run.attributed_revenue,
-      unattributed_revenue: run.unattributed_revenue,
-      campaign_count: run.campaign_count,
-      touches_used: run.meta?.touches_used || results.length
+      date_from: runDoc.date_from,
+      date_to: runDoc.date_to,
+      deal_count: runDoc.deal_count,
+      deals_with_journeys: runDoc.deals_with_journeys,
+      deals_without_journeys: runDoc.deals_without_journeys,
+      total_revenue: runDoc.total_revenue,
+      attributed_revenue: runDoc.attributed_revenue,
+      unattributed_revenue: runDoc.unattributed_revenue,
+      campaign_count: runDoc.campaign_count,
+      touches_used: touchesUsed,
+      filters: runDoc.meta?.filters || null,
+      excluded_by_filters: (runDoc.meta as any)?.excludedByFilters || null
     });
   } catch (e) {
     console.error('[m06/runAttribution]', e);
@@ -1117,7 +1599,7 @@ export async function listAttributionRuns(req: Request, res: Response) {
     const projectOid = new mongoose.Types.ObjectId(projectId);
     const runs = await AttributionRun.find({ project_id: projectOid })
       .sort({ timestamp: -1 })
-      .select('run_id model_type status timestamp date_from date_to deal_count deals_with_journeys deals_without_journeys total_revenue attributed_revenue unattributed_revenue campaign_count')
+      .select('run_id model_type status timestamp date_from date_to deal_count deals_with_journeys deals_without_journeys total_revenue attributed_revenue unattributed_revenue campaign_count meta')
       .lean();
     return res.json({ ok: true, runs });
   } catch (e) {
@@ -1188,7 +1670,9 @@ export async function getAttributionRunSummary(req: Request, res: Response) {
         unattributed_revenue: run.unattributed_revenue,
         campaign_count: run.campaign_count,
         campaigns_with_credit: campaignAgg.length,
-        touches_used
+        touches_used,
+        filters: (run as any)?.meta?.filters || null,
+        excluded_by_filters: (run as any)?.meta?.excludedByFilters || null
       },
       campaigns: campaignAgg,
       samples: sampleDeals,
@@ -1200,41 +1684,114 @@ export async function getAttributionRunSummary(req: Request, res: Response) {
   }
 }
 
-// GET /m06/roi
-// Optional: ?runId=... to restrict to a specific run
-export async function getROI(req: Request, res: Response) {
+// GET /m06/roi-by-run?projectId=...&runId=...
+export async function roiByRun(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const runId = (req.query.runId as string) || (req.body?.runId as string);
+    const runId = req.query.runId as string | undefined;
 
-    const match: any = { project_id: projectOid };
-    if (runId) {
-      if (!mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'invalid_runId' });
-      match.run_id = new mongoose.Types.ObjectId(runId);
+    if (!projectId || !mongoose.isValidObjectId(projectId)) {
+      return res.status(400).json({ error: 'projectId_required' });
+    }
+    if (!runId || !mongoose.isValidObjectId(runId)) {
+      return res.status(400).json({ error: 'runId_required' });
     }
 
-    // ROI: aggregate revenue per campaign and compute share vs total
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const runOid = new mongoose.Types.ObjectId(runId);
+
+    const match: any = { project_id: projectOid, run_id: runOid };
+
     const agg = await AttributionResult.aggregate([
       { $match: match },
-      { $group: { _id: '$campaign_id', revenue: { $sum: '$revenue_share' } } },
-      { $sort: { revenue: -1 } }
-    ]);
+      { $group: { _id: '$campaign_id', attributed: { $sum: '$revenue_share' } } },
+      { $sort: { attributed: -1 } },
+    ]).exec();
 
-    const total = agg.reduce((s: number, r: any) => s + (r.revenue || 0), 0);
-    const campaigns = await Campaign.find({ project_id: projectOid, _id: { $in: agg.map(a => a._id) } }).select('_id name channel').lean();
-    const nameById = new Map(campaigns.map(c => [String(c._id), c]));
-    const rows = agg.map((r: any) => {
+    if (!agg.length) {
+      return res.status(400).json({
+        error: 'no_attribution_for_run',
+        message: 'No attribution results found for this run. Try another run or rerun attribution.',
+      });
+    }
+
+    const campaignIds = agg.map(r => r._id);
+    const campaigns = await Campaign.find({
+      project_id: projectOid,
+      _id: { $in: campaignIds },
+    })
+      .lean()
+      .exec();
+
+    const campaignMap: Record<string, any> = {};
+    for (const c of campaigns) {
+      campaignMap[String(c._id)] = c;
+    }
+
+    const rows: Array<{
+      campaign_id: string;
+      name: string | null;
+      channel: string | null;
+      spend: number;
+      attributed: number;
+      profit: number;
+      roi: number | null;
+    }> = [];
+
+    let totalAttributed = 0;
+    let totalSpend = 0;
+    let totalDeals = 0;
+
+    for (const r of agg) {
       const cid = String(r._id);
-      const meta = nameById.get(cid);
-      const share = total > 0 ? Number(((r.revenue / total) * 100).toFixed(2)) : 0;
-      return { campaign_id: r._id, name: meta?.name || 'Unknown', channel: meta?.channel || 'unknown', revenue: Number(r.revenue.toFixed(2)), share_percent: share };
-    });
+      const camp = campaignMap[cid] || null;
+      const attributed = Number(r.attributed) || 0;
+      const spend = camp ? Number((camp as any).spend || 0) : 0;
+      const profit = attributed - spend;
+      const roi = spend > 0 ? (profit / spend) * 100 : null;
 
-    return res.json({ ok: true, total: Number(total.toFixed(2)), rows });
+      totalAttributed += attributed;
+      totalSpend += spend;
+      totalDeals += 1;
+
+      rows.push({
+        campaign_id: cid,
+        name: camp?.name || null,
+        channel: (camp as any)?.channel || 'other',
+        spend,
+        attributed,
+        profit,
+        roi,
+      });
+    }
+
+    const netProfit = totalAttributed - totalSpend;
+    const overallROI = totalSpend > 0 ? (netProfit / totalSpend) * 100 : null;
+
+    const warnings: string[] = [];
+    if (totalSpend === 0) {
+      warnings.push('Total campaign spend is 0 — ROI is not meaningful.');
+    }
+    if (overallROI !== null && overallROI < 0) {
+      warnings.push('Overall ROI is negative — campaigns are losing money in this run.');
+    }
+    if (rows.length < 3) {
+      warnings.push('Fewer than 3 campaigns in this run — results may be noisy.');
+    }
+
+    return res.json({
+      ok: true,
+      runId: String(runId),
+      totalAttributed,
+      totalSpend,
+      totalDeals,
+      netProfit,
+      overallROI,
+      campaigns: rows,
+      warnings,
+    });
   } catch (e) {
-    console.error('[m06/getROI]', e);
+    console.error('[m06/roiByRun]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -1245,110 +1802,186 @@ export async function previewDeals(req: Request, res: Response) {
     if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
     const projectOid = new mongoose.Types.ObjectId(projectId);
 
-    // Parse filters
+    const toArray = (input: unknown): string[] => {
+      if (Array.isArray(input)) return input.map(val => String(val));
+      if (typeof input === 'string') {
+        return input.split(',').map(v => v.trim()).filter(Boolean);
+      }
+      return [];
+    };
+
     const from = (req.query.from as string) || '';
     const to = (req.query.to as string) || '';
-    const status = (req.query.status as string) || 'closed_won';
+    const statusParam = (req.query.status as string) || 'closed_won';
     const minAmount = req.query.minAmount !== undefined ? Number(req.query.minAmount) : undefined;
     const maxAmount = req.query.maxAmount !== undefined ? Number(req.query.maxAmount) : undefined;
     const leadQuery = (req.query.lead as string) || '';
-    const channelFilter = (req.query.channel as string) || '';
-    const campaignId = (req.query.campaignId as string) || '';
+    const includeArchived = req.query.includeArchived === 'true';
     const page = Math.max(1, Number(req.query.page || 1));
     const limit = Math.min(100, Math.max(1, Number(req.query.limit || 25)));
 
-    // Build deal match
+    const channelInput = req.query.channels ?? req.query.channel;
+    const requiredChannelSet = new Set(
+      toArray(channelInput)
+        .map(ch => ch.toLowerCase())
+        .filter(ch => CHANNEL_SET.has(ch))
+    );
+
+    const campaignInput = req.query.campaignIds ?? req.query.campaignId;
+    const rawCampaignIds = new Set(
+      toArray(campaignInput)
+        .map(id => id.trim())
+        .filter(id => mongoose.isValidObjectId(id))
+    );
+
     const match: any = { project_id: projectOid };
     if (from || to) {
       match.closed_at = {};
       if (from) match.closed_at.$gte = new Date(from);
       if (to) match.closed_at.$lte = new Date(to);
     }
-    if (status) {
-      if (status === 'closed_won') match.closed_won = true;
-      else if (status === 'open') match.closed_won = false;
-      // closed_lost not explicitly tracked; treat as !closed_won
-      else if (status === 'closed_lost') match.closed_won = false;
-    }
+    if (statusParam === 'closed_won') match.closed_won = true;
+    else if (statusParam === 'closed_lost' || statusParam === 'open') match.closed_won = false;
+    if (!includeArchived) match.status = { $ne: 'archived' };
     if (minAmount !== undefined) match.revenue = { ...(match.revenue || {}), $gte: minAmount };
     if (maxAmount !== undefined) match.revenue = { ...(match.revenue || {}), $lte: maxAmount };
 
-    // Optional lead filter by numeric lead_id or by name/email (lookup leads first)
     let leadIdsFilter: string[] | null = null;
     if (leadQuery) {
       if (/^\d+$/.test(leadQuery)) {
         const lead = await (await import('../m01/models/Lead.js')).default.findOne({ lead_id: Number(leadQuery) }).select('_id').lean();
-        if (lead) leadIdsFilter = [String(lead._id)]; else leadIdsFilter = [];
+        leadIdsFilter = lead ? [String(lead._id)] : [];
       } else {
         const regex = new RegExp(leadQuery.replace(/[-/\\^$*+?.()|[\]{}]/g, ''), 'i');
         const LeadModel = (await import('../m01/models/Lead.js')).default as any;
         const leads = await LeadModel.find({ $or: [{ First_Name: regex }, { Last_Name: regex }, { Company: regex }, { Email: regex }] }).limit(200).select('_id').lean();
-        leadIdsFilter = leads.map((l:any)=> String(l._id));
+        leadIdsFilter = leads.map((l: any) => String(l._id));
       }
-      if (leadIdsFilter) {
-        match.lead_id = { $in: leadIdsFilter.map(id => new mongoose.Types.ObjectId(id)) };
-      }
+      if (leadIdsFilter) match.lead_id = { $in: leadIdsFilter.map(id => new mongoose.Types.ObjectId(id)) };
     }
 
-    const skip = (page - 1) * limit;
-    const total = await Deal.countDocuments(match).exec();
-    const deals = await Deal.find(match).sort({ closed_at: -1, createdAt: -1 }).skip(skip).limit(limit).lean();
+    const deals = await Deal.find(match).sort({ closed_at: -1, createdAt: -1 }).lean();
     const leadIds = Array.from(new Set(deals.map(d => String(d.lead_id))));
 
-    // get campaigns for project
     const campaigns = await Campaign.find({ project_id: projectOid }).lean();
     const campaignMap: Record<string, any> = {};
-    for (const c of campaigns) campaignMap[String(c._id)] = c;
-
-    // touches for these leads (filter by project campaigns and optional channel/campaign)
-    const campaignIds = Object.keys(campaignMap);
-    const touchMatch: any = { lead_id: { $in: leadIds }, campaign_id: { $in: campaignIds } };
-    if (channelFilter) touchMatch.channel = channelFilter;
-    if (campaignId && mongoose.isValidObjectId(campaignId)) touchMatch.campaign_id = campaignId;
-    const touches = await CampaignTouch.find(touchMatch).sort({ touched_at: 1 }).lean();
-
-    // Group touches by lead and filter by touched_at <= deal.closed_at when summarizing
-    const touchesByLead: Record<string, any[]> = {};
-    for (const t of touches) {
-      const lid = String(t.lead_id);
-      touchesByLead[lid] = touchesByLead[lid] || [];
-      touchesByLead[lid].push({ campaign_id: String(t.campaign_id), touched_at: t.touched_at, type: t.type, channel: (t as any).channel || campaignMap[String(t.campaign_id)]?.channel || 'other', campaignName: campaignMap[String(t.campaign_id)]?.name || null });
+    const projectCampaignIds = new Set<string>();
+    for (const campaign of campaigns) {
+      const id = String(campaign._id);
+      campaignMap[id] = campaign;
+      projectCampaignIds.add(id);
     }
 
-    // Enrich with lead summary
-    let leadSummaries: Record<string, { name: string | null; email: string | null }> = {};
-    try {
-      const LeadModel = (await import('../m01/models/Lead.js')).default as any;
-      const uniqueLeadIds = Array.from(new Set(deals.map(d => String(d.lead_id))));
-      const leadDocs = await LeadModel.find({ _id: { $in: uniqueLeadIds } }).select('First_Name Last_Name Email').lean();
-      for (const l of leadDocs) {
-        const name = `${l.First_Name || ''} ${l.Last_Name || ''}`.trim() || null;
-        leadSummaries[String(l._id)] = { name, email: l.Email || null };
-      }
-    } catch {}
+    const requiredCampaignIds = Array.from(rawCampaignIds).filter(id => projectCampaignIds.has(id));
+    const requiredCampaignSet = new Set(requiredCampaignIds);
+    const filtersApplied = requiredChannelSet.size > 0 || requiredCampaignSet.size > 0;
 
-    const summaries = deals.map(d => {
-      const list = (touchesByLead[String(d.lead_id)] || []).filter(t => !d.closed_at || new Date(t.touched_at).getTime() <= new Date(d.closed_at as any).getTime());
+    const touches = await CampaignTouch.find({
+      lead_id: { $in: leadIds },
+      campaign_id: { $in: Array.from(projectCampaignIds) }
+    }).sort({ touched_at: 1 }).lean();
+    const touchesByLead: Record<string, any[]> = {};
+    for (const touch of touches) {
+      const lid = String(touch.lead_id);
+      touchesByLead[lid] = touchesByLead[lid] || [];
+      touchesByLead[lid].push(touch);
+    }
+
+    const getTouchChannel = (touch: any): string => {
+      const fromTouch = typeof touch.channel === 'string' ? touch.channel.toLowerCase() : '';
+      if (fromTouch && CHANNEL_SET.has(fromTouch)) return fromTouch;
+      const campaignId = String(touch.campaign_id);
+      const campaignChannel = (campaignMap[campaignId]?.channel || '').toLowerCase();
+      return CHANNEL_SET.has(campaignChannel) ? campaignChannel : 'other';
+    };
+
+    const eligibleDeals: Array<{ deal: any; touches: any[] }> = [];
+    let excludedByChannel = 0;
+    let excludedByCampaign = 0;
+    let excludedNoTouches = 0;
+
+    for (const deal of deals) {
+      const leadId = String(deal.lead_id);
+      const list = (touchesByLead[leadId] || []).filter(t => !deal.closed_at || new Date(t.touched_at).getTime() <= new Date(deal.closed_at as any).getTime());
+
+      if (!list.length) {
+        if (filtersApplied) {
+          excludedNoTouches++;
+          continue;
+        }
+        eligibleDeals.push({ deal, touches: [] });
+        continue;
+      }
+
+      const hasChannel = requiredChannelSet.size === 0
+        || list.some(touch => requiredChannelSet.has(getTouchChannel(touch)));
+      if (!hasChannel) {
+        if (filtersApplied) excludedByChannel++;
+        continue;
+      }
+
+      const hasCampaign = requiredCampaignSet.size === 0
+        || list.some(touch => requiredCampaignSet.has(String(touch.campaign_id)));
+      if (!hasCampaign) {
+        if (filtersApplied) excludedByCampaign++;
+        continue;
+      }
+
+      eligibleDeals.push({ deal, touches: list });
+    }
+
+    const total = eligibleDeals.length;
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    const pageItems = eligibleDeals.slice(start, end);
+
+    const leadSummaryIds = Array.from(new Set(pageItems.map(item => String(item.deal.lead_id))));
+    const leadSummaries: Record<string, { name: string | null; email: string | null }> = {};
+    if (leadSummaryIds.length) {
+      try {
+        const LeadModel = (await import('../m01/models/Lead.js')).default as any;
+        const leadDocs = await LeadModel.find({ _id: { $in: leadSummaryIds } }).select('First_Name Last_Name Email').lean();
+        for (const doc of leadDocs) {
+          const name = `${doc.First_Name || ''} ${doc.Last_Name || ''}`.trim() || null;
+          leadSummaries[String(doc._id)] = { name, email: doc.Email || null };
+        }
+      } catch (err) {
+        console.error('[m06/previewDeals] lead enrichment failed', err);
+      }
+    }
+
+    const rows = pageItems.map(({ deal, touches: list }) => {
       const touchCount = list.length;
-      const firstTouchAt = touchCount > 0 ? list[0].touched_at : null;
-      const lastTouchAt = touchCount > 0 ? list[list.length - 1].touched_at : null;
-      const leadInfo = leadSummaries[String(d.lead_id)] || { name: null, email: null };
+      const firstTouchAt = touchCount ? list[0].touched_at : null;
+      const lastTouchAt = touchCount ? list[touchCount - 1].touched_at : null;
+      const leadInfo = leadSummaries[String(deal.lead_id)] || { name: null, email: null };
       return {
-        deal_id: String(d._id),
-        deal_external_id: (d as any).deal_id || null,
-        lead_id: String(d.lead_id),
+        deal_id: String(deal._id),
+        deal_external_id: (deal as any).deal_id || null,
+        lead_id: String(deal.lead_id),
         lead_name: leadInfo.name,
         lead_email: leadInfo.email,
-        amount: d.revenue,
-        closed_at: d.closed_at,
-        status: d.closed_won ? 'closed_won' : 'other',
+        amount: deal.revenue,
+        closed_at: deal.closed_at,
+        status: deal.closed_won ? 'closed_won' : 'other',
         touchCount,
         firstTouchAt,
         lastTouchAt,
       };
     });
 
-    return res.json({ ok: true, page, limit, total, rows: summaries });
+    return res.json({
+      ok: true,
+      page,
+      limit,
+      total,
+      rows,
+      excluded_by_filters: filtersApplied ? {
+        channels: excludedByChannel,
+        campaigns: excludedByCampaign,
+        noTouches: excludedNoTouches
+      } : undefined
+    });
   } catch (e) {
     console.error('[m06/previewDeals]', e);
     return res.status(500).json({ error: 'internal' });
@@ -1400,11 +2033,14 @@ export async function journeyDetail(req: Request, res: Response) {
 }
 
 // ROI dashboard data for Page 3
+// Optional: ?runId=... to scope attribution to a specific run
 export async function roiDashboard(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
     const projectOid = new mongoose.Types.ObjectId(projectId);
+
+    const runId = (req.query.runId as string) || null;
 
     // parse filters
     const channelFilter = (req.query.channel as string) || null; // single channel or comma-separated
@@ -1413,8 +2049,14 @@ export async function roiDashboard(req: Request, res: Response) {
     const minSpend = req.query.minSpend ? Number(req.query.minSpend) : null;
     const minROI = req.query.minROI ? Number(req.query.minROI) : null;
 
-    // Precondition: ensure attribution results exist for this project
-    const hasAttrib = await AttributionResult.findOne({ project_id: projectOid }).lean();
+    // Precondition: ensure attribution results exist for this project (and run, if provided)
+    const attribMatch: any = { project_id: projectOid };
+    if (runId) {
+      if (!mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'invalid_runId' });
+      attribMatch.run_id = new mongoose.Types.ObjectId(runId);
+    }
+
+    const hasAttrib = await AttributionResult.findOne(attribMatch).lean();
     if (!hasAttrib) return res.status(400).json({ error: 'no_attribution', message: 'No attribution results found. Please run attribution (Page 2) first.' });
 
     // Precondition: ensure there are campaigns with spend (required to compute ROI)
@@ -1422,7 +2064,7 @@ export async function roiDashboard(req: Request, res: Response) {
     if (!campaignsWithSpend || campaignsWithSpend.length === 0) return res.status(400).json({ error: 'no_campaign_spend', message: 'No campaigns with spend found for this project. Add campaign spend to compute ROI.' });
 
     // Build attributed sums per campaign, optionally limited to a date range (by deal.closed_at)
-    const matchStage: any = { project_id: projectOid };
+    const matchStage: any = { ...attribMatch };
     // We'll join deals to filter by closed_at when start/end provided
     let attribByCampaign: any[] = [];
     if (startMonth || endMonth) {
@@ -1487,7 +2129,7 @@ export async function roiDashboard(req: Request, res: Response) {
 
     // Monthly attributed revenue series (by deal.closed_at)
     const monthlyPipeline: any[] = [
-      { $match: { project_id: projectOid } },
+      { $match: attribMatch },
       { $lookup: { from: 'deals', localField: 'deal_id', foreignField: '_id', as: 'deal' } },
       { $unwind: { path: '$deal', preserveNullAndEmptyArrays: false } },
       { $project: { revenue_share: 1, ym: { $dateToString: { format: '%Y-%m', date: '$deal.closed_at' } }, closed_at: '$deal.closed_at', campaign_id: '$campaign_id' } }

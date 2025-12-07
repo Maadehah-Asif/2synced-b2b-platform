@@ -18,6 +18,7 @@ import Module6Dropdown from './modules/m06/Module6Dropdown'
 import Element1Page from './modules/m06/Element1Page'
 import Module6Home from './modules/m06/Module6Home'
 import Module1Home from './modules/m01/Module1Home'
+import Module2Home from './modules/m02/Module2Home'
 import Element2Page from './modules/m06/Element2Page'
 import RoiDashboard from './modules/m06/RoiDashboard'
 import Element4Page from './modules/m06/Element4Page'
@@ -31,6 +32,11 @@ import JourneyPreview from './modules/m06/JourneyPreview'
 import RunAttributionScreen from './modules/m06/RunAttributionScreen'
 import AllocationDashboard from './modules/m06/AllocationDashboard'
 import RoiCalculation from './modules/m06/RoiCalculation'
+import GenerateIntent from './modules/m02/GenerateIntent'
+import Prioritization from './modules/m02/Prioritization'
+import BehaviorTimeline from './modules/m02/BehaviorTimeline'
+import SegmentBehavior from './modules/m02/SegmentBehavior'
+import IntentForecast from './modules/m02/IntentForecast'
 
 function App() {
   const [route, setRoute] = useState<string>(window.location.hash || '#/login')
@@ -78,6 +84,14 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m01/merged')) return <MergedList />
   if (route.startsWith('#/workspace/') && route.includes('/m01/leads')) return <LeadsList />
   if (route.startsWith('#/workspace/') && route.includes('/m01/upload')) return <Upload />
+  // Module 02 - Generate Intent screen
+  if (route.startsWith('#/workspace/') && route.includes('/m02/generate')) return <GenerateIntent />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/prioritization')) return <Prioritization />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/behavior')) return <BehaviorTimeline />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/segment-behavior')) return <SegmentBehavior />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/intent-forecast')) return <IntentForecast />
+  // Module 2 workspace home (no trailing slash)
+  if (route.startsWith('#/workspace/') && route.includes('/m02') && !route.includes('/m02/')) return <Module2Home />
   // Module 1 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m01') && !route.includes('/m01/')) return <Module1Home />
   if (route.startsWith('#/workspace/')) return <WorkspaceDetail />

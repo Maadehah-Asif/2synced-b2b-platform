@@ -40,7 +40,7 @@ export default function Login() {
     <div className="auth-layout auth-light">
       <div className="auth-brand">2-Synced</div>
       <div className="auth-illustration">
-        <img src={'/src/assets/auth/login image.png'} alt="Login visual" />
+        <img src={'/src/assets/auth/new login-signup image.png'} alt="Login visual" />
       </div>
       <div className="auth-pane">
         <form onSubmit={onSubmit} className="auth-card" style={{ color: 'var(--text)' }}>

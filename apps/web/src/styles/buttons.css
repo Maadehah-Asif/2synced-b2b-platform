@@ -1,0 +1,90 @@
+/* Centralized button styles used across the app
+   - Use `--header-primary` as the canonical primary color
+   - Provides filled primary buttons and outline variants
+   - Small utility sizes included
+*/
+
+:root {
+  /* Fallbacks if theme variables aren't set */
+  --header-primary-fallback: #010872;
+}
+
+/* base button reset */
+.btn, button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  border: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: background .12s ease, box-shadow .12s ease, transform .05s ease;
+}
+
+/* Primary filled CTA - filled with header primary color, white text */
+.btn-primary, .button-primary {
+  background: linear-gradient(180deg, var(--header-primary, var(--header-primary-fallback)), color-mix(in srgb, var(--header-primary, var(--header-primary-fallback)) 70%, black 20%));
+  color: #ffffff;
+  box-shadow: 0 10px 28px rgba(1,8,114,0.14);
+  border: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-2px);
+  box-shadow: 0 20px 44px rgba(1,8,114,0.18);
+}
+
+/* Outline variant - white fill, header-colored outline and text */
+.btn-outline-primary {
+  background: #ffffff;
+  color: var(--header-primary, var(--header-primary-fallback));
+  border: 2px solid var(--header-primary, var(--header-primary-fallback));
+}
+
+.btn-outline-primary:hover:not(:disabled) {
+  background: rgba(1,8,114,0.04);
+}
+
+/* Ghost translucent used in headers */
+.btn-ghost-translucent {
+  background: rgba(255,255,255,0.12);
+  color: #ffffff;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.btn-ghost-translucent:hover:not(:disabled) {
+  background: rgba(255,255,255,0.18);
+}
+
+/* Small variant */
+.btn-sm { padding: 6px 10px; font-size: 0.9em; border-radius: 8px; }
+
+/* Disabled state */
+.btn:disabled, .btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Utility class for outline-style, used by cancel/back buttons */
+.btn-outline {
+  background: #ffffff;
+  color: var(--header-primary, var(--header-primary-fallback));
+  border: 1px solid var(--header-primary, var(--header-primary-fallback));
+}
+
+/* Map auth CTA class to the primary style (explicit mapping for plain CSS)
+   Note: auth.css sets its own `--primary` variable to `--header-primary`,
+   but we include this mapping for extra certainty across styles. */
+.auth-button-primary {
+  background: var(--header-primary, var(--header-primary-fallback));
+  color: #fff;
+  border: 0;
+}
+
+/* Ensure links styled as buttons get same look */
+.btn-link { background: transparent; color: var(--header-primary, var(--header-primary-fallback)); border: none; padding: 0; }

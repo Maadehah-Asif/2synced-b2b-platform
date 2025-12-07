@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import ModuleBackButton from '../../components/ModuleBackButton';
 import MERGED_COLUMNS from './mergedColumns';
 // This app uses a simple hash-based router. Read query params from location.hash
 function readSearchParams() {
@@ -287,7 +288,10 @@ export default function MergeCSV() {
 
   return (
     <div style={{ padding: 16, maxWidth: 980 }}>
-      <h2>Merge CSVs</h2>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+        <ModuleBackButton toSuffix="/m01" />
+        <h2 style={{ margin: 0 }}>Merge CSVs</h2>
+      </div>
       <p style={{ color: '#666' }}>Uploads: {uploadIds.join(', ') || '<none>'}</p>
       {loading && <div>Loading…</div>}
       {error && <div style={{ color: 'red', whiteSpace: 'pre-wrap' }}>{error}</div>}

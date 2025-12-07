@@ -3,7 +3,7 @@ import '../styles/components.css';
 
 function getWorkspaceIdFromHash(){
   const hash = window.location.hash || '';
-  const m = hash.match(/workspace\/([^?]+)/);
+  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
   if (m) return m[1];
   const m2 = hash.match(/workspace=([a-f0-9]+)/i);
   return m2 ? m2[1] : null;
@@ -36,82 +36,15 @@ export default function WorkspaceHeader(){
   }, []);
 
   return (
-    <div style={{ position: 'fixed', top: 64, left: 0, right: 0, height: 48, background: 'var(--primary-1)', borderBottom: '1px solid rgba(0,0,0,0.06)', zIndex: 1900 }}>
+    <div style={{ position: 'fixed', top: 64, left: 0, right: 0, height: 48, background: 'var(--header-secondary)', zIndex: 1900 }}>
       <div className="header-row" style={{ height: '100%', padding: '0 16px' }}>
-        <div className="flex gap-12 align-center">
-          <button className="btn-ghost btn-sm" onClick={() => go(`#/workspace/${workspaceId}`)}>Overview</button>
-          {/* Modules dropdowns */}
-          <div className="dropdown">
-            <button
-              className="btn-ghost btn-sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenMenu(openMenu === 'm01' ? null : 'm01');
-              }}
-            >
-              Module 1 ▾
-            </button>
-            {openMenu === 'm01' && (
-              <div className="dropdown-menu dropdown-menu-light">
-                <div
-                  className="dropdown-item"
-                  onClick={() => { setOpenMenu(null); go(`#/m01/upload?workspace=${workspaceId}`); }}
-                >
-                  Upload Leads
-                </div>
-                <div
-                  className="dropdown-item"
-                  onClick={() => { setOpenMenu(null); go(`#/m01/merged?workspace=${workspaceId}`); }}
-                >
-                  View Merged CSVs
-                </div>
-                <div
-                  className="dropdown-item"
-                  onClick={() => { setOpenMenu(null); go(`#/m01/leads?workspace=${workspaceId}`); }}
-                >
-                  View Leads Code CSVs
-                </div>
-              </div>
-            )}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          <div className="flex gap-12 align-center">
+            <button className="btn-ghost-translucent btn-sm" onClick={() => go(`#/workspace/${workspaceId}`)} style={{ color: '#fff' }}>Overview</button>
+            {/* Module navigation moved to workspace cards — keep only Members here */}
+            <button className="btn-ghost-translucent btn-sm" onClick={() => go(`#/workspace/${workspaceId}/members`)} style={{ color: '#fff' }}>Members</button>
           </div>
-          {[2,3,4,5,6].map(mod => (
-            <button
-              key={mod}
-              className="btn-ghost btn-sm"
-              onClick={() => go(modulePath(mod))}
-            >
-              Module {mod}
-            </button>
-          ))}
-          <div className="dropdown">
-            <button
-              className="btn-ghost btn-sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenMenu(openMenu === 'm07' ? null : 'm07');
-              }}
-            >
-              Module 7 ▾
-            </button>
-            {openMenu === 'm07' && (
-              <div className="dropdown-menu dropdown-menu-light">
-                <div className="dropdown-item" onClick={() => { setOpenMenu(null); go(`#/workspace/${workspaceId}/m07/element1`); }}>Element 1</div>
-                <div className="dropdown-item" onClick={() => { setOpenMenu(null); go(`#/workspace/${workspaceId}/m07/element2`); }}>Element 2</div>
-                <div className="dropdown-item" onClick={() => { setOpenMenu(null); go(`#/workspace/${workspaceId}/m07/element3`); }}>Element 3</div>
-                <div className="dropdown-item" onClick={() => { setOpenMenu(null); go(`#/workspace/${workspaceId}/m07/element4`); }}>Element 4</div>
-              </div>
-            )}
-          </div>
-          {[8,9].map(mod => (
-            <button
-              key={mod}
-              className="btn-ghost btn-sm"
-              onClick={() => go(modulePath(mod))}
-            >
-              Module {mod}
-            </button>
-          ))}
-          <button className="btn-ghost btn-sm" onClick={() => go(`#/workspace/${workspaceId}/members`)}>Members</button>
+          <div />
         </div>
       </div>
     </div>

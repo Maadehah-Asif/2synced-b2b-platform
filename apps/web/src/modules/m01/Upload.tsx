@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Layout from '../../components/Layout';
+import ModuleBackButton from '../../components/ModuleBackButton';
 import MERGED_COLUMNS from './mergedColumns';
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
@@ -75,10 +76,7 @@ export default function Upload(){
 
   // preview is provided on a dedicated page (UploadPreview)
 
-  function goBack(){
-    if(workspace) window.location.hash = `#/workspace/${workspace}`;
-    else window.location.hash = '#/landing';
-  }
+  // Back navigation now provided by ModuleBackButton (to module home)
 
   // Use an in-UI confirmation modal instead of browser confirm()
   function archiveUpload(id: string){
@@ -431,11 +429,10 @@ export default function Upload(){
   return (
     <Layout>
       <div className="p-20">
-        <div className="mb-12">
-          <button type="button" className="btn-ghost" onClick={goBack}>Back</button>
+        <div className="mb-12" style={{ display: 'flex', alignItems: 'center' }}>
+          <ModuleBackButton toSuffix="/m01" />
+          <h2 style={{ margin: 0 }}>Module 01 — Upload CSV</h2>
         </div>
-
-        <h2>Module 01 — Upload CSV</h2>
 
         <form onSubmit={handleSubmit}>
           <input type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />

@@ -5,6 +5,7 @@ import { connectDB } from "./config/db.js";
 import authRouter from "./modules/core/auth/routes.js";
 import workspaceRouter from "./modules/core/workspaces/routes.js";
 import m01Router from "./modules/m01/routes.js";
+import m03Router from "./modules/m03/routes.js";
 
 const app = express();
 app.use(cors());
@@ -18,6 +19,8 @@ app.use("/auth", authRouter);
 app.use("/workspaces", workspaceRouter);
 // Module 01 (ingestion) routes
 app.use("/m01", m01Router);
+// Module 03 (conversations) routes
+app.use("/m03", m03Router);
 
 (async () => {
   await connectDB();

@@ -4,15 +4,15 @@ import './module6.css'
 import ModuleBackButton from '../../components/ModuleBackButton'
 import TimelineChart from './TimelineChart'
 import BarChart from './BarChart'
+import { getWorkspaceIdFromHash } from '../../utils/workspace'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
 function useWorkspaceContextFromHash(){
   const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  const workspaceId = m ? m[1] : null;
-  const runMatch = hash.match(/runId=([^&]+)/);
-  const runId = runMatch ? decodeURIComponent(runMatch[1]) : null;
+  const workspaceId = getWorkspaceIdFromHash();
+  const params = new URLSearchParams(hash.split('?')[1] || '');
+  const runId = params.get('runId');
   return { workspaceId, runId };
 }
 
@@ -131,6 +131,11 @@ export default function RoiDashboard(){
               onChange={(e) => {
                 const value = e.target.value || null;
                 const hash = window.location.hash;
+                const workspace = getWorkspaceIdFromHash();
+                if (!workspace) {
+                  window.location.hash = '#/workspaces';
+                  return;
+                }
                 const base = hash.split('?')[0];
                 const params = new URLSearchParams(hash.split('?')[1] || '');
                 if (value) params.set('runId', value);

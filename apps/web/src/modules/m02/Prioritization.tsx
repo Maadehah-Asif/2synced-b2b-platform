@@ -1,17 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
+import { getWorkspaceIdFromHash } from '../../utils/workspace';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-function getWorkspaceFromHash(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
-
 export default function Prioritization(){
-  const [workspace] = useState<string|null>(() => getWorkspaceFromHash());
+  const [workspace] = useState<string|null>(() => getWorkspaceIdFromHash());
   const [runs, setRuns] = useState<any[]>([]);
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const [meta, setMeta] = useState<any|null>(null);

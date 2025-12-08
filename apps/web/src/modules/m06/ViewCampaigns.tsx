@@ -1,17 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
+import { useWorkspaceId } from '../../utils/workspace';
 // Using local API_URL to match CampaignManager pattern
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-function useWorkspaceIdFromHash(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
-
 export default function ViewCampaigns(){
-  const workspaceId = useWorkspaceIdFromHash();
+  const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +36,7 @@ export default function ViewCampaigns(){
   }
 
   async function fetchCampaigns(){
-    if(!workspaceId) return;
+    if(!workspaceId){ window.location.hash = '#/workspaces'; return; }
     setLoading(true); setError(null);
     try{
       const params = new URLSearchParams({
@@ -66,7 +61,7 @@ export default function ViewCampaigns(){
   useEffect(()=>{ fetchCampaigns() },[workspaceId, search, channelFilter, includeArchived, createdFrom, createdTo, startFrom, startTo])
 
   async function archive(c:any){
-    if(!workspaceId) return;
+    if(!workspaceId){ window.location.hash = '#/workspaces'; return; }
     const ok = window.confirm(`Archive campaign "${c.name}"?`);
     if(!ok) return;
     try{
@@ -78,7 +73,7 @@ export default function ViewCampaigns(){
   }
 
   async function permanentDelete(c:any){
-    if(!workspaceId) return;
+    if(!workspaceId){ window.location.hash = '#/workspaces'; return; }
     const ok = window.prompt(`Type the campaign name to confirm permanent delete:\n${c.name}`);
     if(ok !== c.name) return;
     try{

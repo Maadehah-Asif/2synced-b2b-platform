@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import '../m06/module6.css';
+import { useWorkspaceId } from '../../utils/workspace';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -105,12 +106,6 @@ function formatDate(input?: string) {
   return d.toLocaleDateString();
 }
 
-function getWorkspaceIdFromHash(): string | null {
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/?$|\/)/);
-  return m ? m[1] : null;
-}
-
 function mapError(err: unknown): string {
   if (err && typeof err === 'object') {
     const anyErr = err as ApiErrorShape & { status?: number };
@@ -160,7 +155,7 @@ export default function AllocationDashboard() {
 
   const hasRuns = runs.length > 0;
 
-  const projectId = useMemo(() => getWorkspaceIdFromHash(), []);
+  const projectId = useWorkspaceId({ redirectToWorkspaces: true });
 
   useEffect(() => {
     if (!projectId) return;
@@ -360,9 +355,8 @@ export default function AllocationDashboard() {
                 type="button"
                 className="btn-primary btn-sm"
                 onClick={() => {
-                  const wid = getWorkspaceIdFromHash();
-                  if (!wid) return;
-                  window.location.hash = `#/workspace/${wid}/m06/run-attribution`;
+                  if (!projectId) return;
+                  window.location.hash = `#/workspace/${projectId}/m06/run-attribution`;
                 }}
               >
                 Go to Run Attribution

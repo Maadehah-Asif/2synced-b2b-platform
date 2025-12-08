@@ -1,13 +1,9 @@
+import { getWorkspaceIdFromHash } from '../../../utils/workspace';
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-function useWorkspaceIdFromHash(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
-
 export async function searchCampaigns(q: string){
-  const workspaceId = useWorkspaceIdFromHash();
+  const workspaceId = getWorkspaceIdFromHash();
   const usp = new URLSearchParams();
   if(workspaceId) usp.set('projectId', workspaceId);
   if(q) usp.set('search', q);

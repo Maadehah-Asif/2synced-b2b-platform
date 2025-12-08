@@ -3,6 +3,7 @@ import './module6.css';
 import PieChart from './PieChart';
 import TimelineChart from './TimelineChart';
 import type { TimelinePoint } from './TimelineChart';
+import { useWorkspaceId } from '../../utils/workspace';
 
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
@@ -11,14 +12,8 @@ type Page1StatsProps = {
   compact?: boolean;
 };
 
-function useWorkspaceIdFromHash() {
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
-
 export default function Page1Stats({ compact = false }: Page1StatsProps) {
-  const workspaceId = useWorkspaceIdFromHash();
+  const workspaceId = useWorkspaceId({ redirectToWorkspaces: !compact });
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);

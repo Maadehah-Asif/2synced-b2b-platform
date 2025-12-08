@@ -18,6 +18,7 @@ import type {
   AttributionFilterSummary,
   AttributionExcludedSummary,
 } from './services/attributionRuns';
+import { getWorkspaceIdFromHash } from '../../utils/workspace';
 import '../m06/module6.css';
 
 type RunConfig = RunAttributionRequest;
@@ -152,7 +153,7 @@ function mapError(err: unknown): string {
 }
 
 export default function RunAttributionScreen() {
-  const [projectId, setProjectId] = useState<string>('default');
+  const [projectId, setProjectId] = useState<string | null>(() => getWorkspaceIdFromHash());
   const [config, setConfig] = useState<RunConfig>(() => createDefaultConfig());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('closedWon');
   const [running, setRunning] = useState(false);
@@ -223,16 +224,30 @@ export default function RunAttributionScreen() {
   }, [summary]);
 
   useEffect(() => {
-    const pid = localStorage.getItem('projectId') || 'default';
-    setProjectId(pid);
-    if (activeRunStorageKey) {
-      setStoredDefaultRunId(localStorage.getItem(activeRunStorageKey));
-    }
+    const syncWorkspace = () => {
+      const wid = getWorkspaceIdFromHash();
+      if (!wid) {
+        setProjectId(null);
+        if (window.location.hash !== '#/workspaces') {
+          window.location.hash = '#/workspaces';
+        }
+        return;
+      }
+      setProjectId(wid);
+    };
+
+    syncWorkspace();
+    window.addEventListener('hashchange', syncWorkspace);
+    return () => {
+      window.removeEventListener('hashchange', syncWorkspace);
+    };
   }, []);
 
   useEffect(() => {
     if (activeRunStorageKey) {
       setStoredDefaultRunId(localStorage.getItem(activeRunStorageKey));
+    } else {
+      setStoredDefaultRunId(null);
     }
   }, [activeRunStorageKey]);
 
@@ -474,11 +489,9 @@ export default function RunAttributionScreen() {
   );
 
   const goToROI = useCallback(() => {
-    if (!activeRunIdRef.current) return;
-    const wid = (window.location.hash.match(/#\/workspace\/(.+?)(?:\/|$)/) || [])[1];
-    if (!wid) return;
-    window.location.hash = `#/workspace/${wid}/m06/roi?runId=${encodeURIComponent(activeRunIdRef.current)}`;
-  }, []);
+    if (!activeRunIdRef.current || !projectId) return;
+    window.location.hash = `#/workspace/${projectId}/m06/roi?runId=${encodeURIComponent(activeRunIdRef.current)}`;
+  }, [projectId]);
 
   const markRunAsDefault = useCallback(() => {
     if (!activeRunStorageKey || !activeRunIdRef.current) return;
@@ -849,12 +862,11 @@ export default function RunAttributionScreen() {
                         type="button"
                         className="btn-primary btn-sm"
                         onClick={() => {
-                          const wid = (window.location.hash.match(/#\/workspace\/(.+?)(?:\/|$)/) || [])[1];
-                          if (!wid) return;
+                          if (!projectId) return;
                           const params = new URLSearchParams();
                           if (summary.run.date_from) params.set('from', summary.run.date_from.slice(0, 10));
                           if (summary.run.date_to) params.set('to', summary.run.date_to.slice(0, 10));
-                          window.location.hash = `#/workspace/${wid}/m06/journeys?${params.toString()}`;
+                          window.location.hash = `#/workspace/${projectId}/m06/journeys?${params.toString()}`;
                         }}
                       >
                         Review in Journey Preview

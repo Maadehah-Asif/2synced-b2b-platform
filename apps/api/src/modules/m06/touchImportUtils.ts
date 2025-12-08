@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { Campaign } from './models/Campaign.js';
 import Lead from '../m01/models/Lead.js';
+import { Module6Lead } from './models/Module6Lead.js';
 import { CHANNEL_SET, TOUCH_TYPE_SET, parseDate } from './constants.js';
 import { CampaignTouch } from './models/CampaignTouch.js';
 
@@ -38,16 +39,24 @@ export async function resolveCampaignCached(value: string, projectOid: mongoose.
 }
 
 // Resolve lead by numeric id (from Lead.lead_id or _id fallback)
-export async function resolveLeadCached(value: string, cache: Record<string, any>) {
+export async function resolveLeadCached(value: string, projectOid: mongoose.Types.ObjectId, cache: Record<string, any>) {
   const key = `lead:${value}`;
   if(cache[key]) return cache[key];
   let found = null;
   if(/^[0-9]+$/.test(value)) {
-    found = await Lead.findOne({ lead_id: Number(value) }).lean();
+    found = await Module6Lead.findOne({ project_id: projectOid, lead_id: value }).lean();
+    if(!found) found = await Lead.findOne({ lead_id: Number(value) }).lean();
   }
   if(!found) {
-    // attempt direct _id if valid ObjectId
-    if(mongoose.isValidObjectId(value)) found = await Lead.findById(value).lean();
+    if(mongoose.isValidObjectId(value)) {
+      found = await Module6Lead.findOne({ _id: value, project_id: projectOid }).lean();
+      if(!found) found = await Lead.findById(value).lean();
+    }
+  }
+  if(!found && value.includes('@')) {
+    const emailRegex = new RegExp(`^${value.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&')}$`, 'i');
+    found = await Module6Lead.findOne({ project_id: projectOid, email: emailRegex }).lean();
+    if(!found) found = await Lead.findOne({ Email: emailRegex }).lean();
   }
   if(found) { cache[key] = found; return found; }
   return null;
@@ -105,7 +114,7 @@ export async function importCampaignTouchesCSV(opts: ImportOptions): Promise<Imp
     if(!campDoc) { failedRows.push({ row: rowNumber, error: 'campaign_not_found', raw }); continue; }
 
     // resolve lead
-    const leadDoc = await resolveLeadCached(leadVal, cacheLead);
+    const leadDoc = await resolveLeadCached(leadVal, projectOid, cacheLead);
     if(!leadDoc) { failedRows.push({ row: rowNumber, error: 'lead_not_found', raw }); continue; }
 
     // duplicate check

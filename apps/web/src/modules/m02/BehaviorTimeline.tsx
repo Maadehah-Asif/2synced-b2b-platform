@@ -3,20 +3,16 @@ import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import Autocomplete from '../../components/Autocomplete';
 import { listTouchesByLead } from '../m06/services/touches';
+import { getWorkspaceIdFromHash } from '../../utils/workspace';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-
-function getWorkspaceFromHash(){
-  const m = window.location.hash.match(/workspace=([a-f0-9]+)/i);
-  return m ? m[1] : null;
-}
 
 function getQueryParam(name:string){
   try{ const p = new URLSearchParams(window.location.hash.split('?')[1] || ''); return p.get(name); }catch(e){return null}
 }
 
 export default function BehaviorTimeline(){
-  const [workspace] = useState<string|null>(() => getWorkspaceFromHash());
+  const [workspace] = useState<string|null>(() => getWorkspaceIdFromHash());
   const [runs, setRuns] = useState<any[]>([]);
   const [selectedRun, setSelectedRun] = useState<string | null>(getQueryParam('runId'));
   const [leadQuery, setLeadQuery] = useState(getQueryParam('leadId') || '');
@@ -27,13 +23,12 @@ export default function BehaviorTimeline(){
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [channels, setChannels] = useState<string>('');
-  const [types, setTypes] = useState<string>('');
   const [message, setMessage] = useState<string|null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(()=>{ fetchRuns(); }, [workspace]);
   useEffect(()=>{ if(selectedRun) fetchRunData(selectedRun); }, [selectedRun]);
-  useEffect(()=>{ if(selectedRun && selectedLead) loadLeadAndEvents(selectedRun, selectedLead); }, [selectedRun, selectedLead, startDate, endDate, channels, types]);
+  useEffect(()=>{ if(selectedRun && selectedLead) loadLeadAndEvents(selectedRun, selectedLead); }, [selectedRun, selectedLead, startDate, endDate, channels]);
 
   async function fetchRuns(){
     if(!workspace) return;
@@ -56,16 +51,14 @@ export default function BehaviorTimeline(){
       if(startDate) qparams.from = startDate;
       if(endDate) qparams.to = endDate;
       if(channels) qparams.channel = channels;
-      if(types) qparams.type = types;
+      // type filter removed for now; add again when exposing UI
       const ev = await listTouchesByLead(qparams);
       if(Array.isArray(ev)) setEvents(ev as any[]);
     }catch(e){ setMessage('network error'); }
     setLoading(false);
   }
 
-  const leadOptions = useMemo(()=>samples.map(s=> ({ id: s.lead_id, label: `${s.name||s.lead_id} — ${s.email||''}` })), [samples]);
-
-  function onPickLead(id:string|null){ setSelectedLead(id); }
+  const leadOptions = useMemo(()=>samples.map(s=> ({ id: s.lead_id, label: `${s.name||s.lead_id} ƒ?" ${s.email||''}` })), [samples]);
 
   // compute driver heuristics from events
   const drivers = useMemo(()=>{
@@ -95,16 +88,16 @@ export default function BehaviorTimeline(){
 
         <div className="mt-12" style={{ display:'flex', gap:12, alignItems:'center' }}>
           <label>Select Intent Run</label>
-          <select value={selectedRun||''} onChange={(e)=>{ const v=e.target.value; setSelectedRun(v||null); setSelectedLead(null); setLeadRow(null); window.location.hash = `#/workspace/${workspace}/m02/behavior?runId=${v||''}`; }}>
+          <select value={selectedRun||''} onChange={(e)=>{ const v=e.target.value; setSelectedRun(v||null); setSelectedLead(null); setLeadRow(null); if (workspace) window.location.hash = `#/workspace/${workspace}/m02/behavior?runId=${v||''}`; }}>
             <option value="">-- select run --</option>
-            {runs.map(r=> (<option key={r._id} value={r._id}>{(r.filename||r._id) + ' — ' + new Date(r.createdAt).toLocaleString()}</option>))}
+            {runs.map(r=> (<option key={r._id} value={r._id}>{(r.filename||r._id) + ' ƒ?" ' + new Date(r.createdAt).toLocaleString()}</option>))}
           </select>
 
           <div style={{ marginLeft:12 }}>
             <Autocomplete placeholder="Pick lead" value={leadQuery} fetchItems={async (q)=>{
               setLeadQuery(q);
               return leadOptions.filter(o=>String(o.label).toLowerCase().includes(q.toLowerCase())).slice(0,50).map(o=>({ id:o.id, label:o.label }));
-            }} formatItem={(o:any)=>o.label} getValue={(o:any)=>o.id} onChange={(val, item)=>{ if(item) { setSelectedLead(String(item.id)); window.location.hash = `#/workspace/${workspace}/m02/behavior?runId=${selectedRun||''}&leadId=${encodeURIComponent(String(item.id))}`; } }} />
+            }} formatItem={(o:any)=>o.label} getValue={(o:any)=>o.id} onChange={(_, item)=>{ if(item) { setSelectedLead(String(item.id)); if (workspace) window.location.hash = `#/workspace/${workspace}/m02/behavior?runId=${selectedRun||''}&leadId=${encodeURIComponent(String(item.id))}`; } }} />
           </div>
 
           <div style={{ marginLeft:'auto', display:'flex', gap:8, alignItems:'center' }}>
@@ -157,11 +150,11 @@ export default function BehaviorTimeline(){
             <div>
               <div style={{ background:'#fff', padding:12, borderRadius:8 }}>
                 <h4>Intent Summary</h4>
-                <div><strong>IntentScore:</strong> {leadRow.IntentScore || leadRow.intentscore || '—'}</div>
-                <div><strong>IntentCategory:</strong> {leadRow.IntentCategory || leadRow.intentcategory || '—'}</div>
+                <div><strong>IntentScore:</strong> {leadRow.IntentScore || leadRow.intentscore || 'ƒ?"'}</div>
+                <div><strong>IntentCategory:</strong> {leadRow.IntentCategory || leadRow.intentcategory || 'ƒ?"'}</div>
                 <div style={{ marginTop:8 }}><strong>Top Drivers</strong></div>
                 <ul>
-                  {drivers.map((d:any,i:number)=> (<li key={i}><strong>{d.type}</strong> — {d.count} events ({d.window})</li>))}
+                  {drivers.map((d:any,i:number)=> (<li key={i}><strong>{d.type}</strong> ƒ?" {d.count} events ({d.window})</li>))}
                 </ul>
                 <div style={{ marginTop:8 }}>
                   <strong>Explanation</strong>
@@ -193,9 +186,10 @@ function TimelineSVG({ events }:{ events:any[] }){
         const t = Date.parse(e.touched_at) || now;
         const x = padding + ((t - minT)/range) * (Math.min(width, window.innerWidth-120) - padding*2);
         const y = height/2;
-        return (<g key={i}><circle cx={x} cy={y} r={6} fill="#1774FF" /><title>{new Date(t).toLocaleString()}\n{e.type} • {e.channel}</title></g>);
+        return (<g key={i}><circle cx={x} cy={y} r={6} fill="#1774FF" /><title>{new Date(t).toLocaleString()}\n{e.type} ƒ?› {e.channel}</title></g>);
       })}
       <line x1={padding} y1={height-20} x2={Math.min(width, window.innerWidth-120)-padding} y2={height-20} stroke="#ddd" />
     </svg>
   );
 }
+

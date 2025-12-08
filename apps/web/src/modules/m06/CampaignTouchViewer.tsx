@@ -3,12 +3,7 @@ import ModuleBackButton from '../../components/ModuleBackButton';
 import { useEffect, useState } from 'react';
 import { listTouchesByCampaign, listTouchesByLead, updateTouch, archiveTouch, deleteTouchPermanent, searchCampaigns, searchLeads } from './services/touches';
 import Autocomplete from '../../components/Autocomplete';
-
-function useWorkspaceIdFromHash(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
+import { useWorkspaceId } from '../../utils/workspace';
 
 interface TouchRow {
   _id: string;
@@ -23,7 +18,7 @@ interface TouchRow {
 }
 
 export default function CampaignTouchViewer(){
-  const workspaceId = useWorkspaceIdFromHash();
+  const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
   const [mode, setMode] = useState<'campaign'|'lead'>('campaign');
   const [query, setQuery] = useState('');
   const [options, setOptions] = useState<any[]>([]);
@@ -65,6 +60,7 @@ export default function CampaignTouchViewer(){
   },[query, mode]);
 
   async function load(){
+    if(!workspaceId){ setRows([]); return; }
     if(!selectedEntityId){ setRows([]); return; }
     setLoading(true);
     let data: any = [];
@@ -77,7 +73,7 @@ export default function CampaignTouchViewer(){
     setLoading(false);
   }
 
-  useEffect(()=>{ load(); },[selectedEntityId, showArchived, filterType, filterChannel, mode]);
+  useEffect(()=>{ load(); },[selectedEntityId, showArchived, filterType, filterChannel, mode, workspaceId]);
 
   function beginEdit(r:TouchRow){
     setEditingRowId(r._id);
@@ -123,6 +119,7 @@ export default function CampaignTouchViewer(){
         <ModuleBackButton toSuffix="/m06" />
         <h2 style={{ marginTop:16 }}>Campaign Touches</h2>
         <div style={{ fontSize:12, color:'#555' }}>View & manage interaction events. Toggle mode to switch context.</div>
+        {!workspaceId && <div style={{ fontSize:12, color:'#c33', marginTop:8 }}>Open a workspace to manage campaign touches.</div>}
         <div style={{ marginTop:12, display:'flex', gap:12 }}>
           <button className={mode==='campaign'?'btn-primary':'btn-ghost'} onClick={()=>{ setMode('campaign'); setSelectedEntityId(''); setQuery(''); }}>By Campaign</button>
           <button className={mode==='lead'?'btn-primary':'btn-ghost'} onClick={()=>{ setMode('lead'); setSelectedEntityId(''); setQuery(''); }}>By Lead</button>

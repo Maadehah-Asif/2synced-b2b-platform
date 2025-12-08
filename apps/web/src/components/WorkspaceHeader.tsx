@@ -1,13 +1,6 @@
 import { useEffect, useState } from 'react';
 import '../styles/components.css';
-
-function getWorkspaceIdFromHash(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  if (m) return m[1];
-  const m2 = hash.match(/workspace=([a-f0-9]+)/i);
-  return m2 ? m2[1] : null;
-}
+import { getWorkspaceIdFromHash } from '../utils/workspace';
 
 export default function WorkspaceHeader(){
   const workspaceId = getWorkspaceIdFromHash();

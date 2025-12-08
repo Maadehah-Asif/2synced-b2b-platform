@@ -4,13 +4,10 @@ import ModuleBackButton from '../../components/ModuleBackButton';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-function getWorkspaceFromHash(){
-  const m = window.location.hash.match(/workspace=([a-f0-9]+)/i);
-  return m ? m[1] : null;
-}
+import { getWorkspaceIdFromHash } from '../../utils/workspace';
 
 export default function GenerateIntent(){
-  const [workspace] = useState<string|null>(() => getWorkspaceFromHash());
+  const [workspace] = useState<string|null>(() => getWorkspaceIdFromHash());
   const [files, setFiles] = useState<any[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [info, setInfo] = useState<any|null>(null);

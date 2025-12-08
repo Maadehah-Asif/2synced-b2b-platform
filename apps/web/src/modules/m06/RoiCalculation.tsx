@@ -2,14 +2,9 @@ import { useEffect, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import './module6.css';
+import { useWorkspaceId } from '../../utils/workspace';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-
-function useWorkspaceIdFromHash() {
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
 
 type AttributionRun = {
   id: string;
@@ -41,7 +36,7 @@ type RoiByRunResponse = {
 };
 
 export default function RoiCalculation() {
-  const wid = useWorkspaceIdFromHash();
+  const wid = useWorkspaceId({ redirectToWorkspaces: true });
   const workspaceId = wid || '';
   const [runs, setRuns] = useState<AttributionRun[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(false);

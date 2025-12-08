@@ -1,6 +1,7 @@
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
 import { useEffect, useMemo, useState } from 'react'
+import { useWorkspaceId } from '../../utils/workspace'
 function Toast({ message, type, onClose }:{ message:string, type:'success'|'error', onClose:()=>void }){
   return (
     <div style={{ position:'fixed', right:16, bottom:16, background:type==='success'?'#0a7':'#c33', color:'#fff', padding:'10px 14px', borderRadius:8, boxShadow:'0 2px 8px rgba(0,0,0,0.2)' }}>
@@ -11,15 +12,12 @@ function Toast({ message, type, onClose }:{ message:string, type:'success'|'erro
 }
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
-
-function useWorkspaceIdFromHash(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
+const ALLOWED_CHANNELS = new Set(['email','ads','linkedin','webinar','other'])
+const MAX_PREVIEW_ROWS = 200
+const PREVIEW_PAGE_SIZE = 12
 
 export default function CampaignManager(){
-  const workspaceId = useWorkspaceIdFromHash();
+  const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,22 +31,29 @@ export default function CampaignManager(){
   const [endRow, setEndRow] = useState<number | undefined>(undefined);
   const [showWizard, setShowWizard] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [csvText, setCsvText] = useState('');
   const [headersPreview, setHeadersPreview] = useState<string[]>([]);
   const [rowsPreview, setRowsPreview] = useState<string[][]>([]);
+  const [totalPreviewRows, setTotalPreviewRows] = useState(0);
+  const [previewPage, setPreviewPage] = useState(0);
+  const [previewLimited, setPreviewLimited] = useState(false);
+  const [blankRowCount, setBlankRowCount] = useState(0);
   const [headerError, setHeaderError] = useState<string | null>(null);
   const [submitStatus, setSubmitStatus] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<any>({ name: '', channel: 'email', startDate: '', endDate: '', description: '', tags: '', spend: '' });
   const [formErrors, setFormErrors] = useState<{[k:string]:string}>({});
   const [selected, setSelected] = useState<any | null>(null);
-  const [multiCsvText, setMultiCsvText] = useState('');
-  const [mapCampaignCol, setMapCampaignCol] = useState('campaign');
-  const [mapDateCol, setMapDateCol] = useState('date');
-  const [mapAmountCol, setMapAmountCol] = useState('amount');
+  const [mapNameCol, setMapNameCol] = useState('name');
+  const [mapChannelCol, setMapChannelCol] = useState('channel');
+  const [mapCampaignIdCol, setMapCampaignIdCol] = useState('');
+  const [mapStartDateCol, setMapStartDateCol] = useState('start_date');
+  const [mapEndDateCol, setMapEndDateCol] = useState('end_date');
+  const [mapDescriptionCol, setMapDescriptionCol] = useState('description');
+  const [mapSpendCol, setMapSpendCol] = useState('spend');
   const [blockingWarnings, setBlockingWarnings] = useState<string[]>([]);
   const [nonBlockingWarnings, setNonBlockingWarnings] = useState<string[]>([]);
   const [startRow, setStartRow] = useState(1);
-  const [importResult, setImportResult] = useState<any | null>(null);
   const [toast, setToast] = useState<{msg:string, type:'success'|'error'}|null>(null);
   const [mappingConfirmed, setMappingConfirmed] = useState(false);
   const [forceImport, setForceImport] = useState(false);
@@ -81,7 +86,20 @@ export default function CampaignManager(){
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>){
     const f = e.target.files && e.target.files[0];
     setFile(f || null);
-    if(!f) { setHeadersPreview([]); setRowsPreview([]); return; }
+    if(!f) {
+      setHeadersPreview([]);
+      setRowsPreview([]);
+      setTotalPreviewRows(0);
+      setPreviewPage(0);
+      setPreviewLimited(false);
+      setBlankRowCount(0);
+      setCsvText('');
+      setImportSummary(null);
+      setSubmitStatus(null);
+      setMappingConfirmed(false);
+      setForceImport(false);
+      return;
+    }
     // basic file validations
     if(!f.name.toLowerCase().endsWith('.csv')){
       setToast({ msg: 'Please select a .csv file', type: 'error' });
@@ -94,12 +112,41 @@ export default function CampaignManager(){
     const reader = new FileReader();
     reader.onload = () => {
       const text = String(reader.result || '');
-      const lines = text.split(/\r?\n/).filter(l=>l.trim().length>0);
-      const firstLine = lines[0] || '';
-      const cols = firstLine.split(',').map(s=>s.trim());
+      setCsvText(text);
+      const normalized = text.replace(/\r\n?/g, '\n');
+      const lines = normalized.split('\n');
+      const headerLine = lines[0] || '';
+      const cols = headerLine.split(',').map(s=>s.trim());
       setHeadersPreview(cols);
-      const previewRows: string[][] = lines.slice(1, 6).map(line => line.split(',').map(s=>s.trim()));
-      setRowsPreview(previewRows);
+      const dataLines = lines.slice(1);
+      const nonBlankLines = dataLines.filter(line => line.trim().length > 0);
+      const limitedRows = nonBlankLines.slice(0, MAX_PREVIEW_ROWS).map(line => line.split(',').map(s=>s.trim()));
+      setRowsPreview(limitedRows);
+      setTotalPreviewRows(nonBlankLines.length);
+      setPreviewLimited(nonBlankLines.length > MAX_PREVIEW_ROWS);
+      setBlankRowCount(dataLines.length - nonBlankLines.length);
+      setPreviewPage(0);
+      const lowerCols = cols.map(c => c.toLowerCase());
+      const pickHeader = (current: string, candidates: string[], fallbackIndex?: number) => {
+        if(current && cols.includes(current)) return current;
+        for(const candidate of candidates){
+          const idx = lowerCols.indexOf(candidate);
+          if(idx !== -1) return cols[idx];
+        }
+        if(fallbackIndex !== undefined && cols[fallbackIndex]) return cols[fallbackIndex];
+        return '';
+      };
+      setMapNameCol(prev => pickHeader(prev, ['name','campaign','campaign_name','campaign name'], 0));
+      setMapChannelCol(prev => pickHeader(prev, ['channel','utm_medium','source','utm_source']));
+      setMapStartDateCol(prev => pickHeader(prev, ['start_date','start date','start','startdate','begin_date']));
+      setMapEndDateCol(prev => pickHeader(prev, ['end_date','end date','end','finish_date']));
+      setMapDescriptionCol(prev => pickHeader(prev, ['description','campaign description','details','notes']));
+      setMapSpendCol(prev => pickHeader(prev, ['spend','amount','cost','budget']));
+      setMapCampaignIdCol(prev => pickHeader(prev, ['campaign_id','campaign id','campaignid','id','camp_id','campaign identifier']));
+      setImportSummary(null);
+      setSubmitStatus(null);
+      setMappingConfirmed(false);
+      setForceImport(false);
       if(cols.length < 2){
         setHeaderError('Could not detect valid headers. Ensure first row has column names.');
       } else {
@@ -115,65 +162,157 @@ export default function CampaignManager(){
     const blocking:string[] = [];
     const nonBlocking:string[] = [];
     if(headersPreview.length){
-      if(!headersPreview.includes(mapCampaignCol)) blocking.push(`Missing campaign header: "${mapCampaignCol}"`);
-      if(!headersPreview.includes(mapDateCol)) blocking.push(`Missing date header: "${mapDateCol}"`);
-      if(!headersPreview.includes(mapAmountCol)) blocking.push(`Missing amount header: "${mapAmountCol}"`);
-      const dateIdx = headersPreview.indexOf(mapDateCol);
-      const amtIdx = headersPreview.indexOf(mapAmountCol);
-      if(dateIdx >= 0 && rowsPreview.length){
-        const badDates = rowsPreview.filter(r=>{
-          const v = r[dateIdx] || '';
-          return v && !/^\d{4}-\d{2}-\d{2}$/.test(v);
-        }).length;
-        if(badDates){ nonBlocking.push(`Date format issue: ${badDates}/${rowsPreview.length} rows not YYYY-MM-DD`); }
+      const findIdx = (value: string) => {
+        if(!value) return -1;
+        const exact = headersPreview.indexOf(value);
+        if(exact >= 0) return exact;
+        const lower = value.toLowerCase();
+        return headersPreview.findIndex(h => h.toLowerCase() === lower);
+      };
+      const nameIdx = findIdx(mapNameCol);
+      const channelIdx = findIdx(mapChannelCol);
+      if(!mapNameCol) blocking.push('Select a column for campaign name');
+      else if(nameIdx === -1) blocking.push(`Column "${mapNameCol}" not found for campaign name`);
+      if(!mapChannelCol) blocking.push('Select a column for campaign channel');
+      else if(channelIdx === -1) blocking.push(`Column "${mapChannelCol}" not found for campaign channel`);
+
+      if(mapStartDateCol){
+        const idx = findIdx(mapStartDateCol);
+        if(idx === -1) nonBlocking.push(`Column "${mapStartDateCol}" not found for start date`);
+        else if(rowsPreview.length){
+          const badDates = rowsPreview.filter(r=>{
+            const v = (r[idx] || '').trim();
+            return v && Number.isNaN(Date.parse(v));
+          }).length;
+          if(badDates) nonBlocking.push(`Start date format issue: ${badDates}/${rowsPreview.length} rows look invalid`);
+        }
       }
-      if(amtIdx >= 0 && rowsPreview.length){
-        const badAmts = rowsPreview.filter(r=>{
-          const v = r[amtIdx] || '';
-          return v && isNaN(Number(v));
-        }).length;
-        if(badAmts){ blocking.push(`Amount format issue: ${badAmts}/${rowsPreview.length} non-numeric values`); }
+
+      if(mapEndDateCol){
+        const idx = findIdx(mapEndDateCol);
+        if(idx === -1) nonBlocking.push(`Column "${mapEndDateCol}" not found for end date`);
+        else if(rowsPreview.length){
+          const badDates = rowsPreview.filter(r=>{
+            const v = (r[idx] || '').trim();
+            return v && Number.isNaN(Date.parse(v));
+          }).length;
+          if(badDates) nonBlocking.push(`End date format issue: ${badDates}/${rowsPreview.length} rows look invalid`);
+        }
       }
-      const campIdx = headersPreview.indexOf(mapCampaignCol);
-      if(campIdx >= 0 && rowsPreview.length){
+
+      if(mapSpendCol){
+        const idx = findIdx(mapSpendCol);
+        if(idx === -1) nonBlocking.push(`Column "${mapSpendCol}" not found for spend`);
+        else if(rowsPreview.length){
+          const badAmts = rowsPreview.filter(r=>{
+            const v = (r[idx] || '').trim();
+            if(!v) return false;
+            const numeric = Number(String(v).replace(/[^0-9.-]/g,''));
+            return Number.isNaN(numeric);
+          }).length;
+          if(badAmts) blocking.push(`Spend format issue: ${badAmts}/${rowsPreview.length} values not numeric`);
+        }
+      }
+
+      if(mapDescriptionCol && findIdx(mapDescriptionCol) === -1){
+        nonBlocking.push(`Column "${mapDescriptionCol}" not found for description`);
+      }
+
+      if(nameIdx >= 0 && rowsPreview.length){
         const seen = new Set<string>();
         const dups = new Set<string>();
-        rowsPreview.forEach(r=>{ const v = r[campIdx]; if(v){ if(seen.has(v)) dups.add(v); else seen.add(v); } });
-        if(dups.size){ nonBlocking.push(`Potential duplicate names: ${Array.from(dups).slice(0,5).join(', ')}${dups.size>5?'…':''}`); }
+        rowsPreview.forEach(r=>{
+          const v = (r[nameIdx] || '').trim();
+          if(!v) return;
+          if(seen.has(v)) dups.add(v); else seen.add(v);
+        });
+        if(dups.size) nonBlocking.push(`Potential duplicate names: ${Array.from(dups).slice(0,5).join(', ')}${dups.size>5?'…':''}`);
+      }
+
+      if(channelIdx >= 0 && rowsPreview.length){
+        const unknown = new Set<string>();
+        rowsPreview.forEach(r=>{
+          const v = (r[channelIdx] || '').trim().toLowerCase();
+          if(v && !ALLOWED_CHANNELS.has(v)) unknown.add(v);
+        });
+        if(unknown.size) nonBlocking.push(`Unknown channel values detected: ${Array.from(unknown).slice(0,5).join(', ')}${unknown.size>5?'…':''}`);
+      }
+
+      if(mapCampaignIdCol){
+        const idx = findIdx(mapCampaignIdCol);
+        if(idx === -1) nonBlocking.push(`Column "${mapCampaignIdCol}" not found for campaign ID`);
       }
     }
     setBlockingWarnings(blocking);
     setNonBlockingWarnings(nonBlocking);
-  },[headersPreview, rowsPreview, mapCampaignCol, mapDateCol, mapAmountCol]);
+  },[headersPreview, rowsPreview, mapNameCol, mapChannelCol, mapStartDateCol, mapEndDateCol, mapDescriptionCol, mapSpendCol, mapCampaignIdCol]);
+
+  useEffect(()=>{
+    setPreviewPage(prev => {
+      if(!rowsPreview.length) return 0;
+      const maxIndex = Math.max(0, Math.ceil(rowsPreview.length / PREVIEW_PAGE_SIZE) - 1);
+      return Math.min(prev, maxIndex);
+    });
+  },[rowsPreview]);
+
+  const previewPageCount = rowsPreview.length ? Math.ceil(rowsPreview.length / PREVIEW_PAGE_SIZE) : 1;
+  const currentPreviewPage = rowsPreview.length ? Math.min(previewPage, previewPageCount - 1) : 0;
+  const previewPageRows = rowsPreview.slice(currentPreviewPage * PREVIEW_PAGE_SIZE, (currentPreviewPage * PREVIEW_PAGE_SIZE) + PREVIEW_PAGE_SIZE);
+  const previewStartIndex = rowsPreview.length ? (currentPreviewPage * PREVIEW_PAGE_SIZE) + 1 : 0;
+  const previewEndIndex = rowsPreview.length ? Math.min(rowsPreview.length, previewStartIndex + PREVIEW_PAGE_SIZE - 1) : 0;
 
   async function submitWizard(){
     if(!workspaceId) return;
     if(!file){ alert('Select a CSV file'); return; }
+    if(!csvText.trim()){ setToast({ msg: 'Unable to read CSV file contents', type: 'error' }); return; }
     setSubmitStatus(null);
-    if(!mapCampaignCol || !mapDateCol || !mapAmountCol){ setToast({ msg: 'Fill all mapping fields', type: 'error' }); return; }
+    if(!mapNameCol || !mapChannelCol){ setToast({ msg: 'Campaign name and channel mappings are required', type: 'error' }); return; }
     if(!mappingConfirmed){ setToast({ msg: 'Confirm mappings with the checkbox', type: 'error' }); return; }
     if(blockingWarnings.length && !forceImport){ setToast({ msg: 'Blocking issues present. Fix or enable Force Import.', type: 'error' }); return; }
-    const form = new FormData();
-    form.append('projectId', workspaceId);
-    form.append('file', file);
-    form.append('mapCampaignCol', mapCampaignCol);
-    form.append('mapDateCol', mapDateCol);
-    form.append('mapAmountCol', mapAmountCol);
-    form.append('startRow', String(startRow||1));
-    if(endRow) form.append('endRow', String(endRow));
+    const resolveHeader = (value: string | null | undefined) => {
+      if(!value) return null;
+      const match = headersPreview.find(h => h.toLowerCase() === value.toLowerCase());
+      return match || null;
+    };
+    const resolvedName = resolveHeader(mapNameCol);
+    const resolvedChannel = resolveHeader(mapChannelCol);
+    if(!resolvedName || !resolvedChannel){ setToast({ msg: 'Mapped columns do not match CSV headers', type: 'error' }); return; }
+    const payload:any = {
+      projectId: workspaceId,
+      csv: csvText,
+      map: {
+        campaign_id: resolveHeader(mapCampaignIdCol),
+        name: resolvedName,
+        channel: resolvedChannel,
+        start_date: resolveHeader(mapStartDateCol),
+        end_date: resolveHeader(mapEndDateCol),
+        description: resolveHeader(mapDescriptionCol),
+        spend: resolveHeader(mapSpendCol),
+      },
+      startRow: Number(startRow || 1),
+    };
+    if(endRow) payload.endRow = Number(endRow);
     try{
-      const res = await fetch(`${API_URL}/m06/campaigns/import/csv`, { method: 'POST', body: form });
+      const res = await fetch(`${API_URL}/m06/campaigns/import/csv`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
       const j = await res.json();
-      if(!res.ok){ setSubmitStatus(j && j.error ? String(j.error) : 'Import failed'); }
+      if(!res.ok){
+        setSubmitStatus(j && j.error ? String(j.error) : 'Import failed');
+        setImportSummary(null);
+      }
       else {
-        setSubmitStatus(`Imported ${j.inserted || 0} campaigns`);
+        setSubmitStatus(`Imported ${j.created || 0} campaigns (${j.skipped || 0} skipped)`);
         setImportSummary({
-          processed: j.processed ?? j.inserted ?? 0,
-          imported: j.inserted ?? 0,
-          failed: (j.failedRows && Array.isArray(j.failedRows)) ? j.failedRows.length : (j.failed ?? 0),
-          failedRows: j.failedRows || null
+          created: j.created ?? 0,
+          skipped: j.skipped ?? 0,
+          selected: j.selected ?? 0,
+          errors: Array.isArray(j.errors) ? j.errors : []
         });
-        setToast({ msg: `CSV import finished – ${j.inserted || 0} imported`, type: 'success' });
+        setToast({ msg: `CSV import finished – ${j.created || 0} created`, type: 'success' });
+        fetchCampaigns();
       }
     }catch(e){ alert('Network error'); }
   }
@@ -207,21 +346,6 @@ export default function CampaignManager(){
   async function addSpend(c:any){ const date = prompt('Enter date (YYYY-MM-DD)'); const amount = prompt('Amount'); if(!date || !amount) return; const res = await fetch(`${API_URL}/m06/campaigns/${encodeURIComponent(c.id)}/spend`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ date, amount }) }); if(res.ok) fetchCampaigns(); else { const j = await res.json(); alert('Error: ' + (j && j.error)); } }
 
   // per-campaign CSV paste was removed — use 'Add Spend' for single entries or the workspace import below
-
-  async function uploadCsvMulti(){
-    if(!workspaceId) return alert('Open a workspace first');
-    if(!multiCsvText) return alert('Paste CSV text into textarea');
-    setImportResult(null);
-    const payload:any = { csv: multiCsvText, campaignColumn: mapCampaignCol || null, dateColumn: mapDateCol || null, amountColumn: mapAmountCol || null, startRow: Number(startRow), projectId: workspaceId };
-    try{
-      const res = await fetch(`${API_URL}/m06/campaigns/spend/csv`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-      const j = await res.json();
-      if(!res.ok) { alert('Import error: ' + (j && j.error)); setImportResult({ error: j && j.error }); return; }
-      setImportResult(j);
-      setMultiCsvText('');
-      fetchCampaigns();
-    }catch(e){ alert('Network error'); }
-  }
 
   return (
     <Layout>
@@ -289,67 +413,95 @@ export default function CampaignManager(){
               </div>
             </div>
           )}
-
-          {/* Removed duplicate paste-based CSV import. Use the Wizard below for uploads. */}
-
+          {/* Bulk CSV wizard */}
           {showWizard && (
             <div className="modal-backdrop">
-              <div className="modal" style={{ maxWidth: 800 }}>
+              <div className="modal" style={{ maxWidth: 920 }}>
                 <h3>Upload Campaigns CSV</h3>
+                <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>First row must contain headers. Preview is limited to the first {MAX_PREVIEW_ROWS} rows.</div>
                 <div style={{ marginTop: 8 }}>
                   <input type="file" accept=".csv" onChange={onFileChange} />
                 </div>
-                {headersPreview.length > 0 && (
-                  <div style={{ marginTop: 8, fontSize: 12 }}>
-                    Detected headers: {headersPreview.join(', ')}
-                  </div>
-                )}
                 {headerError && (
-                  <div style={{ marginTop: 8, fontSize: 12, color:'#c33' }}>{headerError}</div>
+                  <div style={{ marginTop: 8, fontSize: 12, color: '#c33' }}>{headerError}</div>
+                )}
+                {!headerError && headersPreview.length > 0 && (
+                  <div style={{ marginTop: 8, fontSize: 12 }}>Detected headers: {headersPreview.join(', ')}</div>
                 )}
                 {rowsPreview.length > 0 && (
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{ fontSize: 12, marginBottom: 4 }}>Preview (first {rowsPreview.length} rows):</div>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr style={{ background: '#fafafa', textAlign: 'left' }}>
-                          {headersPreview.map((h,i)=>(<th key={i} style={{ padding: 6, borderBottom: '1px solid #eee' }}>{h}</th>))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rowsPreview.map((r,ri)=>(
-                          <tr key={ri}>
-                            {headersPreview.map((_,ci)=>(<td key={ci} style={{ padding: 6, borderBottom: '1px solid #f3f3f3' }}>{r[ci]||''}</td>))}
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ fontSize: 12, marginBottom: 6 }}>
+                      Previewing rows {previewStartIndex}-{previewEndIndex} of {rowsPreview.length}
+                      {previewLimited ? ` (showing first ${rowsPreview.length} of ${totalPreviewRows})` : totalPreviewRows ? ` (total rows: ${totalPreviewRows})` : ''}
+                      {blankRowCount > 0 ? ` • Blank lines skipped: ${blankRowCount}` : ''}
+                    </div>
+                    <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 6 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: '#f8f9fb' }}>
+                            {headersPreview.map((h, idx) => (
+                              <th key={idx} style={{ padding: 8, borderBottom: '1px solid #e2e8f0', textAlign: 'left', fontSize: 12 }}>{h}</th>
+                            ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {previewPageRows.map((row, rIdx) => (
+                            <tr key={rIdx} style={{ background: rIdx % 2 === 0 ? '#fff' : '#fafbff' }}>
+                              {headersPreview.map((_, cIdx) => (
+                                <td key={cIdx} style={{ padding: 8, borderBottom: '1px solid #edf2f7', fontSize: 12 }}>
+                                  {row[cIdx] ?? ''}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {rowsPreview.length > PREVIEW_PAGE_SIZE && (
+                      <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: 11, color: '#555' }}>Page {currentPreviewPage + 1} of {previewPageCount}</div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button className="btn-ghost" disabled={currentPreviewPage === 0} onClick={() => setPreviewPage(p => Math.max(0, p - 1))}>Prev</button>
+                          <button className="btn-ghost" disabled={currentPreviewPage >= previewPageCount - 1} onClick={() => setPreviewPage(p => Math.min(previewPageCount - 1, p + 1))}>Next</button>
+                        </div>
+                      </div>
+                    )}
+                    {previewLimited && (
+                      <div style={{ marginTop: 4, fontSize: 11, color: '#777' }}>Showing a sample of the first {MAX_PREVIEW_ROWS} rows for validation.</div>
+                    )}
                   </div>
                 )}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 160px 160px', gap: 12, marginTop: 12, alignItems: 'end' }}>
+                {rowsPreview.length === 0 && headersPreview.length > 0 && totalPreviewRows === 0 && (
+                  <div style={{ marginTop: 12, fontSize: 12, color: '#555' }}>No data rows detected after the header.</div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginTop: 16, alignItems: 'end' }}>
                   <div>
-                    <div style={{ fontSize: 12 }}>Campaign column header</div>
-                    <select value={mapCampaignCol} onChange={e=>setMapCampaignCol(e.target.value)} style={{ width: '100%' }}>
-                      {headerOptions.length ? headerOptions.map(h=> (
-                        <option key={h.value} value={h.value}>{h.label}</option>
-                      )) : (<option value={mapCampaignCol}>{mapCampaignCol}</option>)}
-                    </select>
+                    <div style={{ fontSize: 12 }}>Campaign name header *</div>
+                    <input list="campaign-upload-headers" value={mapNameCol} onChange={e=>setMapNameCol(e.target.value)} placeholder="Column name" style={{ width: '100%' }} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 12 }}>Date column header</div>
-                    <select value={mapDateCol} onChange={e=>setMapDateCol(e.target.value)} style={{ width: '100%' }}>
-                      {headerOptions.length ? headerOptions.map(h=> (
-                        <option key={h.value} value={h.value}>{h.label}</option>
-                      )) : (<option value={mapDateCol}>{mapDateCol}</option>)}
-                    </select>
+                    <div style={{ fontSize: 12 }}>Channel header *</div>
+                    <input list="campaign-upload-headers" value={mapChannelCol} onChange={e=>setMapChannelCol(e.target.value)} placeholder="Column name" style={{ width: '100%' }} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 12 }}>Amount column header</div>
-                    <select value={mapAmountCol} onChange={e=>setMapAmountCol(e.target.value)} style={{ width: '100%' }}>
-                      {headerOptions.length ? headerOptions.map(h=> (
-                        <option key={h.value} value={h.value}>{h.label}</option>
-                      )) : (<option value={mapAmountCol}>{mapAmountCol}</option>)}
-                    </select>
+                    <div style={{ fontSize: 12 }}>Campaign ID header</div>
+                    <input list="campaign-upload-headers" value={mapCampaignIdCol} onChange={e=>setMapCampaignIdCol(e.target.value)} placeholder="Optional" style={{ width: '100%' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12 }}>Start date header</div>
+                    <input list="campaign-upload-headers" value={mapStartDateCol} onChange={e=>setMapStartDateCol(e.target.value)} placeholder="Optional" style={{ width: '100%' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12 }}>End date header</div>
+                    <input list="campaign-upload-headers" value={mapEndDateCol} onChange={e=>setMapEndDateCol(e.target.value)} placeholder="Optional" style={{ width: '100%' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12 }}>Description header</div>
+                    <input list="campaign-upload-headers" value={mapDescriptionCol} onChange={e=>setMapDescriptionCol(e.target.value)} placeholder="Optional" style={{ width: '100%' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12 }}>Spend header</div>
+                    <input list="campaign-upload-headers" value={mapSpendCol} onChange={e=>setMapSpendCol(e.target.value)} placeholder="Optional" style={{ width: '100%' }} />
                   </div>
                   <div>
                     <div style={{ fontSize: 12 }}>Start row</div>
@@ -363,6 +515,11 @@ export default function CampaignManager(){
                     }} style={{ width: '100%' }} />
                   </div>
                 </div>
+                <datalist id="campaign-upload-headers">
+                  {headerOptions.map(opt => (
+                    <option key={opt.value} value={opt.value} />
+                  ))}
+                </datalist>
                 {(blockingWarnings.length || nonBlockingWarnings.length) && (
                   <div style={{ marginTop: 8, background:'#fff3cd', color:'#664d03', padding:10, borderRadius:8, fontSize:12 }}>
                     <div style={{ fontWeight:600, marginBottom:4 }}>Import diagnostics</div>
@@ -370,7 +527,7 @@ export default function CampaignManager(){
                     {nonBlockingWarnings.map((w,i)=> (<div key={'n'+i}>• {w}</div>))}
                   </div>
                 )}
-                <label style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop: 10 }}>
+                <label style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop: 12 }}>
                   <input type="checkbox" checked={mappingConfirmed} onChange={e=>setMappingConfirmed(e.target.checked)} />
                   <span style={{ fontSize: 12 }}>I have reviewed my mappings and confirm they are correct.</span>
                 </label>
@@ -392,17 +549,24 @@ export default function CampaignManager(){
                 {importSummary && (
                   <div style={{ marginTop: 12, background:'#f5f7fa', padding:12, borderRadius:8, fontSize:12 }}>
                     <div style={{ fontWeight:600, marginBottom:4 }}>Import Summary</div>
-                    <div>Processed: {importSummary.processed}</div>
-                    <div>Imported: {importSummary.imported}</div>
-                    <div>Failed: {importSummary.failed}</div>
-                    {importSummary.failedRows && importSummary.failedRows.length > 0 && (
+                    <div>Selected rows: {importSummary.selected}</div>
+                    <div>Created: {importSummary.created}</div>
+                    <div>Skipped: {importSummary.skipped}</div>
+                    <div>Errors: {importSummary.errors ? importSummary.errors.length : 0}</div>
+                    {importSummary.errors && importSummary.errors.length > 0 && (
                       <div style={{ marginTop:8 }}>
+                        <div style={{ marginBottom:6 }}>
+                          {importSummary.errors.slice(0,3).map((err:any, idx:number)=>(
+                            <div key={idx}>Row {err.row}: {String(err.reason || '')}</div>
+                          ))}
+                          {importSummary.errors.length > 3 && <div>…and {importSummary.errors.length - 3} more</div>}
+                        </div>
                         <button className="btn-ghost" disabled={downloadingErrors} onClick={()=>{
-                          if(!importSummary.failedRows) return;
+                          if(!importSummary.errors || !importSummary.errors.length) return;
                           try {
                             setDownloadingErrors(true);
-                            const header = ['row','error'];
-                            const lines = [header.join(',')].concat(importSummary.failedRows.map((fr:any)=> `${fr.rowNumber},"${(fr.error||'').replace(/"/g,'""')}"`));
+                            const header = ['row','reason'];
+                            const lines = [header.join(',')].concat(importSummary.errors.map((fr:any)=> `${fr.row},"${String(fr.reason||'').replace(/"/g,'""')}"`));
                             const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
@@ -415,7 +579,7 @@ export default function CampaignManager(){
                         }}>Retry</button>
                       </div>
                     )}
-                    {!importSummary.failedRows && importSummary.failed === 0 && (
+                    {(!importSummary.errors || importSummary.errors.length === 0) && (
                       <div style={{ marginTop:8, color:'#0a7' }}>All rows imported successfully.</div>
                     )}
                   </div>

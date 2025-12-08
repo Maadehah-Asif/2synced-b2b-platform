@@ -1,16 +1,14 @@
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
 import './module6.css'
-
-function getWorkspaceId(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
+import { getWorkspaceIdFromHash } from '../../utils/workspace'
 
 export default function Module6Home(){
-  const wid = getWorkspaceId();
-  function go(path: string){ if(!wid) return; window.location.hash = path.replace(':workspaceId', wid); }
+  const wid = getWorkspaceIdFromHash();
+  function go(path: string){
+    if (wid) window.location.hash = path.replace(':workspaceId', wid);
+    else window.location.hash = '#/workspaces';
+  }
   return (
     <Layout>
       <main className="page-root">
@@ -29,6 +27,7 @@ export default function Module6Home(){
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/campaigns/manage`)}>Add Campaign</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/touches`)}>Campaign Touches</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/touches/input`)}>Add Touches</button>
+          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/leads`)}>Leads (Import)</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/deals`)}>Deals</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/deals/input`)}>Add Deals</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/journeys`)}>Journey Preview</button>

@@ -1,11 +1,6 @@
 import type { CampaignTouchImportSummary } from '../../../types/campaignTouch';
+import { getWorkspaceIdFromHash } from '../../../utils/workspace';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-
-function getWorkspaceIdFromHash(): string | null {
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
 
 export interface Deal {
   _id?: string;

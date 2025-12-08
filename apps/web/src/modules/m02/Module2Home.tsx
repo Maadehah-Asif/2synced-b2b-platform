@@ -1,22 +1,20 @@
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
 import { useState } from 'react'
+import { getWorkspaceIdFromHash } from '../../utils/workspace'
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
-function getWorkspaceId(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
-
 export default function Module2Home(){
-  const wid = getWorkspaceId();
+  const wid = getWorkspaceIdFromHash();
   const [seeding, setSeeding] = useState(false);
   const [seedMsg, setSeedMsg] = useState<string | null>(null);
-  function go(path: string){ if(!wid) return; window.location.hash = path.replace(':workspaceId', wid); }
+  function go(path: string){
+    if (wid) window.location.hash = path.replace(':workspaceId', wid);
+    else window.location.hash = '#/workspaces';
+  }
   async function seedDemo(){
-    if (!wid) return setSeedMsg('workspace not found');
+    if (!wid) { window.location.hash = '#/workspaces'; return setSeedMsg('workspace not found'); }
     setSeeding(true); setSeedMsg(null);
     try{
       const res = await fetch(`${API_URL || ''}/m02/seed-demo`, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ workspace: wid }) });

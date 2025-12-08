@@ -5,10 +5,7 @@ import MERGED_COLUMNS from './mergedColumns';
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
-function getWorkspaceFromHash() {
-  const m = window.location.hash.match(/workspace=([a-f0-9]+)/i);
-  return m ? m[1] : null;
-}
+import { getWorkspaceIdFromHash } from '../../utils/workspace';
 
 // (helper inferType removed — unused in this module)
 
@@ -24,7 +21,7 @@ export default function Upload(){
   const [uploads, setUploads] = useState<any[]>([]);
   // preview moved to a dedicated screen; inline preview state removed
   const [detailsItem, setDetailsItem] = useState<any|null>(null);
-  const [workspace] = useState<string | null>(() => getWorkspaceFromHash());
+  const [workspace] = useState<string | null>(() => getWorkspaceIdFromHash());
   const [statusView, setStatusView] = useState<'active'|'archived'>('active');
   const [selectedForMerge, setSelectedForMerge] = useState<Record<string, boolean>>({});
   const [headersByUpload, setHeadersByUpload] = useState<Record<string, string[]>>({});
@@ -461,7 +458,7 @@ export default function Upload(){
               <div className="meta">{u.filename} — {u.contentType} — {new Date(u.createdAt).toLocaleString()}</div>
               <div>
                 {statusView === 'active' && <input type="checkbox" checked={!!selectedForMerge[u._id]} onChange={() => toggleSelectForMerge(u._id)} title="Select for merge" />}
-                <button type="button" className="ml-6" onClick={() => { if(workspace) window.location.hash = `#/m01/upload/preview/${u._id}?workspace=${workspace}`; else window.location.hash = `#/m01/upload/preview/${u._id}`; }}>Preview</button>
+                <button type="button" className="ml-6" onClick={() => { if (workspace) window.location.hash = `#/workspace/${workspace}/m01/upload/preview/${u._id}`; else window.location.hash = `#/m01/upload/preview/${u._id}`; }}>Preview</button>
                 <button type="button" className="ml-6" onClick={async () => {
                   // open details
                   const res = await fetch(`${API_URL}/m01/uploads/${u._id}?workspace=${workspace}`, { headers: getAuthHeaders() });
@@ -652,7 +649,7 @@ export default function Upload(){
                         <button onClick={submitMerge} disabled={!requiredTargetsSatisfied()}>Merge and save</button>
                         {mergedResultId && (
                           <button type="button" onClick={() => {
-                            if(workspace) window.location.hash = `#/m01/merged?workspace=${workspace}&open=${mergedResultId}`;
+                            if (workspace) window.location.hash = `#/workspace/${workspace}/m01/merged?open=${mergedResultId}`;
                             else window.location.hash = `#/m01/merged`;
                           }}>Open / View merged CSVs</button>
                         )}

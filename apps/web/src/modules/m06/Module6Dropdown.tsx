@@ -2,28 +2,21 @@ import { useState, useRef, useEffect } from 'react'
 import './module6.css'
 import RoundedButton from './RoundedButton.tsx'
 import Page1Stats from './Page1Stats'
+import { getWorkspaceIdFromHash } from '../../utils/workspace'
 
 export default function Module6Dropdown() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
 
-  function getWorkspaceId(){
-    const hash = window.location.hash || '';
-    const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-    return m ? m[1] : null;
-  }
-
   function openInWorkspace(){
-    const wid = getWorkspaceId();
-    if(!wid) return;
-    window.location.hash = `#/workspace/${wid}/m06/element1`;
+    const wid = getWorkspaceIdFromHash();
+    window.location.hash = wid ? `#/workspace/${wid}/m06/element1` : '#/workspaces';
     setOpen(false);
   }
 
   function go(path: string){
-    const wid = getWorkspaceId();
-    if(!wid) return;
-    window.location.hash = `#/workspace/${wid}${path}`;
+    const wid = getWorkspaceIdFromHash();
+    window.location.hash = wid ? `#/workspace/${wid}${path}` : '#/workspaces';
     setOpen(false);
   }
 

@@ -2,14 +2,9 @@ import { useEffect, useState } from 'react';
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
 import './module6.css'
+import { useWorkspaceId } from '../../utils/workspace'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
-
-function useWorkspaceIdFromHash(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
 
 function numberFmt(v: number | null | undefined){
   if(v === null || v === undefined) return '-';
@@ -17,7 +12,7 @@ function numberFmt(v: number | null | undefined){
 }
 
 export default function Element4Page(){
-  const workspaceId = useWorkspaceIdFromHash();
+  const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);

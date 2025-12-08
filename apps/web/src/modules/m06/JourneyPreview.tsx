@@ -5,15 +5,10 @@ import Autocomplete from '../../components/Autocomplete';
 import { previewJourneys, getJourney } from './services/journeys';
 import { searchCampaigns } from './services/campaigns';
 import { searchLeads } from './services/deals';
-
-function useWorkspaceIdFromHash(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
+import { useWorkspaceId } from '../../utils/workspace';
 
 export default function JourneyPreview(){
-  const workspaceId = useWorkspaceIdFromHash();
+  const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [status, setStatus] = useState('closed_won');
@@ -58,6 +53,11 @@ export default function JourneyPreview(){
   }
 
   async function load(){
+    if(!workspaceId){
+      setRows([]);
+      setTotal(0);
+      return;
+    }
     if(!validate()) return;
     setLoading(true); setError(undefined);
     try{
@@ -68,7 +68,7 @@ export default function JourneyPreview(){
     setLoading(false);
   }
 
-  useEffect(()=>{ if(from && to) load(); },[from,to,status,minAmount,maxAmount,leadFilter,channel,page,limit]);
+  useEffect(()=>{ if(from && to) load(); },[from,to,status,minAmount,maxAmount,leadFilter,channel,page,limit,workspaceId]);
 
   function onPickDeal(row:any){
     setSelectedDealId(row.deal_id);
@@ -85,6 +85,7 @@ export default function JourneyPreview(){
         <ModuleBackButton toSuffix="/m06" />
         <h2 style={{ marginTop:16 }}>Journey Preview</h2>
         <div style={{ fontSize:12, color:'#555' }}>Inspect journeys for deals within an analysis window (pre-attribution).</div>
+        {!workspaceId && <div style={{ fontSize:12, color:'#c33', marginTop:8 }}>Open a workspace to inspect journeys.</div>}
         <div style={{ marginTop:12, display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12 }}>
           <div>
             <div style={{ fontSize:12 }}>Closed from</div>

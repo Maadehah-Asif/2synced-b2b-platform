@@ -1,15 +1,10 @@
 import { useEffect, useState } from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
-
-function getWorkspaceId(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
+import { getWorkspaceIdFromHash } from '../../utils/workspace'
 
 export default function IntentForecast(){
-  const wid = getWorkspaceId();
+  const wid = getWorkspaceIdFromHash();
   const [runs, setRuns] = useState<any[]>([]);
   const [runId, setRunId] = useState<string>('');
   const [scopeType, setScopeType] = useState<string>('all');

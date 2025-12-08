@@ -26,6 +26,7 @@ import CampaignManager from './modules/m06/CampaignManager'
 import ViewCampaigns from './modules/m06/ViewCampaigns'
 import CampaignTouchInput from './modules/m06/CampaignTouchInput'
 import CampaignTouchViewer from './modules/m06/CampaignTouchViewer'
+import Module6Leads from './modules/m06/Module6Leads'
 import DealInput from './modules/m06/DealInput'
 import DealViewer from './modules/m06/DealViewer'
 import JourneyPreview from './modules/m06/JourneyPreview'
@@ -71,6 +72,7 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m06/campaigns')) return <ViewCampaigns />
   if (route.startsWith('#/workspace/') && route.includes('/m06/touches/input')) return <CampaignTouchInput />
   if (route.startsWith('#/workspace/') && route.includes('/m06/touches')) return <CampaignTouchViewer />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/leads')) return <Module6Leads />
   if (route.startsWith('#/workspace/') && route.includes('/m06/deals/input')) return <DealInput />
   if (route.startsWith('#/workspace/') && route.includes('/m06/deals')) return <DealViewer />
   if (route.startsWith('#/workspace/') && route.includes('/m06/journeys')) return <JourneyPreview />

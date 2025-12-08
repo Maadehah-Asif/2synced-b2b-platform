@@ -2,17 +2,12 @@ import Layout from '../../components/Layout'
 import { useEffect, useState } from 'react'
 import './module6.css'
 import ModuleBackButton from '../../components/ModuleBackButton'
+import { useWorkspaceId } from '../../utils/workspace'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
-function useWorkspaceIdFromHash(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
-
 export default function Element2Page(){
-  const workspaceId = useWorkspaceIdFromHash();
+  const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
   const [model, setModel] = useState<'first_touch'|'last_touch'|'linear'>('linear');
   const [preview, setPreview] = useState<any[]>([]);
   const [loadingPreview, setLoadingPreview] = useState(false);

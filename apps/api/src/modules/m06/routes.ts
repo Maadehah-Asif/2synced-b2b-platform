@@ -33,9 +33,10 @@ import {
 	roiByRun,
 	forecast,
 	journeyDetail,
+	listModule6Leads,
+	importModule6LeadsCSV,
+	searchModule6Leads,
 } from './controllers.js';
-import mongoose from 'mongoose';
-import Lead from '../m01/models/Lead.js';
 import { seedHttp, demoProjects } from './seedController.js';
 import { createDeal, listDeals, updateDeal, archiveDeal, deleteDealPermanent, importDealsCSV } from './controllers.js';
 
@@ -95,31 +96,8 @@ router.post('/campaign-touches/:id/archive', archiveCampaignTouch);
 router.delete('/campaign-touches/:id/permanent', deleteCampaignTouchPermanent);
 router.post('/campaign-touches/import/csv', importCampaignTouches);
 
-// Lightweight lead search for autocomplete (by numeric id or partial company/email fields)
-router.get('/leads/search', async (req, res) => {
-	try {
-		const { projectId, q } = req.query as { projectId?: string; q?: string };
-		// projectId currently unused; placeholder for future multi-tenancy filter
-		const query = (q || '').trim();
-		if (!query) return res.json({ leads: [] });
-		let mongoQuery: any = {};
-		if (/^\d+$/.test(query)) {
-			// numeric search by lead_id
-			mongoQuery.lead_id = Number(query);
-		} else {
-			// partial match across First_Name, Last_Name, Company
-			const regex = new RegExp(query.replace(/[-/\\^$*+?.()|[\]{}]/g, ''), 'i');
-			mongoQuery.$or = [
-				{ First_Name: regex },
-				{ Last_Name: regex },
-				{ Company: regex },
-			];
-		}
-		const leads = await Lead.find(mongoQuery).limit(15).select('lead_id First_Name Last_Name Company').lean();
-		return res.json({ leads });
-	} catch (err:any) {
-		return res.status(500).json({ error: 'lead_search_failed', message: err.message });
-	}
-});
+router.get('/leads', listModule6Leads);
+router.post('/leads/import/csv', importModule6LeadsCSV);
+router.get('/leads/search', searchModule6Leads);
 
 export default router;

@@ -4,15 +4,10 @@ import { useEffect, useState } from 'react';
 import Autocomplete from '../../components/Autocomplete';
 import { listDeals, updateDeal, archiveDeal, deleteDealPermanent, searchLeads } from './services/deals';
 import type { Deal } from './services/deals';
-
-function useWorkspaceIdFromHash(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
+import { useWorkspaceId } from '../../utils/workspace';
 
 export default function DealViewer(){
-  const workspaceId = useWorkspaceIdFromHash();
+  const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
   const [leadQuery, setLeadQuery] = useState('');
   const [leadId, setLeadId] = useState<string>('');
   const [from, setFrom] = useState<string>('');
@@ -46,6 +41,10 @@ export default function DealViewer(){
   },[]);
 
   async function load(){
+    if(!workspaceId){
+      setRows([]);
+      return;
+    }
     setLoading(true);
     setLoadError(undefined);
     const params: any = { from, to, status, stage, includeArchived };
@@ -61,7 +60,7 @@ export default function DealViewer(){
     setLoading(false);
   }
 
-  useEffect(()=>{ load(); },[leadId, from, to, status, minAmount, maxAmount, stage, includeArchived]);
+  useEffect(()=>{ load(); },[leadId, from, to, status, minAmount, maxAmount, stage, includeArchived, workspaceId]);
 
   function startEdit(r:Deal){
     setEditing(r._id!);
@@ -107,6 +106,7 @@ export default function DealViewer(){
         <ModuleBackButton toSuffix="/m06" />
         <h2 style={{ marginTop:16 }}>Deals</h2>
         <div style={{ fontSize:12, color:'#555' }}>View, filter, edit, archive or delete deals.</div>
+        {!workspaceId && <div style={{ fontSize:12, color:'#c33', marginTop:8 }}>Open a workspace to load deals.</div>}
         <div style={{ marginTop:12, display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:12 }}>
           <div>
             <div style={{ fontSize:12 }}>Lead</div>

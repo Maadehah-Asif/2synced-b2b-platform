@@ -1,15 +1,13 @@
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
-
-function getWorkspaceId(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
+import { getWorkspaceIdFromHash } from '../../utils/workspace'
 
 export default function Module1Home(){
-  const wid = getWorkspaceId();
-  function go(path: string){ if(!wid) return; window.location.hash = path.replace(':workspaceId', wid); }
+  const wid = getWorkspaceIdFromHash();
+  function go(path: string){
+    if (wid) window.location.hash = path.replace(':workspaceId', wid);
+    else window.location.hash = '#/workspaces';
+  }
   return (
     <Layout>
       <main className="page-root">

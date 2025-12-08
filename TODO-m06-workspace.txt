@@ -1,0 +1,5 @@
+TODO:
+1. Update Module 6 page components to read workspace id via utils/workspace helper and add fallback navigation.
+2. Update Module 6 service modules to reuse workspace helper for consistent query parameters.
+3. Identify remaining Module 6 files using manual regex and replace with helper functions.
+4. Run lint/build to ensure updated files compile.

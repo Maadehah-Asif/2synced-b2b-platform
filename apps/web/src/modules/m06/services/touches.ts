@@ -1,11 +1,6 @@
 import type { CampaignTouch, CampaignTouchImportSummary } from '../../../types/campaignTouch';
+import { getWorkspaceIdFromHash } from '../../../utils/workspace';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-
-function getWorkspaceIdFromHash(): string | null {
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
 
 
 export async function createTouch(payload: { leadId: string; campaignId: string; type: string; channel?: string; touched_at: string; metadata?: any; }): Promise<{ id: string } | { error: string }> {
@@ -64,7 +59,7 @@ export async function deleteTouchPermanent(id: string){
   return res.json();
 }
 
-export async function importTouchesCSV(payload: { csv: string; map: any; startRow?: number; endRow?: number; campaignIdentifier?: string; duplicatePolicy?: string; }): Promise<CampaignTouchImportSummary> {
+export async function importTouchesCSV(payload: { csv: string; map: any; startRow?: number; endRow?: number; campaignIdentifier?: 'name'|'campaign_id'; duplicatePolicy?: string; }): Promise<CampaignTouchImportSummary> {
   const projectId = getWorkspaceIdFromHash();
   const body = { ...payload, projectId };
   const res = await fetch(`${API_URL}/m06/campaign-touches/import/csv`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });

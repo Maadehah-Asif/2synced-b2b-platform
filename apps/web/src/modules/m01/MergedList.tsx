@@ -4,10 +4,7 @@ import ModuleBackButton from '../../components/ModuleBackButton';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-function getWorkspaceFromHash(){
-  const m = window.location.hash.match(/workspace=([a-f0-9]+)/i);
-  return m ? m[1] : null;
-}
+import { getWorkspaceIdFromHash } from '../../utils/workspace';
 
 function getOpenIdFromHash(){
   const m = window.location.hash.match(/open=([a-f0-9]+)/i);
@@ -15,7 +12,7 @@ function getOpenIdFromHash(){
 }
 
 export default function MergedList(){
-  const [workspace] = useState<string|null>(() => getWorkspaceFromHash());
+  const [workspace] = useState<string|null>(() => getWorkspaceIdFromHash());
   const [items, setItems] = useState<any[]>([]);
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<'createdAt_desc'|'createdAt_asc'|'name_asc'|'name_desc'>('createdAt_desc');
@@ -76,7 +73,7 @@ export default function MergedList(){
               </div>
               <div>
                 <button type="button" className="ml-6" onClick={() => {
-                  if(workspace) window.location.hash = `#/m01/merged/preview/${m._id}?workspace=${workspace}`; else window.location.hash = `#/m01/merged/preview/${m._id}`;
+                  if (workspace) window.location.hash = `#/workspace/${workspace}/m01/merged/preview/${m._id}`; else window.location.hash = `#/m01/merged/preview/${m._id}`;
                 }}>Preview</button>
                 <button type="button" className="ml-6" onClick={async () => {
                   const res = await fetch(`${API_URL}/m01/merges/${m._id}?workspace=${workspace}`);

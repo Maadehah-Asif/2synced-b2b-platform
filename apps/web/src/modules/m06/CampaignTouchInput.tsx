@@ -1,8 +1,13 @@
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import { createTouch, importTouchesCSV, searchCampaigns, searchLeads } from './services/touches';
 import Autocomplete from '../../components/Autocomplete';
+import { useWorkspaceId } from '../../utils/workspace';
+
+const MAX_PREVIEW_ROWS = 200;
+const PREVIEW_PAGE_SIZE = 12;
 
 function Toast({ message, type, onClose }:{ message:string, type:'success'|'error', onClose:()=>void }){
   return (
@@ -13,21 +18,15 @@ function Toast({ message, type, onClose }:{ message:string, type:'success'|'erro
   );
 }
 
-function useWorkspaceIdFromHash(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
-
 export default function CampaignTouchInput(){
-  const workspaceId = useWorkspaceIdFromHash();
+  const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
   const [activeTab, setActiveTab] = useState<'form'|'csv'>('form');
   const [toast, setToast] = useState<{msg:string,type:'success'|'error'}|null>(null);
 
   // Form state
   const [leadQuery, setLeadQuery] = useState('');
   const [campaignQuery, setCampaignQuery] = useState('');
-  const [leadOptions, setLeadOptions] = useState<any[]>([]); // placeholder
+  const [leadOptions, setLeadOptions] = useState<any[]>([]);
   const [campaignOptions, setCampaignOptions] = useState<any[]>([]);
   const [selectedLead, setSelectedLead] = useState<string>('');
   const [selectedCampaign, setSelectedCampaign] = useState<string>('');
@@ -39,7 +38,13 @@ export default function CampaignTouchInput(){
 
   // CSV wizard state
   const [csvText, setCsvText] = useState('');
-  const [headers, setHeaders] = useState<string[]>([]);
+  const [headersPreview, setHeadersPreview] = useState<string[]>([]);
+  const [rowsPreview, setRowsPreview] = useState<string[][]>([]);
+  const [totalPreviewRows, setTotalPreviewRows] = useState(0);
+  const [previewLimited, setPreviewLimited] = useState(false);
+  const [blankRowCount, setBlankRowCount] = useState(0);
+  const [previewPage, setPreviewPage] = useState(0);
+  const [headerError, setHeaderError] = useState<string | null>(null);
   const [mapLead, setMapLead] = useState('');
   const [mapCampaign, setMapCampaign] = useState('');
   const [mapChannel, setMapChannel] = useState('');
@@ -51,8 +56,8 @@ export default function CampaignTouchInput(){
   const [mappingConfirmed, setMappingConfirmed] = useState(false);
   const [duplicatePolicy, setDuplicatePolicy] = useState<'skip'|'allow'>('skip');
   const [importing, setImporting] = useState(false);
-  const [diagnostics, setDiagnostics] = useState<{rows:number;blank:number;}|null>(null);
   const [forceImport, setForceImport] = useState(false);
+  const [campaignIdentifier, setCampaignIdentifier] = useState<'name'|'campaign_id'>('name');
 
   useEffect(()=>{
     let ignore = false;
@@ -90,58 +95,207 @@ export default function CampaignTouchInput(){
     if(!validateForm()) return;
     let metadataObj: any = undefined;
     if(metadata.trim()) {
-      try { metadataObj = JSON.parse(metadata); } catch(e){ setToast({ msg:'Metadata must be valid JSON', type:'error'}); return; }
+      try {
+        metadataObj = JSON.parse(metadata);
+      } catch(e){
+        setToast({ msg:'Metadata must be valid JSON', type:'error'});
+        return;
+      }
     }
     const res = await createTouch({ leadId: selectedLead, campaignId: selectedCampaign, type, channel, touched_at: touchedAt, metadata: metadataObj });
-    if((res as any).error) { setToast({ msg:'Error creating touch', type:'error'}); }
-    else { setToast({ msg:'Touch created', type:'success'}); setSelectedLead(''); setSelectedCampaign(''); setTouchedAt(''); setMetadata(''); }
+    if((res as any).error) {
+      setToast({ msg:'Error creating touch', type:'error'});
+    } else {
+      setToast({ msg:'Touch created', type:'success'});
+      setSelectedLead('');
+      setSelectedCampaign('');
+      setLeadQuery('');
+      setCampaignQuery('');
+      setTouchedAt('');
+      setMetadata('');
+      setFormErrors({});
+    }
   }
 
-  useEffect(()=>{
-    if(!csvText.trim()) { setHeaders([]); setDiagnostics(null); return; }
-    const lines = csvText.replace(/\r\n?/g,'\n').split('\n');
-    if(lines.length){
-      const hdrLine = lines[0];
-      // Simple CSV split (no quoted commas); can enhance later
-      const hdrs = hdrLine.split(',').map(h=>h.trim()).filter(Boolean);
-      setHeaders(hdrs);
-      const dataLines = lines.slice(1).filter(l=>l.trim().length>0);
-      setDiagnostics({ rows: dataLines.length, blank: lines.slice(1).length - dataLines.length });
-      // Auto-suggest mappings if blank
-      function suggest(target:string){
-        const lower = hdrs.map(h=>h.toLowerCase());
-        const idx = lower.indexOf(target);
-        return idx>=0?hdrs[idx]:'';
-      }
-      if(!mapLead) setMapLead(suggest('lead_id') || suggest('lead') || '');
-      if(!mapCampaign) setMapCampaign(suggest('campaign') || suggest('campaign_id') || '');
-      if(!mapChannel) setMapChannel(suggest('channel') || '');
-      if(!mapType) setMapType(suggest('type') || '');
-      if(!mapTouchedAt) setMapTouchedAt(suggest('touched_at') || suggest('timestamp') || suggest('date') || '');
+  function resetCsvState(){
+    setCsvText('');
+    setHeadersPreview([]);
+    setRowsPreview([]);
+    setTotalPreviewRows(0);
+    setPreviewLimited(false);
+    setBlankRowCount(0);
+    setPreviewPage(0);
+    setHeaderError(null);
+    setMapLead('');
+    setMapCampaign('');
+    setMapChannel('');
+    setMapType('');
+    setMapTouchedAt('');
+    setStartRow(1);
+    setEndRow(undefined);
+    setUploadSummary(null);
+    setMappingConfirmed(false);
+    setForceImport(false);
+    setImporting(false);
+    setCampaignIdentifier('name');
+  }
+
+  function onFileChange(e: ChangeEvent<HTMLInputElement>){
+    const input = e.target;
+    const f = input.files && input.files[0];
+    resetCsvState();
+    if(!f){
+      input.value = '';
+      return;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[csvText]);
+    if(!f.name.toLowerCase().endsWith('.csv')){
+      setToast({ msg: 'Please select a .csv file', type: 'error' });
+      input.value = '';
+      return;
+    }
+    if(f.size > 5 * 1024 * 1024){
+      setToast({ msg: 'File too large (max 5MB)', type: 'error' });
+      input.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || '');
+      setCsvText(text);
+      const normalized = text.replace(/\r\n?/g, '\n');
+      const lines = normalized.split('\n');
+      const headerLine = lines[0] || '';
+      const cols = headerLine.split(',').map(s=>s.trim());
+      setHeadersPreview(cols);
+      const dataLines = lines.slice(1);
+      const nonBlankLines = dataLines.filter(line => line.trim().length > 0);
+      const limitedRows = nonBlankLines.slice(0, MAX_PREVIEW_ROWS).map(line => line.split(',').map(s=>s.trim()));
+      setRowsPreview(limitedRows);
+      setTotalPreviewRows(nonBlankLines.length);
+      setPreviewLimited(nonBlankLines.length > MAX_PREVIEW_ROWS);
+      setBlankRowCount(dataLines.length - nonBlankLines.length);
+      setPreviewPage(0);
+      const lowerCols = cols.map(c => c.toLowerCase());
+      const pickHeader = (current: string, candidates: string[], fallbackIndex?: number) => {
+        if(current && cols.includes(current)) return current;
+        for(const candidate of candidates){
+          const idx = lowerCols.indexOf(candidate);
+          if(idx !== -1) return cols[idx];
+        }
+        if(fallbackIndex !== undefined && cols[fallbackIndex]) return cols[fallbackIndex];
+        return '';
+      };
+      const nextLead = pickHeader(mapLead, ['lead_id','lead','lead id'], 0);
+      const nextCampaign = pickHeader(mapCampaign, ['campaign','campaign_id','campaign id','campaign name']);
+      const nextChannel = pickHeader(mapChannel, ['channel','touch_channel']);
+      const nextType = pickHeader(mapType, ['type','touch_type','interaction_type']);
+      const nextTouched = pickHeader(mapTouchedAt, ['touched_at','timestamp','date','datetime','touch_time'], 1);
+      setMapLead(nextLead);
+      setMapCampaign(nextCampaign);
+      setMapChannel(nextChannel);
+      setMapType(nextType);
+      setMapTouchedAt(nextTouched);
+      if(nextCampaign && nextCampaign.toLowerCase().includes('id')) setCampaignIdentifier('campaign_id');
+      setUploadSummary(null);
+      setMappingConfirmed(false);
+      setForceImport(false);
+      if(cols.length < 2){
+        setHeaderError('Could not detect valid headers. Ensure first row has column names.');
+      } else {
+        setHeaderError(null);
+      }
+    };
+    reader.onerror = () => {
+      resetCsvState();
+      setToast({ msg: 'Failed to read file', type: 'error' });
+    };
+    reader.readAsText(f);
+    input.value = '';
+  }
+
+  const headerOptions = useMemo(() => headersPreview.map(value => ({ value, label: value })), [headersPreview]);
+
+  useEffect(()=>{
+    setPreviewPage(prev => {
+      if(!rowsPreview.length) return 0;
+      const maxIndex = Math.max(0, Math.ceil(rowsPreview.length / PREVIEW_PAGE_SIZE) - 1);
+      return Math.min(prev, maxIndex);
+    });
+  },[rowsPreview]);
+
+  const previewPageCount = rowsPreview.length ? Math.ceil(rowsPreview.length / PREVIEW_PAGE_SIZE) : 1;
+  const currentPreviewPage = rowsPreview.length ? Math.min(previewPage, previewPageCount - 1) : 0;
+  const previewPageRows = rowsPreview.slice(currentPreviewPage * PREVIEW_PAGE_SIZE, (currentPreviewPage * PREVIEW_PAGE_SIZE) + PREVIEW_PAGE_SIZE);
+  const previewStartIndex = rowsPreview.length ? (currentPreviewPage * PREVIEW_PAGE_SIZE) + 1 : 0;
+  const previewEndIndex = rowsPreview.length ? Math.min(rowsPreview.length, previewStartIndex + PREVIEW_PAGE_SIZE - 1) : 0;
+
+  const resolveHeader = (value: string | null | undefined) => {
+    if(!value) return null;
+    const exact = headersPreview.find(h => h === value);
+    if(exact) return exact;
+    const lower = value.toLowerCase();
+    const match = headersPreview.find(h => h.toLowerCase() === lower);
+    return match || null;
+  };
 
   function verifyRequiredMappings(){
-    const missing:string[] = [];
+    const missing: string[] = [];
     if(!mapLead) missing.push('lead');
     if(!mapCampaign) missing.push('campaign');
     if(!mapType) missing.push('type');
     if(!mapTouchedAt) missing.push('touched_at');
-    if(missing.length){ setToast({ msg:`Missing required mappings: ${missing.join(', ')}`, type:'error'}); return false; }
-    return true;
+    if(missing.length){
+      setToast({ msg: `Missing required mappings: ${missing.join(', ')}`, type: 'error' });
+      return null;
+    }
+    const resolved = {
+      lead: resolveHeader(mapLead),
+      campaign: resolveHeader(mapCampaign),
+      channel: resolveHeader(mapChannel),
+      type: resolveHeader(mapType),
+      touched_at: resolveHeader(mapTouchedAt),
+    } as const;
+    const mismatched: string[] = [];
+    if(!resolved.lead) mismatched.push(`lead column "${mapLead}"`);
+    if(!resolved.campaign) mismatched.push(`campaign column "${mapCampaign}"`);
+    if(!resolved.type) mismatched.push(`type column "${mapType}"`);
+    if(!resolved.touched_at) mismatched.push(`touched_at column "${mapTouchedAt}"`);
+    if(mismatched.length){
+      setToast({ msg: `Mapped headers not found: ${mismatched.join(', ')}`, type: 'error' });
+      return null;
+    }
+    return resolved;
   }
 
   async function submitCsv(){
-    if(!csvText.trim()) { setToast({ msg:'Paste CSV text first', type:'error'}); return; }
-    if(!verifyRequiredMappings()) return;
+    if(!workspaceId){ setToast({ msg:'Open a workspace first', type:'error'}); return; }
+    if(!csvText.trim()) { setToast({ msg:'Upload a CSV file first', type:'error'}); return; }
+    const resolvedMap = verifyRequiredMappings();
+    if(!resolvedMap) return;
     if(!mappingConfirmed && !forceImport){ setToast({ msg:'Confirm mappings or use Force Import', type:'error'}); return; }
-    setImporting(true); setUploadSummary(null);
-    const map = { lead: mapLead, campaign: mapCampaign, channel: mapChannel, type: mapType, touched_at: mapTouchedAt };
-    const summary = await importTouchesCSV({ csv: csvText, map, startRow, endRow, campaignIdentifier:'name', duplicatePolicy });
-    setImporting(false); setUploadSummary(summary);
-    if(summary && summary.inserted){ setToast({ msg:`Imported ${summary.inserted} touches`, type:'success'}); }
-    else if(summary && summary.failed){ setToast({ msg:`Import finished with ${summary.failed} failures`, type:'error'}); }
+    setImporting(true);
+    setUploadSummary(null);
+    try {
+      const summary = await importTouchesCSV({
+        csv: csvText,
+        map: resolvedMap,
+        startRow: Number(startRow || 1),
+        endRow,
+        campaignIdentifier,
+        duplicatePolicy
+      });
+      setUploadSummary(summary);
+      if(summary && summary.inserted){
+        setToast({ msg:`Imported ${summary.inserted} touches`, type:'success'});
+      } else if(summary && summary.failed){
+        setToast({ msg:`Import finished with ${summary.failed} failures`, type:'error'});
+      } else {
+        setToast({ msg:'Import completed', type:'success'});
+      }
+    } catch (e){
+      setToast({ msg:'Failed to import CSV', type:'error'});
+    }
+    setImporting(false);
   }
 
   function downloadErrors(){
@@ -232,51 +386,106 @@ export default function CampaignTouchInput(){
         {activeTab==='csv' && (
           <div style={{ marginTop:16, padding:12, background:'#fff', borderRadius:8 }}>
             <h4>Bulk Import via CSV</h4>
-            <div style={{ fontSize:12, color:'#555', marginBottom:8 }}>Map columns then import. Required: lead, campaign, type, touched_at.</div>
-            <textarea rows={10} style={{ width:'100%', fontFamily:'monospace' }} placeholder="Paste CSV here (first row headers)" value={csvText} onChange={e=>setCsvText(e.target.value)} />
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:12, marginTop:12 }}>
+            <div style={{ fontSize:12, color:'#555', marginBottom:12 }}>Upload a CSV file with touch activity. Required headers: lead, campaign, type, touched_at.</div>
+            <div>
+              <input type="file" accept=".csv" onChange={onFileChange} />
+            </div>
+            {headerError && (
+              <div style={{ marginTop:8, fontSize:12, color:'#c33' }}>{headerError}</div>
+            )}
+            {!headerError && headersPreview.length > 0 && (
+              <div style={{ marginTop:8, fontSize:12 }}>Detected headers: {headersPreview.join(', ')}</div>
+            )}
+            {rowsPreview.length > 0 && (
+              <div style={{ marginTop:16 }}>
+                <div style={{ fontSize:12, marginBottom:6 }}>
+                  Previewing rows {previewStartIndex}-{previewEndIndex} of {rowsPreview.length}
+                  {previewLimited ? ` (showing first ${rowsPreview.length} of ${totalPreviewRows})` : totalPreviewRows ? ` (total rows: ${totalPreviewRows})` : ''}
+                  {blankRowCount > 0 ? ` • Blank lines skipped: ${blankRowCount}` : ''}
+                </div>
+                <div style={{ overflowX:'auto', border:'1px solid #e5e7eb', borderRadius:6 }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                    <thead>
+                      <tr style={{ background:'#f8f9fb' }}>
+                        {headersPreview.map((header, idx)=>(
+                          <th key={idx} style={{ padding:8, borderBottom:'1px solid #e2e8f0', textAlign:'left', fontSize:12 }}>{header}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewPageRows.map((row, rIdx)=>(
+                        <tr key={rIdx} style={{ background: rIdx % 2 === 0 ? '#fff' : '#fafbff' }}>
+                          {headersPreview.map((_, cIdx)=>(
+                            <td key={cIdx} style={{ padding:8, borderBottom:'1px solid #edf2f7', fontSize:12 }}>{row[cIdx] ?? ''}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {rowsPreview.length > PREVIEW_PAGE_SIZE && (
+                  <div style={{ marginTop:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <div style={{ fontSize:11, color:'#555' }}>Page {currentPreviewPage + 1} of {previewPageCount}</div>
+                    <div style={{ display:'flex', gap:8 }}>
+                      <button className="btn-ghost" disabled={currentPreviewPage === 0} onClick={()=>setPreviewPage(p=>Math.max(0, p-1))}>Prev</button>
+                      <button className="btn-ghost" disabled={currentPreviewPage >= previewPageCount - 1} onClick={()=>setPreviewPage(p=>Math.min(previewPageCount - 1, p+1))}>Next</button>
+                    </div>
+                  </div>
+                )}
+                {previewLimited && (
+                  <div style={{ marginTop:4, fontSize:11, color:'#777' }}>Showing a sample of the first {MAX_PREVIEW_ROWS} rows for validation.</div>
+                )}
+              </div>
+            )}
+            {rowsPreview.length === 0 && headersPreview.length > 0 && totalPreviewRows === 0 && (
+              <div style={{ marginTop:12, fontSize:12, color:'#555' }}>No data rows detected after the header.</div>
+            )}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:12, marginTop:16 }}>
               <div>
                 <div style={{ fontSize:12 }}>Lead column *</div>
-                <select value={mapLead} onChange={e=>setMapLead(e.target.value)}>
-                  <option value="">-- select --</option>
-                  {headers.map(h=> <option key={h} value={h}>{h}</option> )}
-                </select>
+                <input list="touch-upload-headers" value={mapLead} onChange={e=>setMapLead(e.target.value)} placeholder="Column name" style={{ width:'100%' }} />
               </div>
               <div>
                 <div style={{ fontSize:12 }}>Campaign column *</div>
-                <select value={mapCampaign} onChange={e=>setMapCampaign(e.target.value)}>
-                  <option value="">-- select --</option>
-                  {headers.map(h=> <option key={h} value={h}>{h}</option> )}
-                </select>
+                    <input
+                      list="touch-upload-headers"
+                      value={mapCampaign}
+                      onChange={e=>{
+                        const value = e.target.value;
+                        setMapCampaign(value);
+                        if(value && value.toLowerCase().includes('id')) setCampaignIdentifier('campaign_id');
+                      }}
+                      placeholder="Column name"
+                      style={{ width:'100%' }}
+                    />
               </div>
               <div>
                 <div style={{ fontSize:12 }}>Channel column</div>
-                <select value={mapChannel} onChange={e=>setMapChannel(e.target.value)}>
-                  <option value="">-- optional --</option>
-                  {headers.map(h=> <option key={h} value={h}>{h}</option> )}
-                </select>
+                <input list="touch-upload-headers" value={mapChannel} onChange={e=>setMapChannel(e.target.value)} placeholder="Optional" style={{ width:'100%' }} />
               </div>
               <div>
                 <div style={{ fontSize:12 }}>Type column *</div>
-                <select value={mapType} onChange={e=>setMapType(e.target.value)}>
-                  <option value="">-- select --</option>
-                  {headers.map(h=> <option key={h} value={h}>{h}</option> )}
-                </select>
+                <input list="touch-upload-headers" value={mapType} onChange={e=>setMapType(e.target.value)} placeholder="Column name" style={{ width:'100%' }} />
               </div>
               <div>
                 <div style={{ fontSize:12 }}>Touched at column *</div>
-                <select value={mapTouchedAt} onChange={e=>setMapTouchedAt(e.target.value)}>
-                  <option value="">-- select --</option>
-                  {headers.map(h=> <option key={h} value={h}>{h}</option> )}
-                </select>
+                <input list="touch-upload-headers" value={mapTouchedAt} onChange={e=>setMapTouchedAt(e.target.value)} placeholder="Column name" style={{ width:'100%' }} />
               </div>
+                  <div>
+                    <div style={{ fontSize:12 }}>Campaign identifier</div>
+                    <select value={campaignIdentifier} onChange={e=>setCampaignIdentifier(e.target.value as 'name'|'campaign_id')} style={{ width:'100%' }}>
+                      <option value="name">Campaign name</option>
+                      <option value="campaign_id">Campaign ID</option>
+                    </select>
+                    <div style={{ fontSize:11, color:'#555', marginTop:4 }}>Choose how the campaign column should match existing campaigns.</div>
+                  </div>
               <div>
                 <div style={{ fontSize:12 }}>Start row</div>
-                <input type="number" min={1} value={String(startRow)} onChange={e=>setStartRow(Number(e.target.value||1))} />
+                <input type="number" min={1} value={String(startRow)} onChange={e=>setStartRow(Number(e.target.value||1))} style={{ width:'100%' }} />
               </div>
               <div>
                 <div style={{ fontSize:12 }}>End row (optional)</div>
-                <input type="number" min={1} value={endRow!==undefined?String(endRow):''} placeholder="auto" onChange={e=>setEndRow(e.target.value?Number(e.target.value):undefined)} />
+                <input type="number" min={1} value={endRow!==undefined?String(endRow):''} placeholder="auto" onChange={e=>setEndRow(e.target.value?Number(e.target.value):undefined)} style={{ width:'100%' }} />
               </div>
               <div>
                 <div style={{ fontSize:12 }}>Duplicate policy</div>
@@ -286,17 +495,19 @@ export default function CampaignTouchInput(){
                 </select>
               </div>
             </div>
+            <datalist id="touch-upload-headers">
+              {headerOptions.map(opt => (
+                <option key={opt.value} value={opt.value} />
+              ))}
+            </datalist>
             <label style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:12 }}>
               <input type="checkbox" checked={mappingConfirmed} onChange={e=>setMappingConfirmed(e.target.checked)} />
-              <span style={{ fontSize:12 }}>I have reviewed my mappings and understand they will write interaction data.</span>
+              <span style={{ fontSize:12 }}>I have reviewed my mappings and understand they will create touch records.</span>
             </label>
             <label style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:4 }}>
               <input type="checkbox" checked={forceImport} onChange={e=>setForceImport(e.target.checked)} />
               <span style={{ fontSize:12 }}>Force import without confirmation (advanced)</span>
             </label>
-            {diagnostics && (
-              <div style={{ marginTop:8, fontSize:11, color:'#555' }}>Rows: {diagnostics.rows}, Blank lines: {diagnostics.blank}, Headers detected: {headers.length}</div>
-            )}
             <div style={{ marginTop:12 }}>
               <button className="btn-primary" disabled={importing} onClick={submitCsv}>{importing?'Importing...':'Import CSV'}</button>
               {uploadSummary && (

@@ -58,3 +58,25 @@ desktop.ini
 .idea/
 *.code-workspace
 .specstory/
+
+# --- Data files (ignore CSVs and common data artifacts) ---
+# ignore any folder named `data` anywhere in the repo
+**/data/
+# common flat data formats
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.db
+*.sqlite
+*.sqlite3
+*.xls
+*.xlsx
+
+# also ignore compressed data archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz

@@ -1,0 +1,325 @@
+/* =========================
+   PALETTE / THEME TOKENS
+   ========================= */
+
+.auth-layout {
+  --bg-dark: #0f1724; /* page background (auth only) */
+  --navy: #08234a;    /* illustration column */
+  --panel: #0f1724;   /* overall panel bg fallback */
+  --card-bg: #111318; /* card background (auth only) */
+  --muted: #9aa4b2;   /* subtitle / muted text */
+  --muted-2: rgba(255,255,255,0.12);
+  --border: rgba(255,255,255,0.06);
+  --text: #eef2ff;    /* main text (light) */
+  --primary: #1e56ff; /* vivid blue CTA */
+  --accent: #1347b9;
+}
+
+/* Light-mode variant used on Login/Signup */
+.auth-layout.auth-light {
+  --bg-dark: #ffffff;
+  --navy: transparent;
+  --panel: #ffffff;
+  --card-bg: #ffffff;
+  --muted: #6b7684;
+  --muted-2: rgba(11,37,64,0.06);
+  --border: rgba(11,37,64,0.06);
+  --text: #0b2540;
+  --primary: var(--header-primary, #010872);
+  --accent: var(--header-primary, #010872);
+}
+
+/* =========================
+   ROOT LAYOUT
+   ========================= */
+
+.auth-layout {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg-dark);
+  align-items: stretch;   /* both columns fill full height */
+  overflow-x: hidden;
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* Left: illustration / marketing hero */
+.auth-illustration {
+  flex: 0 0 50%;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--header-primary, #010872);
+}
+
+.auth-illustration img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* fills column, crops nicely if needed */
+  display: block;
+}
+
+/* Brand text on top of illustration (optional) */
+.auth-brand {
+  position: absolute;
+  top: 24px;
+  left: 40px;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 32px;
+  letter-spacing: 0.02em;
+  z-index: 6;
+}
+
+/* Right: auth pane (form side) */
+.auth-pane {
+  flex: 0 0 50%;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 0; /* remove outer gutter so card touches center */
+  background: var(--panel);
+}
+
+/* Light mode right side = white background */
+.auth-layout.auth-light .auth-pane {
+  background: #ffffff;
+}
+
+/* =========================
+   CARD / CONTENT
+   ========================= */
+
+.auth-card {
+  width: 100%;
+  max-width: none; /* allow card to fill the right half */
+  background: var(--card-bg, var(--container-bg));
+  color: var(--text, var(--text-primary));
+  border-radius: 0 16px 16px 0; /* keep rounded outer edge on right */
+  padding: 48px 48px; /* inner padding for form content */
+  box-shadow: 0 18px 48px rgba(6,18,40,0.12);
+  border: none; /* remove border so there is no white seam at center */
+  position: relative;
+  z-index: 3;
+}
+
+.auth-layout.auth-light .auth-card {
+  box-shadow: 0 24px 70px rgba(15,23,42,0.08);
+}
+
+/* Back link */
+.auth-back {
+  display: inline-block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  text-decoration: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--header-primary, #010872);
+  border: 2px solid var(--header-primary, #010872);
+}
+
+/* Title / subtitle */
+.auth-title {
+  margin: 8px 0 6px;
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+
+.auth-subtitle {
+  color: var(--muted);
+  margin-bottom: 18px;
+  line-height: 1.4;
+  font-size: 14px;
+}
+
+/* Labels (if you add them) */
+.auth-card .field-label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+/* =========================
+   FORM ELEMENTS
+   ========================= */
+
+.auth-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(48,117,172,0.08);
+  color: var(--text);
+  border: 1px solid rgba(48,117,172,0.26);
+  border-radius: 8px;
+  outline: none;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.auth-layout.auth-light .auth-input {
+  background: #f5f7ff;
+  color: #111827;
+  border-color: #d0d7ee;
+}
+
+.auth-input::placeholder {
+  color: rgba(255,255,255,0.4);
+}
+
+.auth-layout.auth-light .auth-input::placeholder {
+  color: #a0a9bf;
+}
+
+.auth-input:focus {
+  border-color: rgba(30,86,255,0.9);
+  box-shadow: 0 6px 18px rgba(48,117,172,0.18);
+}
+
+/* Error box */
+.auth-error {
+  color: #b91c1c;
+  background: rgba(185,28,28,0.06);
+  border: 1px solid rgba(185,28,28,0.18);
+  padding: 8px;
+  border-radius: 6px;
+  margin: 10px 0;
+  font-size: 13px;
+}
+
+/* Eye icon for password toggle */
+.auth-eye {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+/* Row for checkbox + label etc. */
+.auth-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 16px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* =========================
+   BUTTONS
+   ========================= */
+
+.auth-button {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-weight: 600;
+  margin-top: 12px;
+  font-size: 15px;
+}
+
+.auth-button-primary {
+  background: linear-gradient(180deg,var(--primary),var(--accent));
+  color: #fff;
+  border: 0;
+  box-shadow: 0 10px 28px rgba(30,86,255,0.18);
+}
+
+.auth-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* OR divider */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #e5e7eb;
+}
+
+/* Google OAuth button */
+.auth-button-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  background: #ffffff;
+  color: #111827;
+  border: 1px solid #111827;
+  border-radius: 999px;
+  padding: 10px 14px;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.05);
+  font-size: 14px;
+}
+
+.auth-button-google img {
+  height: 18px;
+  width: 18px;
+}
+
+/* Footer text under form */
+.auth-footer {
+  margin-top: 18px;
+  font-size: 14px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* =========================
+   RESPONSIVE
+   ========================= */
+
+@media (max-width: 900px) {
+  .auth-layout {
+    flex-direction: column;
+    min-height: auto;
+  }
+
+  .auth-illustration {
+    flex: 0 0 auto;
+    width: 100%;
+    height: 260px;
+  }
+
+  .auth-illustration img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .auth-pane {
+    flex: 1;
+    width: 100%;
+    padding: 24px 20px 32px;
+  }
+
+  .auth-card {
+    max-width: 100%;
+    border-radius: 16px;
+    box-shadow: 0 18px 48px rgba(6,18,40,0.12);
+  }
+}

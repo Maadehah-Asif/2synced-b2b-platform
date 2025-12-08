@@ -1,0 +1,37 @@
+# Python 3.13-friendly requirements (Windows)
+# Purpose: avoid packages that require Rust/C++ builds or lack cp313 wheels.
+# Note: CatBoost wheels are not available for cp313 on Windows as of 2025-11.
+#       If you must use the CatBoost .pkl model, see notes in CATBOOST-PY313-NOTES.md.
+
+# Core numerics
+numpy==2.3.3
+pandas==2.3.3
+scikit-learn==1.7.2
+joblib==1.5.2
+python-dateutil==2.9.0.post0
+pytz==2025.2
+# Windows does not use tzdata, but safe to include for cross-platform
+# tzdata==2025.2
+
+# Utilities
+tqdm==4.67.1
+python-dotenv==1.0.1
+
+# (Optional) Serving
+# fastapi==0.115.0
+# uvicorn==0.30.1
+
+# (Optional) Visualization
+# matplotlib==3.9.2
+# seaborn==0.13.2
+
+# (Optional) Tree-based alternatives
+# Try these only if wheels exist for cp313 on your platform. If install fails, comment out again.
+# xgboost==2.1.2
+# lightgbm==4.5.0
+
+# EXCLUDED: JupyterLab / y-py (requires Rust toolchain on Windows)
+# EXCLUDED: PyTorch / TensorFlow (wheels for cp313 may not be available yet)
+
+# CatBoost — no cp313 wheel on Windows (as of 2025-11)
+# catboost==1.2.8

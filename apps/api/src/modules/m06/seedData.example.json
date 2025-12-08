@@ -1,0 +1,10 @@
+{
+  "campaigns": [
+    { "campaign_id": "example-camp-ads", "channel": "ads", "spend": 5000, "name": "Example Ads Campaign" },
+    { "campaign_id": "example-camp-email", "channel": "email", "spend": 3000, "name": "Example Email Campaign" }
+  ],
+  "deals": [
+    { "deal_id": "example-deal-1", "lead_id": "000000000000000000000001", "revenue": 12000, "closed_won": true, "closed_at": "2025-09-15T12:00:00.000Z" },
+    { "deal_id": "example-deal-2", "lead_id": "000000000000000000000002", "revenue": 8000, "closed_won": true, "closed_at": "2025-10-02T12:00:00.000Z" }
+  ]
+}

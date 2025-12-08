@@ -36,31 +36,38 @@ export default function WorkspaceDetail(){
   return (
     <Layout>
       <main className="page-root">
-        {/* Hero */}
-        <div className="hero" style={{ backgroundImage: "url('/src/assets/hero-image.png')" }}>
-          <h1>Workspace Overview</h1>
-          <p>Use the workspace navigation bar above to access modules and members.</p>
+        {/* Page heading */}
+        <div className="p-20">
+          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#0B2540' }}>Workspace Home</h1>
         </div>
-
-        {/* Info cards (static, non-dynamic) */}
-        <section className="p-20">
-          <div className="stats-grid">
-            <div className="stats-card">
-              <div className="label">Uploads</div>
-              <div className="muted">Manage source CSVs for your workspace.</div>
-            </div>
-            <div className="stats-card">
-              <div className="label">Merged CSVs</div>
-              <div className="muted">Combine, deduplicate, and normalize columns.</div>
-            </div>
-            <div className="stats-card">
-              <div className="label">Leads Code</div>
-              <div className="muted">Generate prediction CSVs and review outputs.</div>
-            </div>
-            <div className="stats-card">
-              <div className="label">Members</div>
-              <div className="muted">View all members; admins can edit roles.</div>
-            </div>
+        {/* Module cards - navigate to each module home (primary content) */}
+        <section className="p-20" style={{ paddingTop: 8 }}>
+          <h3 style={{ marginBottom: 12 }}>Modules</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+            {(() => {
+              const moduleNames = [
+                'Module 1 — Lead Ingestion, Cleaning & AI Scoring',
+                'Module 2 — Intent Extraction & Categorization',
+                'Module 3 — Conversation Intelligence & Thread Sentiment Analysis',
+                'Module 4 — Guided Assistant (Workflow Runner)',
+                'Module 5 — Sales & Marketing Alignment Dashboard',
+                'Module 6 — Revenue Attribution & ROI Modeling',
+                'Module 7 — Funnel Leakage & Campaign Fatigue Predictor',
+                'MODULE 8 — Executive Proposal & Insight Report Generator',
+                'Module 9 — Campaign Performance Aggregation & Optimization',
+              ];
+              return Array.from({ length: 9 }).map((_, i) => {
+                const mod = i + 1;
+                const path = mod === 1 ? `#/workspace/${id}/m01` : `#/workspace/${id}/m0${mod}`;
+                const name = moduleNames[i] || `Module ${mod}`;
+                return (
+                  <div key={mod} className="module-card" role="button" tabIndex={0} onClick={() => window.location.hash = path} onKeyDown={(e)=>{ if(e.key==='Enter') window.location.hash = path; }}>
+                    <div className="label">{name}</div>
+                    <div className="muted">Open Module {mod} tools and reports</div>
+                  </div>
+                );
+              })
+            })()}
           </div>
         </section>
 

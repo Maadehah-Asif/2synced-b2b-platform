@@ -1,6 +1,7 @@
 import Layout from '../../components/Layout'
 import { useEffect, useState } from 'react'
-import './module7.css'
+import './module6.css'
+import ModuleBackButton from '../../components/ModuleBackButton'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
@@ -23,7 +24,7 @@ export default function Element2Page(){
     if(!workspaceId) return;
     setLoadingPreview(true);
     try{
-      const res = await fetch(`${API_URL}/m07/preview?projectId=${encodeURIComponent(workspaceId)}`);
+      const res = await fetch(`${API_URL}/m06/preview?projectId=${encodeURIComponent(workspaceId)}`);
       const j = await res.json();
       if(res.ok && j.deals) setPreview(j.deals || []);
     }catch(e){}
@@ -67,7 +68,7 @@ export default function Element2Page(){
       setProgress('Building journeys...');
       await new Promise(r=>setTimeout(r,200));
       setProgress('Applying model...');
-      const res = await fetch(`${API_URL}/m07/run`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' }, body: JSON.stringify({ projectId: workspaceId, modelType: model }) });
+      const res = await fetch(`${API_URL}/m06/run`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' }, body: JSON.stringify({ projectId: workspaceId, modelType: model }) });
       const j = await res.json();
       if(!res.ok) {
         setProgress('Error: ' + (j && j.error) );
@@ -77,7 +78,7 @@ export default function Element2Page(){
       setProgress('Validating totals...');
       // fetch stored results from backend for this run
       if (j && j.runId) {
-        const r2 = await fetch(`${API_URL}/m07/run/${encodeURIComponent(j.runId)}/results?projectId=${encodeURIComponent(workspaceId)}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+        const r2 = await fetch(`${API_URL}/m06/run/${encodeURIComponent(j.runId)}/results?projectId=${encodeURIComponent(workspaceId)}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
         const jr = await r2.json();
         if (r2.ok && jr.results) {
           // group results by deal for display
@@ -108,7 +109,10 @@ export default function Element2Page(){
   return (
     <Layout>
       <main className="page-root">
-        <h2 style={{ marginTop: 16 }}>Module 7 — Attribution Runner (Page 2)</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <ModuleBackButton toSuffix="/m06" />
+          <h2 style={{ marginTop: 16, marginBottom: 0 }}>Module 6 — Attribution Runner (Page 2)</h2>
+        </div>
         {!workspaceId && <div style={{ fontSize: 13 }}>Open a workspace to use the Attribution Runner.</div>}
 
         <div style={{ display: 'flex', gap: 20, marginTop: 12 }}>

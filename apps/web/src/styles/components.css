@@ -1,3 +1,5 @@
+@import './buttons.css';
+
 /* Component-level shared styles built on top of theme variables */
 
 /* Page and container foundations */
@@ -55,20 +57,7 @@
 .stats-card .value { font-size: 28px; font-weight: 700; margin-top: 8px; }
 .stats-card .delta { color: var(--primary-1); margin-top: 8px; }
 
-/* Buttons */
-.btn-primary {
-  background: linear-gradient(180deg, var(--primary-1), var(--primary-2));
-  color: var(--btn-text);
-  border: 0;
-  padding: 8px 12px;
-  border-radius: 8px;
-}
-.btn-ghost {
-  background: transparent;
-  border: 1px solid rgba(25,73,114,0.06);
-  color: var(--primary-4);
-}
-.btn-sm { padding: 6px 10px; font-size: 0.9em; border-radius: 8px; }
+/* Button styles are centralized in `buttons.css` */
 
 /* Form inputs: subtle bluish tint for visibility on light backgrounds */
 input[type="text"],
@@ -134,6 +123,25 @@ textarea:focus {
 .brand { font-weight: 800; color: var(--container-bg); cursor: pointer; }
 .btn-ghost-light { background: var(--container-bg); color: var(--primary-3); }
 
+/* Module card styles - make modules look clickable with blue outline & shadow */
+.module-card {
+  background: linear-gradient(180deg, rgba(72,177,217,0.03), rgba(246,250,253,0.6));
+  border-radius: 12px;
+  padding: 18px;
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  border: 2px solid rgba(1,8,114,0.04);
+  box-shadow: 0 6px 20px rgba(1,8,114,0.03);
+}
+.module-card .label { font-size: 13px; color: rgba(16,24,48,0.7); margin-bottom: 8px; }
+.module-card .muted { color: rgba(16,24,48,0.6); }
+.module-card:hover, .module-card:focus {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(1,8,114,0.12);
+  border-color: var(--header-primary);
+}
+.module-card:active { transform: translateY(-2px); }
+
 /* Simple dropdown menu for workspace header */
 .dropdown { position: relative; }
 .dropdown-menu {
@@ -168,6 +176,11 @@ textarea:focus {
 .app-root { min-height: 100vh; width: 100vw; }
 .app-layout { display: flex; padding-top: 80px; min-height: calc(100vh - 64px); background: var(--page-bg, #F9FBFE); width: 100%; }
 .app-main { flex: 1; padding: 20px; background: var(--page-bg, #F9FBFE); min-height: calc(100vh - 64px); overflow: auto; }
+
+/* Prevent double scrollbars: delegate all scrolling to the inner app container */
+html, body, #root { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+.app-root, .app-layout { height: 100%; }
+.app-main { overflow: auto; -webkit-overflow-scrolling: touch; }
 .card-pad { padding: 18px; max-height: calc(100vh - 140px); overflow: auto; box-sizing: border-box; }
 
 /* Spacing helpers */

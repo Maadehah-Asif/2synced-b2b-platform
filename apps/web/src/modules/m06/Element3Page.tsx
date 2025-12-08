@@ -1,22 +1,27 @@
 import Layout from '../../components/Layout'
 import { useEffect, useState } from 'react'
-import './module7.css'
+import './module6.css'
+import ModuleBackButton from '../../components/ModuleBackButton'
 import TimelineChart from './TimelineChart'
 import BarChart from './BarChart'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
-function useWorkspaceIdFromHash(){
+function useWorkspaceContextFromHash(){
   const hash = window.location.hash || '';
   const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
+  const workspaceId = m ? m[1] : null;
+  const runMatch = hash.match(/runId=([^&]+)/);
+  const runId = runMatch ? decodeURIComponent(runMatch[1]) : null;
+  return { workspaceId, runId };
 }
 
-export default function Element3Page(){
-  const workspaceId = useWorkspaceIdFromHash();
+export default function RoiDashboard(){
+  const { workspaceId, runId } = useWorkspaceContextFromHash();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [runs, setRuns] = useState<any[]>([]);
 
   // filters
   const [channel, setChannel] = useState<string>('');
@@ -24,6 +29,28 @@ export default function Element3Page(){
   const [endMonth, setEndMonth] = useState<string>('');
   const [minSpend, setMinSpend] = useState<string>('');
   const [minROI, setMinROI] = useState<string>('');
+  const [scopedRunId] = useState<string | null>(runId);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    async function fetchRuns() {
+      try {
+        const token = localStorage.getItem('token');
+        const params = new URLSearchParams();
+        params.set('projectId', workspaceId || '');
+        const res = await fetch(`${API_URL}/m06/runs?${params.toString()}`, {
+          headers: { Authorization: token ? `Bearer ${token}` : '' },
+        });
+        const j = await res.json();
+        if (res.ok && Array.isArray(j.runs)) {
+          setRuns(j.runs);
+        }
+      } catch {
+        // ignore run selector errors, dashboard still usable
+      }
+    }
+    fetchRuns();
+  }, [workspaceId]);
 
   async function fetchData(){
     if(!workspaceId) return;
@@ -32,13 +59,14 @@ export default function Element3Page(){
     try{
       const token = localStorage.getItem('token');
       const params = new URLSearchParams();
-      params.set('projectId', workspaceId);
+      params.set('projectId', workspaceId || '');
+      if(scopedRunId) params.set('runId', scopedRunId);
       if(channel) params.set('channel', channel);
       if(startMonth) params.set('start', startMonth);
       if(endMonth) params.set('end', endMonth);
       if(minSpend) params.set('minSpend', minSpend);
       if(minROI) params.set('minROI', minROI);
-      const res = await fetch(`${API_URL}/m07/roi?${params.toString()}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+      const res = await fetch(`${API_URL}/m06/roi?${params.toString()}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
       const j = await res.json();
       if(!res.ok) { setError(j && j.message ? String(j.message) : (j && j.error ? String(j.error) : 'error')); setData(null); }
       else setData(j);
@@ -46,7 +74,7 @@ export default function Element3Page(){
     setLoading(false);
   }
 
-  useEffect(()=>{ fetchData() },[workspaceId]);
+  useEffect(()=>{ fetchData() },[workspaceId, scopedRunId]);
 
   if(!workspaceId) return <Layout><main className="page-root"><div style={{ fontSize: 13 }}>Open a workspace to view ROI dashboard.</div></main></Layout>
   if(loading) return <Layout><main className="page-root"><div style={{ fontSize: 13 }}>Loading...</div></main></Layout>
@@ -89,7 +117,36 @@ export default function Element3Page(){
   return (
     <Layout>
       <main className="page-root">
-        <h2 style={{ marginTop: 16 }}>Module 7 — ROI Dashboard (Page 3)</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <ModuleBackButton toSuffix="/m06" />
+          <h2 style={{ marginTop: 16, marginBottom: 0 }}>Module 6 — ROI Dashboard</h2>
+        </div>
+
+        <div style={{ marginTop: 4, fontSize: 12, color: '#555', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div>
+            Scope:
+            <select
+              style={{ marginLeft: 6 }}
+              value={scopedRunId || ''}
+              onChange={(e) => {
+                const value = e.target.value || null;
+                const hash = window.location.hash;
+                const base = hash.split('?')[0];
+                const params = new URLSearchParams(hash.split('?')[1] || '');
+                if (value) params.set('runId', value);
+                else params.delete('runId');
+                window.location.hash = params.toString() ? `${base}?${params.toString()}` : base;
+              }}
+            >
+              <option value="">All runs</option>
+              {runs.map((r:any) => (
+                <option key={r.id || r._id || r.run_id} value={r.id || r._id || r.run_id}>
+                  {r.run_id || r.id} — {r.model_type || r.modelType || 'unknown'}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 20 }}>
           <div>
@@ -110,6 +167,23 @@ export default function Element3Page(){
                 <div style={{ fontSize: 13, color: '#666' }}>Net Profit</div>
                 <div style={{ fontSize: 18, fontWeight: 700 }}>{tr(data.netProfit)}</div>
               </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+              {sortedByROI.length > 0 && (
+                <div className="m7-card" style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, color: '#666' }}>Best Campaign ROI</div>
+                  <div style={{ fontSize: 14 }}>{sortedByROI[0].name || sortedByROI[0].campaign_id}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>{pct(sortedByROI[0].roi)}</div>
+                </div>
+              )}
+              {sortedByROI.length > 0 && (
+                <div className="m7-card" style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, color: '#666' }}>Worst Campaign ROI</div>
+                  <div style={{ fontSize: 14 }}>{sortedByROI[sortedByROI.length - 1].name || sortedByROI[sortedByROI.length - 1].campaign_id}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>{pct(sortedByROI[sortedByROI.length - 1].roi)}</div>
+                </div>
+              )}
             </div>
 
             <div className="m7-card" style={{ marginTop: 12 }}>
@@ -215,8 +289,18 @@ export default function Element3Page(){
             </div>
 
             <div className="m7-card" style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>Filters</div>
-              <div style={{ marginTop: 8, color: '#666' }}>Channel / Date range / Min spend / ROI threshold (todo)</div>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>Recommendations</div>
+              <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
+                {top5 && top5.length > 0 && top5[0].roi !== null && top5[0].roi > 150 && (
+                  <div>Top campaign {top5[0].name || top5[0].campaign_id} is delivering exceptional ROI. Consider increasing spend.</div>
+                )}
+                {bottom5 && bottom5.length > 0 && bottom5[0].roi !== null && bottom5[0].roi < 0 && (
+                  <div>Some campaigns are generating negative ROI. Review messaging, targeting, or pause low performers.</div>
+                )}
+                {!((top5 && top5.length > 0) || (bottom5 && bottom5.length > 0)) && (
+                  <div>ROI profile looks balanced. Use filters on the left to explore specific segments.</div>
+                )}
+              </div>
             </div>
 
           </div>

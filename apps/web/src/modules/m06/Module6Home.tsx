@@ -18,8 +18,7 @@ export default function Module6Home(){
         </div>
         <div style={{ fontSize:12, color:'#555', marginTop:8 }}>Quick access to Module 6 features.</div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
-          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/element1`)}>Page 1 Stats</button>
-          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/element2`)}>Page 2</button>
+          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/element1`)}>Main Dashboard</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/roi-calc`)}>ROI Calculation</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/roi`)}>ROI Dashboard</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/forecast`)}>Forecasts</button>

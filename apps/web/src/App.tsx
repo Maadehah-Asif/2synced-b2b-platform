@@ -15,11 +15,10 @@ import MergedList from './modules/m01/MergedList'
 import LeadsList from './modules/m01/LeadsList'
 import MergeCSV from './modules/m01/MergeCSV'
 import Module6Dropdown from './modules/m06/Module6Dropdown'
-import Element1Page from './modules/m06/Element1Page'
+import Module6Main from './modules/m06/Module6Main'
 import Module6Home from './modules/m06/Module6Home'
 import Module1Home from './modules/m01/Module1Home'
 import Module2Home from './modules/m02/Module2Home'
-import Element2Page from './modules/m06/Element2Page'
 import RoiDashboard from './modules/m06/RoiDashboard'
 import CampaignManager from './modules/m06/CampaignManager'
 import ViewCampaigns from './modules/m06/ViewCampaigns'
@@ -34,8 +33,6 @@ import AllocationDashboard from './modules/m06/AllocationDashboard'
 import RoiCalculation from './modules/m06/RoiCalculation'
 import GenerateIntent from './modules/m02/GenerateIntent'
 import Prioritization from './modules/m02/Prioritization'
-import BehaviorTimeline from './modules/m02/BehaviorTimeline'
-import SegmentBehavior from './modules/m02/SegmentBehavior'
 import IntentForecast from './modules/m02/IntentForecast'
 import UploadM02 from './modules/m02/Upload'
 import UploadPreviewM02 from './modules/m02/UploadPreview'
@@ -70,8 +67,7 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m06/roi-calc')) return <RoiCalculation />
   if (route.startsWith('#/workspace/') && route.includes('/m06/roi')) return <RoiDashboard />
   if (route.startsWith('#/workspace/') && route.includes('/m06/element3')) return <RoiDashboard />
-  if (route.startsWith('#/workspace/') && route.includes('/m06/element2')) return <Element2Page />
-  if (route.startsWith('#/workspace/') && route.includes('/m06/element1')) return <Element1Page />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/element1')) return <Module6Main />
   if (route.startsWith('#/workspace/') && route.includes('/m06/forecast')) return <ForecastPage />
   // Module 6 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m06') && !route.includes('/m06/')) return <Module6Home />
@@ -85,7 +81,7 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m06/journeys')) return <JourneyPreview />
   if (route.startsWith('#/workspace/') && route.includes('/m06/run-attribution')) return <RunAttributionScreen />
   if (route.startsWith('#/workspace/') && route.includes('/m06/allocation')) return <AllocationDashboard />
-  if (route.startsWith('#/workspace/') && route.includes('/m06/')) return <Element1Page />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/')) return <Module6Main />
   // Module 1 workspace routes and home
   if (route.startsWith('#/workspace/') && route.includes('/m01/upload/preview')) return <UploadPreview />
   if (route.startsWith('#/workspace/') && route.includes('/m01/merged/preview')) return <UploadPreview />
@@ -104,8 +100,6 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m02/upload')) return <UploadM02 />
   if (route.startsWith('#/workspace/') && route.includes('/m02/generate')) return <GenerateIntent />
   if (route.startsWith('#/workspace/') && route.includes('/m02/prioritization')) return <Prioritization />
-  if (route.startsWith('#/workspace/') && route.includes('/m02/behavior')) return <BehaviorTimeline />
-  if (route.startsWith('#/workspace/') && route.includes('/m02/segment-behavior')) return <SegmentBehavior />
   if (route.startsWith('#/workspace/') && route.includes('/m02/intent-forecast')) return <IntentForecast />
   if (route.startsWith('#/workspace/') && route.includes('/m02/upload-wizard')) return <UploadWizardM02 />
   // Module 2 workspace home (no trailing slash)

@@ -960,8 +960,8 @@ export async function getBehaviorTimeline(req: Request, res: Response) {
     const dropCount = events.filter(e=>e.dropFlag).length;
     let behaviorNarrative = 'No behavior events uploaded for this lead yet.';
     if (totalEvents > 0) {
-      const first = events[0];
-      const last = events[events.length-1];
+      const first = events[0]!;
+      const last = events[events.length-1]!;
       const spanDays = Math.max(1, Math.round((new Date(last.timestamp).getTime() - new Date(first.timestamp).getTime()) / (1000*60*60*24)));
       if (avgEngagement >= 0.6 || spikeCount > 2) {
         behaviorNarrative = `High engagement over ${spanDays} days with spikes and recent activity (${eventsLast30d} in last 30 days).`;

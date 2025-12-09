@@ -1,6 +1,6 @@
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getWorkspaceIdFromHash } from '../../utils/workspace';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
@@ -45,6 +45,8 @@ export default function UploadWizard(){
 
   const [startRow, setStartRow] = useState(1);
   const [endRow, setEndRow] = useState<number|undefined>(undefined);
+  const leadsRef = useRef<HTMLInputElement | null>(null);
+  const behaviorsRef = useRef<HTMLInputElement | null>(null);
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>){
     const f = e.target.files && e.target.files[0];
@@ -216,6 +218,13 @@ export default function UploadWizard(){
             <h2 style={{ marginTop:16 }}>Module 2 — Upload Wizard</h2>
             <div style={{ fontSize:12, color:'#555' }}>Preview and map headers before import. Required columns will be renamed to the expected schema on upload.</div>
           </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button className="btn-ghost btn-sm" onClick={() => { setKind('leads'); leadsRef.current?.click(); }}>Upload Leads CSV</button>
+            <button className="btn-ghost btn-sm" onClick={() => { setKind('behaviors'); behaviorsRef.current?.click(); }}>Upload Behavior CSV</button>
+            <button className="btn-ghost btn-sm" onClick={() => { setCsvText(''); setFile(null); resetState(); }}>Reset</button>
+          </div>
+          <input type="file" accept=".csv" style={{ display: 'none' }} ref={leadsRef as any} onChange={(e)=>{ const f = (e.target as HTMLInputElement).files?.[0]; if(f){ setKind('leads'); onFileChange(e as any); } }} />
+          <input type="file" accept=".csv" style={{ display: 'none' }} ref={behaviorsRef as any} onChange={(e)=>{ const f = (e.target as HTMLInputElement).files?.[0]; if(f){ setKind('behaviors'); onFileChange(e as any); } }} />
         </div>
 
         <div className="card" style={{ marginTop:12, padding:12 }}>

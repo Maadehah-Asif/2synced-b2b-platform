@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import { getWorkspaceIdFromHash } from '../../utils/workspace';
@@ -27,6 +27,11 @@ type PrioritizationRow = {
 };
 
 export default function Prioritization() {
+  const [uploadToast, setUploadToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  // file input refs for quick upload
+  const leadsRef = useRef<HTMLInputElement | null>(null);
+  const behaviorsRef = useRef<HTMLInputElement | null>(null);
   const [workspace] = useState<string | null>(() => getWorkspaceIdFromHash());
   const [rows, setRows] = useState<PrioritizationRow[]>([]);
   const [page, setPage] = useState(1);
@@ -38,8 +43,7 @@ export default function Prioritization() {
   const [intentRange, setIntentRange] = useState<[number, number]>([0, 100]);
   const [activeLead, setActiveLead] = useState<PrioritizationRow | null>(null);
   const [timeline, setTimeline] = useState<any | null>(null);
-  const [uploadOpen, setUploadOpen] = useState<'leads' | 'behaviors' | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [timelineFilters, setTimelineFilters] = useState<{ range: '30' | '60' | '90' | 'all'; types: string[] }>({ range: '30', types: [] });
 
   useEffect(() => {
     fetchData();
@@ -84,8 +88,13 @@ export default function Prioritization() {
     setActiveLead(row);
     setTimeline({ loading: true });
     try {
-      const params = new URLSearchParams({ workspaceId: workspace, leadId: row.leadId });
-      const res = await fetch(`${API_URL}/m02/behaviors/timeline?${params.toString()}`);
+      const now = new Date();
+      const start = new Date(now.getTime() - (timelineFilters.range === 'all' ? 3650 : Number(timelineFilters.range)) * 24 * 60 * 60 * 1000);
+      const params = new URLSearchParams({ workspaceId: workspace });
+      params.set('startDate', start.toISOString());
+      params.set('endDate', now.toISOString());
+      if (timelineFilters.types.length) params.set('eventTypes', timelineFilters.types.join(','));
+      const res = await fetch(`${API_URL}/m02/leads/${encodeURIComponent(row.leadId)}/behavior-timeline?${params.toString()}`);
       const j = await res.json();
       if (!res.ok || !j?.ok) {
         setTimeline({ error: j?.error || 'failed to load' });
@@ -95,31 +104,7 @@ export default function Prioritization() {
     }
   }
 
-  async function doUpload(kind: 'leads' | 'behaviors', file: File) {
-    if (!workspace) {
-      setMessage('Workspace required');
-      return;
-    }
-    setUploading(true);
-    const form = new FormData();
-    form.append('file', file);
-    form.append('workspaceId', workspace);
-    const url = kind === 'leads' ? `${API_URL}/m02/upload/leads-intent` : `${API_URL}/m02/upload/behaviors`;
-    try {
-      const res = await fetch(url, { method: 'POST', body: form });
-      const j = await res.json();
-      if (!res.ok || !j?.ok) {
-        setMessage(j?.error || 'upload failed');
-      } else {
-        setMessage(`Imported ${j.importedCount || 0}, skipped ${j.skippedCount || 0}`);
-        fetchData();
-      }
-    } catch (e) {
-      setMessage('upload failed');
-    }
-    setUploading(false);
-    setUploadOpen(null);
-  }
+  
 
   const segmentOptions = ['ALL', 'BLAZING', 'HOT', 'WARM', 'COLD'];
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -134,12 +119,6 @@ export default function Prioritization() {
             <div style={{ color: '#4b5563', fontSize: 13 }}>Rank leads by intent, engagement, and recent behavior.</div>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <button className="btn-ghost btn-sm" onClick={() => setUploadOpen('leads')}>
-              Upload Leads + Intent CSV
-            </button>
-            <button className="btn-ghost btn-sm" onClick={() => setUploadOpen('behaviors')}>
-              Upload Behavior CSV
-            </button>
             <button
               className="btn-ghost btn-sm"
               onClick={() => {
@@ -150,8 +129,47 @@ export default function Prioritization() {
             >
               Open Upload Wizard
             </button>
+            <button className="btn-ghost btn-sm" onClick={() => leadsRef.current?.click()}>Quick upload leads</button>
+            <button className="btn-ghost btn-sm" onClick={() => behaviorsRef.current?.click()}>Quick upload behaviors</button>
           </div>
+          <input ref={leadsRef as any} type="file" accept=".csv" style={{ display: 'none' }} onChange={async (e) => {
+            const f = (e.target as HTMLInputElement).files?.[0];
+            if (!f) return;
+            setUploadToast(null);
+            try {
+              const form = new FormData();
+              form.append('file', f);
+              form.append('workspaceId', workspace || '');
+              const res = await fetch(`${API_URL}/m02/upload/leads-intent`, { method: 'POST', body: form });
+              const j = await res.json();
+              if (!res.ok || !j?.ok) setUploadToast({ msg: j?.error || 'Upload failed', type: 'error' });
+              else { setUploadToast({ msg: `Imported ${j.importedCount||0}`, type: 'success' }); fetchData(); }
+            } catch (err:any) { setUploadToast({ msg: String(err?.message || 'Upload failed'), type: 'error' }); }
+            (e.target as HTMLInputElement).value = '';
+          }} />
+          <input ref={behaviorsRef as any} type="file" accept=".csv" style={{ display: 'none' }} onChange={async (e) => {
+            const f = (e.target as HTMLInputElement).files?.[0];
+            if (!f) return;
+            setUploadToast(null);
+            try {
+              const form = new FormData();
+              form.append('file', f);
+              form.append('workspaceId', workspace || '');
+              const res = await fetch(`${API_URL}/m02/upload/behaviors`, { method: 'POST', body: form });
+              const j = await res.json();
+              if (!res.ok || !j?.ok) setUploadToast({ msg: j?.error || 'Upload failed', type: 'error' });
+              else { setUploadToast({ msg: `Imported ${j.importedCount||0}`, type: 'success' }); fetchData(); }
+            } catch (err:any) { setUploadToast({ msg: String(err?.message || 'Upload failed'), type: 'error' }); }
+            (e.target as HTMLInputElement).value = '';
+          }} />
         </div>
+
+        {uploadToast && (
+          <div style={{ position: 'fixed', right: 16, bottom: 16, background: uploadToast.type === 'success' ? '#0a7' : '#c33', color: '#fff', padding: '10px 14px', borderRadius: 8 }}>
+            <div>{uploadToast.msg}</div>
+            <button className="btn-ghost" style={{ marginTop: 6, background: '#fff', color: '#333' }} onClick={() => setUploadToast(null)}>Close</button>
+          </div>
+        )}
 
         <div className="card mt-12" style={{ padding: 12 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
@@ -277,10 +295,58 @@ export default function Prioritization() {
         {timeline && activeLead && (
           <div className="modal-overlay" onClick={() => { setActiveLead(null); setTimeline(null); }}>
             <div className="modal-content" style={{ maxWidth: 900, width: '90%' }} onClick={(e) => e.stopPropagation()}>
-              <h3 style={{ marginTop: 0 }}>{activeLead.fullName || activeLead.leadId}</h3>
+              <h3 style={{ marginTop: 0 }}>{timeline?.lead ? `${timeline.lead.first_name || ''} ${timeline.lead.last_name || ''}`.trim() || timeline.lead.lead_id : (activeLead.fullName || activeLead.leadId)}</h3>
               <div style={{ fontSize: 12, color: '#555' }}>
-                {activeLead.jobTitle} {activeLead.company ? ` @ ${activeLead.company}` : ''}
+                {timeline?.lead?.title || activeLead.jobTitle || ''} {timeline?.lead?.company || activeLead.company ? ` @ ${timeline?.lead?.company || activeLead.company}` : ''}
               </div>
+              <div style={{ marginTop: 6, fontSize: 12 }}>
+                Intent: <strong>{timeline?.lead?.intent_score ?? activeLead.intentScore ?? '-'}</strong> <span className="badge" style={{ marginLeft: 6 }}>{timeline?.lead?.intent_segment || activeLead.intentSegment || '-'}</span>
+              </div>
+
+              <div className="card" style={{ padding: 10, marginTop: 10, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 12 }}>Date range</div>
+                  <select value={timelineFilters.range} onChange={(e) => setTimelineFilters(f => ({ ...f, range: e.target.value as any }))}>
+                    <option value="30">Last 30 days</option>
+                    <option value="60">Last 60 days</option>
+                    <option value="90">Last 90 days</option>
+                    <option value="all">All time</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12 }}>Event types</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {['email_open','email_click','reply','website_visit','linkedin_view','call','demo_request'].map(t => (
+                      <label key={t} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12 }}>
+                        <input type="checkbox" checked={timelineFilters.types.includes(t)} onChange={(e) => setTimelineFilters(f => ({ ...f, types: e.target.checked ? [...f.types, t] : f.types.filter(x=>x!==t) }))} />
+                        {prettyEventType(t)}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ marginLeft: 'auto' }}>
+                  <button className="btn-ghost btn-sm" onClick={() => activeLead && openTimeline(activeLead)}>Apply filters</button>
+                </div>
+              </div>
+
+              {/* Simple horizontal timeline */}
+              {timeline?.events && timeline.events.length > 0 && (
+                <div style={{ marginTop: 12, padding: 10, border: '1px dashed #e5e7eb', borderRadius: 8 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                    {timeline.events.map((ev: any, idx: number) => (
+                      <div key={idx} title={`${new Date(ev.timestamp).toLocaleString()}\n${prettyEventType(ev.event_type)}\nEng: ${ev.engagement_score} Vel: ${ev.velocity}${ev.spike_flag? '\nSpike':''}${ev.drop_flag? '\nDrop':''}`}
+                        style={{ width:8, height:8, borderRadius:999, background: eventColor(ev.event_type), opacity: Math.max(0.4, Math.min(1, Number(ev.engagement_score || 0))) }} />
+                    ))}
+                  </div>
+                  <div style={{ marginTop:6, display:'flex', gap:10, flexWrap:'wrap' }}>
+                    {['email_open','email_click','reply','website_visit','linkedin_view','call','demo_request'].map(t => (
+                      <div key={t} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12 }}>
+                        <span style={{ width:10, height:10, borderRadius:999, background:eventColor(t) }} /> {prettyEventType(t)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {timeline?.error && <div style={{ color: '#c33', marginTop: 8 }}>{timeline.error}</div>}
               {timeline?.loading && <div>Loading...</div>}
               {!timeline?.error && timeline?.summary && (
@@ -329,18 +395,22 @@ export default function Prioritization() {
                         <th style={{ textAlign: 'left', padding: 6 }}>Timestamp</th>
                         <th style={{ textAlign: 'left', padding: 6 }}>Event</th>
                         <th style={{ textAlign: 'left', padding: 6 }}>Engagement</th>
+                        <th style={{ textAlign: 'left', padding: 6 }}>Velocity</th>
+                        <th style={{ textAlign: 'left', padding: 6 }}>Recency (d)</th>
                         <th style={{ textAlign: 'left', padding: 6 }}>Flags</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {timeline.events.map((ev: any, idx: number) => (
+                      {[...timeline.events].sort((a:any,b:any)=> new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((ev: any, idx: number) => (
                         <tr key={idx} style={{ borderTop: '1px solid #eee' }}>
                           <td style={{ padding: 6 }}>{new Date(ev.timestamp).toLocaleString()}</td>
-                          <td style={{ padding: 6 }}>{ev.eventType}</td>
-                          <td style={{ padding: 6 }}>{ev.engagementScore ?? '-'}</td>
+                          <td style={{ padding: 6 }}>{prettyEventType(ev.event_type)}</td>
+                          <td style={{ padding: 6 }}>{ev.engagement_score ?? '-'}</td>
+                          <td style={{ padding: 6 }}>{ev.velocity ?? '-'}</td>
+                          <td style={{ padding: 6 }}>{ev.recency_days ?? '-'}</td>
                           <td style={{ padding: 6 }}>
-                            {ev.spikeFlag ? 'Spike ' : ''}
-                            {ev.dropFlag ? 'Drop' : ''}
+                            {ev.spike_flag ? 'Spike ' : ''}
+                            {ev.drop_flag ? 'Drop' : ''}
                           </td>
                         </tr>
                       ))}
@@ -360,33 +430,34 @@ export default function Prioritization() {
           </div>
         )}
 
-        {uploadOpen && (
-          <div className="modal-overlay" onClick={() => setUploadOpen(null)}>
-            <div className="modal-content" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
-              <h3 style={{ marginTop: 0 }}>{uploadOpen === 'leads' ? 'Upload Leads + Intent CSV' : 'Upload Behavior CSV'}</h3>
-              <div style={{ fontSize: 12, color: '#555', marginBottom: 10 }}>
-                {uploadOpen === 'leads'
-                  ? 'Required columns: lead_id, intent_score, intent_segment. Additional columns stored as raw.'
-                  : 'Required columns: lead_id, timestamp, event_type. timestamp must be YYYY-MM-DD HH:MM:SS.'}
-              </div>
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) doUpload(uploadOpen, f);
-                }}
-                disabled={uploading}
-              />
-              <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button className="btn-ghost" onClick={() => setUploadOpen(null)} disabled={uploading}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        
       </div>
     </Layout>
   );
+}
+
+function prettyEventType(t: string){
+  const map: Record<string,string> = {
+    email_open: 'Email Open',
+    email_click: 'Email Click',
+    reply: 'Reply',
+    website_visit: 'Website Visit',
+    linkedin_view: 'LinkedIn View',
+    call: 'Call',
+    demo_request: 'Demo Request',
+  };
+  return map[t] || t;
+}
+
+function eventColor(t: string){
+  const map: Record<string,string> = {
+    email_open: '#60a5fa',
+    email_click: '#2563eb',
+    reply: '#10b981',
+    website_visit: '#8b5cf6',
+    linkedin_view: '#14b8a6',
+    call: '#f59e0b',
+    demo_request: '#f472b6',
+  };
+  return map[t] || '#9ca3af';
 }

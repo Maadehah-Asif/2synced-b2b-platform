@@ -57,7 +57,6 @@ export default function Element1Page() {
 
   const revenueByChannel = useMemo(() => {
     const list = stats?.revenueByChannel || []
-    // Filter client-side by selected channels
     return list.filter((r: any) => channels.includes(String(r.channel).toLowerCase()))
   }, [stats, channels])
 
@@ -74,12 +73,11 @@ export default function Element1Page() {
   const totalSpend = Number(stats?.totalSpend || 0)
 
   const modelName = stats?.modelName || model
-  // Default last run: prefer stats.lastRun; fallback to latest period in revenueOverTime; else '—'
+
   const lastRunFallback = useMemo(() => {
     if (stats?.lastRun) return new Date(stats.lastRun).toLocaleString()
     const rot = stats?.revenueOverTime || []
     if (rot.length > 0) {
-      // Assume period is ISO date or YYYY-MM; take max
       const parse = (p: any) => {
         const s = String(p || '')
         if (/^\d{4}-\d{2}$/.test(s)) return new Date(s + '-01')
@@ -97,26 +95,20 @@ export default function Element1Page() {
   const lastRun = lastRunFallback
   const status = stats?.status || 'pending'
 
-  // Fake trend vs previous window if provided
   const trend30 = stats?.trend30 ?? 0
   const trend90 = stats?.trend90 ?? 0
 
   const donutData = revenueByChannel.map((c: any) => ({ label: c.channel, value: Number(c.attributedRevenue || c.revenue || 0) }))
 
-  const timelineToggleOptions = ['revenue', 'spend', 'both'] as const
-  const [timelineMode, setTimelineMode] = useState<typeof timelineToggleOptions[number]>('both')
+  const [timelineMode, setTimelineMode] =
+    useState<'revenue' | 'spend' | 'both'>('both')
 
   const timelineSeries = useMemo(() => {
-    // Map into the shared TimelineChart shape if needed
-    // Our TimelineChart expects array of { month, total }
-    // For multi-series, we can render two charts or adapt
-    // Here, we render one chart showing revenue; if both, show revenue first then spend below
     const rev = revenueOverTime.map((r: any) => ({ month: r.period, total: Number(r.revenue || 0) }))
     const spd = revenueOverTime.map((r: any) => ({ month: r.period, total: Number(r.spend || 0) }))
     return { rev, spd }
   }, [revenueOverTime])
 
-  // Channel health mini-cards
   const bestChannel = useMemo(() => {
     return [...revenueByChannel].sort((a: any, b: any) => Number(b.roi || 0) - Number(a.roi || 0))[0] || null
   }, [revenueByChannel])
@@ -132,81 +124,203 @@ export default function Element1Page() {
   return (
     <Layout>
       <main className="page-root">
-        {/* Title + back */}
+
+        {/* Title */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix="/m06" />
           <h2 style={{ marginTop: 16, marginBottom: 0 }}>Module 6 — Overview</h2>
         </div>
 
-        {/* Filter bar */}
-        <div style={{ marginTop: 12, background: '#fff', borderRadius: 8, padding: 10, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: 12, color: '#666' }}>Date range</div>
-            <select value={dateRange} onChange={e=>setDateRange(e.target.value as DateRangeKey)}>
-              {DATE_RANGE_OPTIONS.map(o=> <option key={o.key} value={o.key}>{o.label}</option>)}
+        {/* ⭐ NEW FILTER BAR - ONE ROW, BLUE BUTTONS */}
+        <div
+          style={{
+            marginTop: 12,
+            background: '#fff',
+            borderRadius: 10,
+            padding: 14,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 18,
+            flexWrap: 'nowrap',
+            overflowX: 'auto',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          {/* Date range */}
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <label style={{ fontSize: 12, color: '#444', marginBottom: 4 }}>Date range</label>
+            <select
+              value={dateRange}
+              onChange={e => setDateRange(e.target.value as DateRangeKey)}
+              style={{
+                padding: '8px 10px',
+                borderRadius: 8,
+                border: '1px solid #ccc',
+                fontSize: 13
+              }}
+            >
+              {DATE_RANGE_OPTIONS.map(o => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
             </select>
           </div>
-          <div>
-            <div style={{ fontSize: 12, color: '#666' }}>Channels</div>
-            <select multiple value={channels} onChange={e=>{
-              const opts = Array.from(e.target.selectedOptions).map(o=>o.value)
-              setChannels(opts)
-            }} style={{ minWidth: 180, height: 72 }}>
-              {CHANNEL_OPTIONS.map(c=> <option key={c} value={c}>{c}</option>)}
+
+          {/* Channels */}
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <label style={{ fontSize: 12, color: '#444', marginBottom: 4 }}>Channels</label>
+            <select
+              multiple
+              value={channels}
+              onChange={e => {
+                const opts = Array.from(e.target.selectedOptions).map(o => o.value)
+                setChannels(opts)
+              }}
+              style={{
+                minWidth: 160,
+                height: 70,
+                padding: 6,
+                borderRadius: 8,
+                border: '1px solid #ccc',
+                fontSize: 13
+              }}
+            >
+              {CHANNEL_OPTIONS.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
             </select>
           </div>
-          <div>
-            <div style={{ fontSize: 12, color: '#666' }}>Attribution model</div>
-            <select value={model} onChange={e=>setModel(e.target.value)}>
-              {MODEL_OPTIONS.map(m=> <option key={m} value={m}>{m}</option>)}
+
+          {/* Attribution model */}
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <label style={{ fontSize: 12, color: '#444', marginBottom: 4 }}>Attribution model</label>
+            <select
+              value={model}
+              onChange={e => setModel(e.target.value)}
+              style={{
+                padding: '8px 10px',
+                borderRadius: 8,
+                border: '1px solid #ccc',
+                fontSize: 13
+              }}
+            >
+              {MODEL_OPTIONS.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
             </select>
           </div>
-          <div>
-            <button className="btn-primary" onClick={applyFilters} disabled={loading}>Apply filters</button>
-          </div>
+
+          {/* Apply button */}
+          <button
+            onClick={applyFilters}
+            disabled={loading}
+            style={{
+              background: '#0f4258',
+              padding: '10px 18px',
+              borderRadius: 8,
+              color: '#fff',
+              fontWeight: 600,
+              border: 'none',
+              fontSize: 14,
+              whiteSpace: 'nowrap',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.17)'
+            }}
+          >
+            Apply filters
+          </button>
         </div>
 
-        {/* Error state */}
+        {/* Error */}
         {error && (
           <div style={{ marginTop: 12, background: '#fff', padding: 12, borderRadius: 8 }}>
             <div style={{ color: 'crimson', fontSize: 13 }}>{error}</div>
-            <button className="btn-outline" style={{ marginTop: 8 }} onClick={fetchStats}>Retry</button>
+
+            {/* ⭐ Retry button updated */}
+            <button
+              onClick={fetchStats}
+              style={{
+                marginTop: 8,
+                background: '#0f4258',
+                color: 'white',
+                padding: '8px 14px',
+                borderRadius: 8,
+                border: 'none',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.16)'
+              }}
+            >
+              Retry
+            </button>
           </div>
         )}
 
-        {/* Top KPI strip + model pill */}
+        {/* KPI Cards */}
         <div className="summary-metrics" style={{ marginTop: 12 }}>
           <div className="summary-card">
             <h5>Total Revenue</h5>
-            <div className="value">{(Math.round(totalRevenue*100)/100).toLocaleString()}</div>
-            <div style={{ fontSize: 11, color: '#4d4f67', marginTop: 4 }}>vs last 30d: {trend30 >= 0 ? `+${trend30}%` : `${trend30}%`}</div>
+            <div className="value">{totalRevenue.toLocaleString()}</div>
+            <div style={{ fontSize: 11, color: '#4d4f67', marginTop: 4 }}>
+              vs last 30d: {trend30 >= 0 ? `+${trend30}%` : `${trend30}%`}
+            </div>
           </div>
+
           <div className="summary-card">
             <h5>Attributed Revenue</h5>
-            <div className="value">{(Math.round(attributedRevenue*100)/100).toLocaleString()} ({attributedPct}%)</div>
-            <div style={{ fontSize: 11, color: '#4d4f67', marginTop: 4 }}>vs last 90d: {trend90 >= 0 ? `+${trend90}%` : `${trend90}%`}</div>
+            <div className="value">
+              {attributedRevenue.toLocaleString()} ({attributedPct}%)
+            </div>
+            <div style={{ fontSize: 11, color: '#4d4f67', marginTop: 4 }}>
+              vs last 90d: {trend90 >= 0 ? `+${trend90}%` : `${trend90}%`}
+            </div>
           </div>
+
           <div className="summary-card">
             <h5>Unattributed Revenue</h5>
-            <div className="value">{(Math.round(unattributedRevenue*100)/100).toLocaleString()} ({unattributedPct}%)</div>
+            <div className="value">
+              {unattributedRevenue.toLocaleString()} ({unattributedPct}%)
+            </div>
           </div>
+
           <div className="summary-card">
             <h5>Campaigns & Spend</h5>
             <div className="value">{campaignCount} campaigns</div>
-            <div style={{ fontSize: 11, color: '#4d4f67', marginTop: 4 }}>Spend: {(Math.round(totalSpend*100)/100).toLocaleString()}</div>
+            <div style={{ fontSize: 11, color: '#4d4f67', marginTop: 4 }}>
+              Spend: {totalSpend.toLocaleString()}
+            </div>
           </div>
         </div>
-        <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 11, background: '#eef4ff', padding: '4px 8px', borderRadius: 999 }}>Model: {modelName}</div>
-          <div style={{ fontSize: 11, background: '#f0f4f7', padding: '4px 8px', borderRadius: 999 }}>Last Run: {lastRun}</div>
-          <div style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, color: '#fff', background: status==='success'?'#3bb273':status==='error'?'#e74c3c':'#f1c40f' }}>{status}</div>
+
+        {/* Model status pills */}
+        <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ fontSize: 11, background: '#eef4ff', padding: '4px 8px', borderRadius: 999 }}>
+            Model: {modelName}
+          </div>
+          <div style={{ fontSize: 11, background: '#f0f4f7', padding: '4px 8px', borderRadius: 999 }}>
+            Last Run: {lastRun}
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              padding: '4px 8px',
+              borderRadius: 999,
+              color: '#fff',
+              background: status === 'success'
+                ? '#3bb273'
+                : status === 'error'
+                ? '#e74c3c'
+                : '#f1c40f'
+            }}
+          >
+            {status}
+          </div>
         </div>
 
-        {/* Charts row */}
+        {/* Charts */}
         <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          {/* Channel donut */}
           <div className="summary-card" style={{ padding: 12 }}>
             <h5>Revenue by Channel</h5>
+
             {loading ? (
               <div style={{ fontSize: 12, color: '#666' }}>Loading…</div>
             ) : donutData.length <= 1 ? (
@@ -216,14 +330,30 @@ export default function Element1Page() {
                 <div style={{ flex: 1 }}>
                   <PieChart data={donutData} size={220} />
                 </div>
+
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>Legend</div>
-                  {donutData.map((d: { label: string; value: number })=>{
-                    const pct = totalRevenue>0 ? Math.round((d.value/totalRevenue)*100) : 0
+
+                  {donutData.map((d: any) => {
+                    const pct = totalRevenue > 0
+                      ? Math.round((d.value / totalRevenue) * 100)
+                      : 0
+
                     return (
-                      <div key={d.label} style={{ display:'flex', justifyContent:'space-between', fontSize:12, padding: '4px 0', borderBottom:'1px dashed #eee' }}>
+                      <div
+                        key={d.label}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          fontSize: 12,
+                          padding: '4px 0',
+                          borderBottom: '1px dashed #eee'
+                        }}
+                      >
                         <span>{d.label}</span>
-                        <span>{(Math.round(d.value*100)/100).toLocaleString()} ({pct}%)</span>
+                        <span>
+                          {d.value.toLocaleString()} ({pct}%)
+                        </span>
                       </div>
                     )
                   })}
@@ -232,26 +362,44 @@ export default function Element1Page() {
             )}
           </div>
 
-          {/* Revenue Over Time */}
           <div className="summary-card" style={{ padding: 12 }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h5>Revenue Over Time</h5>
-              <div style={{ display:'flex', gap:6, fontSize:11 }}>
-                {(['revenue','spend','both'] as const).map(opt=> (
-                  <button key={opt} className={timelineMode===opt? 'btn-primary btn-sm':'btn-ghost btn-sm'} onClick={()=>setTimelineMode(opt)}>{opt[0].toUpperCase()+opt.slice(1)}</button>
+
+              {/* ⭐ BLUE timeline buttons */}
+              <div style={{ display: 'flex', gap: 6, fontSize: 11 }}>
+                {(['revenue', 'spend', 'both'] as const).map(opt => (
+                  <button
+                    key={opt}
+                    onClick={() => setTimelineMode(opt)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      background: timelineMode === opt ? '#0f4258' : '#eef2f5',
+                      color: timelineMode === opt ? 'white' : '#333',
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {opt[0].toUpperCase() + opt.slice(1)}
+                  </button>
                 ))}
               </div>
             </div>
+
             {loading ? (
               <div style={{ fontSize: 12, color: '#666' }}>Loading…</div>
             ) : (
               <>
-                {(timelineMode==='revenue' || timelineMode==='both') && (
+                {(timelineMode === 'revenue' || timelineMode === 'both') && (
                   <div style={{ marginTop: 8 }}>
                     <TimelineChart data={timelineSeries.rev} />
                   </div>
                 )}
-                {(timelineMode==='spend' || timelineMode==='both') && (
+
+                {(timelineMode === 'spend' || timelineMode === 'both') && (
                   <div style={{ marginTop: 12 }}>
                     <TimelineChart data={timelineSeries.spd} />
                   </div>
@@ -265,56 +413,61 @@ export default function Element1Page() {
         <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div className="summary-card" style={{ padding: 12 }}>
             <h5>Top 5 Campaigns by ROI</h5>
+
             {loading ? (
               <div style={{ fontSize: 12, color: '#666' }}>Loading…</div>
             ) : (
-              <table style={{ width:'100%', fontSize:12, borderCollapse:'collapse', marginTop: 8 }}>
+              <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse', marginTop: 8 }}>
                 <thead>
-                  <tr style={{ background:'#f5f5f5' }}>
-                    <th style={{ textAlign:'left', padding:6 }}>Campaign</th>
-                    <th style={{ textAlign:'left', padding:6 }}>Channel</th>
-                    <th style={{ textAlign:'left', padding:6 }}>Spend</th>
-                    <th style={{ textAlign:'left', padding:6 }}>Revenue</th>
-                    <th style={{ textAlign:'left', padding:6 }}>ROI</th>
+                  <tr style={{ background: '#f5f5f5' }}>
+                    <th style={{ textAlign: 'left', padding: 6 }}>Campaign</th>
+                    <th style={{ textAlign: 'left', padding: 6 }}>Channel</th>
+                    <th style={{ textAlign: 'left', padding: 6 }}>Spend</th>
+                    <th style={{ textAlign: 'left', padding: 6 }}>Revenue</th>
+                    <th style={{ textAlign: 'left', padding: 6 }}>ROI</th>
                   </tr>
                 </thead>
+
                 <tbody>
-                  {topCampaigns.slice(0,5).map((c:any)=> (
-                    <tr key={c.name} style={{ borderTop:'1px solid #eee', cursor:'pointer' }} title="Open campaign details">
-                      <td style={{ padding:6 }}>{c.name}</td>
-                      <td style={{ padding:6 }}>{c.channel}</td>
-                      <td style={{ padding:6 }}>{(Math.round(Number(c.spend||0)*100)/100).toLocaleString()}</td>
-                      <td style={{ padding:6 }}>{(Math.round(Number(c.revenue||0)*100)/100).toLocaleString()}</td>
-                      <td style={{ padding:6 }}>{Math.round(Number(c.roi||0))}%</td>
+                  {topCampaigns.slice(0, 5).map((c: any) => (
+                    <tr key={c.name} style={{ borderTop: '1px solid #eee', cursor: 'pointer' }}>
+                      <td style={{ padding: 6 }}>{c.name}</td>
+                      <td style={{ padding: 6 }}>{c.channel}</td>
+                      <td style={{ padding: 6 }}>{c.spend?.toLocaleString()}</td>
+                      <td style={{ padding: 6 }}>{c.revenue?.toLocaleString()}</td>
+                      <td style={{ padding: 6 }}>{Math.round(Number(c.roi || 0))}%</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
           </div>
+
           <div className="summary-card" style={{ padding: 12 }}>
             <h5>Bottom 5 Campaigns by ROI</h5>
+
             {loading ? (
               <div style={{ fontSize: 12, color: '#666' }}>Loading…</div>
             ) : (
-              <table style={{ width:'100%', fontSize:12, borderCollapse:'collapse', marginTop: 8 }}>
+              <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse', marginTop: 8 }}>
                 <thead>
-                  <tr style={{ background:'#f5f5f5' }}>
-                    <th style={{ textAlign:'left', padding:6 }}>Campaign</th>
-                    <th style={{ textAlign:'left', padding:6 }}>Channel</th>
-                    <th style={{ textAlign:'left', padding:6 }}>Spend</th>
-                    <th style={{ textAlign:'left', padding:6 }}>Revenue</th>
-                    <th style={{ textAlign:'left', padding:6 }}>ROI</th>
+                  <tr style={{ background: '#f5f5f5' }}>
+                    <th style={{ textAlign: 'left', padding: 6 }}>Campaign</th>
+                    <th style={{ textAlign: 'left', padding: 6 }}>Channel</th>
+                    <th style={{ textAlign: 'left', padding: 6 }}>Spend</th>
+                    <th style={{ textAlign: 'left', padding: 6 }}>Revenue</th>
+                    <th style={{ textAlign: 'left', padding: 6 }}>ROI</th>
                   </tr>
                 </thead>
+
                 <tbody>
-                  {bottomCampaigns.slice(0,5).map((c:any)=> (
-                    <tr key={c.name} style={{ borderTop:'1px solid #eee', cursor:'pointer' }} title="Open campaign details">
-                      <td style={{ padding:6 }}>{c.name}</td>
-                      <td style={{ padding:6 }}>{c.channel}</td>
-                      <td style={{ padding:6 }}>{(Math.round(Number(c.spend||0)*100)/100).toLocaleString()}</td>
-                      <td style={{ padding:6 }}>{(Math.round(Number(c.revenue||0)*100)/100).toLocaleString()}</td>
-                      <td style={{ padding:6 }}>{Math.round(Number(c.roi||0))}%</td>
+                  {bottomCampaigns.slice(0, 5).map((c: any) => (
+                    <tr key={c.name} style={{ borderTop: '1px solid #eee', cursor: 'pointer' }}>
+                      <td style={{ padding: 6 }}>{c.name}</td>
+                      <td style={{ padding: 6 }}>{c.channel}</td>
+                      <td style={{ padding: 6 }}>{c.spend?.toLocaleString()}</td>
+                      <td style={{ padding: 6 }}>{c.revenue?.toLocaleString()}</td>
+                      <td style={{ padding: 6 }}>{Math.round(Number(c.roi || 0))}%</td>
                     </tr>
                   ))}
                 </tbody>
@@ -323,28 +476,28 @@ export default function Element1Page() {
           </div>
         </div>
 
-        {/* Channel Health mini-cards */}
-        <div style={{ marginTop: 16, display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+        {/* Channel health */}
+        <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
           <div className="summary-card">
             <h5>Best channel (ROI)</h5>
-            <div style={{ fontSize: 13, color:'#2d2f45' }}>{bestChannel ? `${bestChannel.channel} — ${Math.round(Number(bestChannel.roi||0))}%` : '—'}</div>
+            <div style={{ fontSize: 13 }}>{bestChannel ? `${bestChannel.channel} — ${Math.round(bestChannel.roi)}%` : '—'}</div>
           </div>
+
           <div className="summary-card">
             <h5>Highest spend channel</h5>
-            <div style={{ fontSize: 13, color:'#2d2f45' }}>{highestSpendChannel ? `${highestSpendChannel.channel} — ${(Math.round(Number(highestSpendChannel.spend||0)*100)/100).toLocaleString()}` : '—'}</div>
+            <div style={{ fontSize: 13 }}>{highestSpendChannel ? `${highestSpendChannel.channel} — ${highestSpendChannel.spend?.toLocaleString()}` : '—'}</div>
           </div>
+
           <div className="summary-card">
             <h5>Most efficient channel</h5>
-            <div style={{ fontSize: 13, color:'#2d2f45' }}>{mostEfficientChannel ? `${mostEfficientChannel.channel} — ${((Number(mostEfficientChannel.revenue||0)/Math.max(1,Number(mostEfficientChannel.spend||0))).toFixed(2))}` : '—'}</div>
+            <div style={{ fontSize: 13 }}>
+              {mostEfficientChannel
+                ? `${mostEfficientChannel.channel} — ${(mostEfficientChannel.revenue / Math.max(1, mostEfficientChannel.spend)).toFixed(2)}`
+                : '—'}
+            </div>
           </div>
         </div>
 
-        {/* No-data state */}
-        {!loading && !error && !stats && (
-          <div style={{ marginTop: 16, background:'#fff', borderRadius:8, padding:12, fontSize:13, color:'#666' }}>
-            No data for this filter selection. Try expanding the date range or channels.
-          </div>
-        )}
       </main>
     </Layout>
   )

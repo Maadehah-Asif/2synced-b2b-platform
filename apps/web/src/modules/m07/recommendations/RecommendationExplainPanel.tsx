@@ -1,5 +1,3 @@
-import React from 'react'
-
 export default function RecommendationExplainPanel({ open, onClose, signals }: any) {
   if (!open) return null
   return (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 
 export default function RecommendationsFilterBar({ filters, setFilters, onApply, onClear }: any) {
   const [local, setLocal] = useState<any>(filters || {})

@@ -1,5 +1,3 @@
-import React from 'react'
-
 export default function RecommendationHistoryTable({ history }: any) {
   if (!history) return null
   return (

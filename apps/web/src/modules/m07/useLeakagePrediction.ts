@@ -14,6 +14,9 @@ export function useLeakagePrediction(workspaceId: string | null, filters: Leakag
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // IMPORTANT: stabilize filters via JSON.stringify so we don't recreate callbacks forever
+  const filtersKey = JSON.stringify(filters || {});
+
   const buildParams = useCallback(() => {
     const params = new URLSearchParams();
     if (workspaceId) params.append('workspace', workspaceId);
@@ -22,7 +25,8 @@ export function useLeakagePrediction(workspaceId: string | null, filters: Leakag
     if (filters.stages && filters.stages.length) params.append('stages', filters.stages.join(','));
     if (filters.riskBuckets && filters.riskBuckets.length) params.append('buckets', filters.riskBuckets.join(','));
     return params.toString();
-  }, [workspaceId, filters]);
+    // ⬇️ use filtersKey instead of the raw filters object
+  }, [workspaceId, filtersKey]);
 
   const fetchData = useCallback(async () => {
     if (!workspaceId) {
@@ -33,8 +37,19 @@ export function useLeakagePrediction(workspaceId: string | null, filters: Leakag
     setError(null);
     try {
       const token = localStorage.getItem('token');
-      const res = await window.fetch(`${API_URL}/api/m07/leakage-prediction?${buildParams()}`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
-      if (!res.ok) throw new Error(await res.text() || res.statusText);
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const res = await window.fetch(`${API_URL}/m07/leakage-prediction?${buildParams()}`, { headers });
+      if (!res.ok) {
+        const text = await res.text();
+        try {
+          const json = JSON.parse(text || '{}');
+          throw new Error(json.message || JSON.stringify(json));
+        } catch (_err) {
+          throw new Error(text || res.statusText);
+        }
+      }
       const body = await res.json();
       setData(body);
     } catch (e: any) {
@@ -43,33 +58,40 @@ export function useLeakagePrediction(workspaceId: string | null, filters: Leakag
     } finally {
       setLoading(false);
     }
+    // ⬇️ depends on workspaceId + filtersKey via buildParams
   }, [workspaceId, buildParams]);
 
-  const runPrediction = useCallback(async (opts: { modelVersion?: string } = {}) => {
-    if (!workspaceId) {
-      setError('workspace id required');
-      return { ok: false };
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const token = localStorage.getItem('token');
-      const res = await window.fetch(`${API_URL}/m07/leakage-prediction/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' },
-        body: JSON.stringify({ workspace: workspaceId, modelVersion: opts.modelVersion || 'v1' }),
-      });
-      if (!res.ok) throw new Error(await res.text() || res.statusText);
-      // On success, refetch dashboard
-      await fetchData();
-      return { ok: true };
-    } catch (e: any) {
-      setError(e?.message || 'run failed');
-      return { ok: false };
-    } finally {
-      setLoading(false);
-    }
-  }, [workspaceId, fetchData]);
+  const runPrediction = useCallback(
+    async (opts: { modelVersion?: string } = {}) => {
+      if (!workspaceId) {
+        setError('workspace id required');
+        return { ok: false };
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const token = localStorage.getItem('token');
+        const res = await window.fetch(`${API_URL}/m07/leakage-prediction/run`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token ? `Bearer ${token}` : '',
+          },
+          body: JSON.stringify({ workspace: workspaceId, modelVersion: opts.modelVersion || 'v1' }),
+        });
+        if (!res.ok) throw new Error((await res.text()) || res.statusText);
+        // On success, refetch dashboard
+        await fetchData();
+        return { ok: true };
+      } catch (e: any) {
+        setError(e?.message || 'run failed');
+        return { ok: false };
+      } finally {
+        setLoading(false);
+      }
+    },
+    [workspaceId, fetchData]
+  );
 
   useEffect(() => {
     fetchData();

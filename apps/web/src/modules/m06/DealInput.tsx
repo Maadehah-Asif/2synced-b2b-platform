@@ -298,10 +298,13 @@ export default function DealInput(){
           <button className={tab==='csv'?'btn-primary':'btn-ghost'} onClick={()=>setTab('csv')}>Bulk import via CSV</button>
         </div>
         {tab==='form' && (
-          <div style={{ marginTop:16, padding:12, background:'#fff', borderRadius:8 }}>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+          <div style={{ marginTop:16, padding:16, background:'#fff', borderRadius:10, boxShadow:'0 4px 20px rgba(17,24,39,0.08)' }}>
+            <div style={{ marginBottom:10 }}>
+              <div style={{ fontSize:13, color:'#4b5563' }}>Required: Lead, Amount, and Closed date if marked closed-won. Keep currency codes short (USD, EUR).</div>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:12 }}>
               <div>
-                <div style={{ fontSize:12 }}>Lead</div>
+                <label style={{ fontSize:12, fontWeight:600 }}>Lead *</label>
                 <Autocomplete
                   value={leadQuery}
                   placeholder="Lead id / name / company"
@@ -313,40 +316,44 @@ export default function DealInput(){
                 {formErrors.lead && <div style={{ color:'#c33', fontSize:11 }}>{formErrors.lead}</div>}
               </div>
               <div>
-                <div style={{ fontSize:12 }}>Deal ID (optional)</div>
-                <input value={dealId} onChange={e=>setDealId(e.target.value)} />
+                <label style={{ fontSize:12, fontWeight:600 }}>Deal ID (optional)</label>
+                <input value={dealId} onChange={e=>setDealId(e.target.value)} placeholder="CRM deal id" />
               </div>
               <div>
-                <div style={{ fontSize:12 }}>Amount</div>
-                <input value={amount} onChange={e=>setAmount(e.target.value)} />
+                <label style={{ fontSize:12, fontWeight:600 }}>Amount *</label>
+                <input value={amount} onChange={e=>setAmount(e.target.value)} placeholder="e.g., 15000" />
+                <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>Numbers only; positive values.</div>
                 {formErrors.amount && <div style={{ color:'#c33', fontSize:11 }}>{formErrors.amount}</div>}
               </div>
               <div>
-                <div style={{ fontSize:12 }}>Currency</div>
-                <input value={currency} onChange={e=>setCurrency(e.target.value)} />
+                <label style={{ fontSize:12, fontWeight:600 }}>Currency</label>
+                <input value={currency} onChange={e=>setCurrency(e.target.value)} placeholder="USD" />
+                <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>3-4 letter code.</div>
               </div>
               <div>
-                <div style={{ fontSize:12 }}>Closed won?</div>
+                <label style={{ fontSize:12, fontWeight:600 }}>Closed won?</label>
                 <select value={String(closedWon)} onChange={e=>setClosedWon(e.target.value==='true')}>
                   <option value="true">Yes</option>
                   <option value="false">No</option>
                 </select>
               </div>
               <div>
-                <div style={{ fontSize:12 }}>Closed at</div>
+                <label style={{ fontSize:12, fontWeight:600 }}>Closed at {closedWon && '*'}</label>
                 <input type="datetime-local" value={closedAt} onChange={e=>setClosedAt(e.target.value)} />
                 {formErrors.closed_at && <div style={{ color:'#c33', fontSize:11 }}>{formErrors.closed_at}</div>}
               </div>
               <div>
-                <div style={{ fontSize:12 }}>Stage</div>
+                <label style={{ fontSize:12, fontWeight:600 }}>Stage</label>
                 <input value={stage} onChange={e=>setStage(e.target.value)} />
+                <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>e.g., Discovery, Proposal, Closed Won.</div>
               </div>
-              <div>
-                <div style={{ fontSize:12 }}>Notes</div>
-                <textarea rows={3} value={notes} onChange={e=>setNotes(e.target.value)} />
+              <div style={{ gridColumn:'1 / -1' }}>
+                <label style={{ fontSize:12, fontWeight:600 }}>Notes</label>
+                <textarea rows={3} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Optional context for this deal" style={{ width:'100%' }} />
+                <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>Keep it short—help teammates understand status fast.</div>
               </div>
             </div>
-            <div style={{ marginTop:12 }}>
+            <div style={{ marginTop:12, display:'flex', gap:8 }}>
               <button className="btn-primary" onClick={submitForm}>Save Deal</button>
             </div>
           </div>

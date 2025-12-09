@@ -303,6 +303,10 @@ export default function Upload(){
   const usedTargets = computeUsedTargets(mappingsByFile);
   const allTargetKeys = MERGED_COLUMNS.map(c => c.key);
 
+  const setPreviewReturn = () => {
+    try { sessionStorage.setItem('m01_preview_return', window.location.hash || ''); } catch (e) { /* ignore */ }
+  };
+
   const availableTargetsFor = (_fileId: string, current?: string) => {
     const used = new Set(usedTargets);
     // Exclude the selected targetKey from all dropdowns; it's supplied by the matching key automatically
@@ -458,7 +462,14 @@ export default function Upload(){
               <div className="meta">{u.filename} — {u.contentType} — {new Date(u.createdAt).toLocaleString()}</div>
               <div>
                 {statusView === 'active' && <input type="checkbox" checked={!!selectedForMerge[u._id]} onChange={() => toggleSelectForMerge(u._id)} title="Select for merge" />}
-                <button type="button" className="ml-6" onClick={() => { if (workspace) window.location.hash = `#/workspace/${workspace}/m01/upload/preview/${u._id}`; else window.location.hash = `#/m01/upload/preview/${u._id}`; }}>Preview</button>
+                <button
+                  type="button"
+                  className="ml-6"
+                  onClick={() => {
+                    setPreviewReturn();
+                    if (workspace) window.location.hash = `#/workspace/${workspace}/m01/upload/preview/${u._id}`; else window.location.hash = `#/m01/upload/preview/${u._id}`;
+                  }}
+                >Preview</button>
                 <button type="button" className="ml-6" onClick={async () => {
                   // open details
                   const res = await fetch(`${API_URL}/m01/uploads/${u._id}?workspace=${workspace}`, { headers: getAuthHeaders() });

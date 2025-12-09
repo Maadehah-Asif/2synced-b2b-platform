@@ -16,10 +16,15 @@ export async function createTouch(payload: { leadId: string; campaignId: string;
   return j.touch;
 }
 
-export async function listTouchesByCampaign(params: { campaignId: string; from?: string; to?: string; channel?: string; type?: string; includeArchived?: boolean; showArchived?: boolean; filterType?: string; filterChannel?: string; }) : Promise<CampaignTouch[]> {
+type TouchListParams = { campaignId: string; from?: string; to?: string; channel?: string; type?: string; includeArchived?: boolean; showArchived?: boolean; filterType?: string; filterChannel?: string; workspaceId?: string; };
+
+type TouchListLeadParams = { leadId: string; from?: string; to?: string; channel?: string; type?: string; includeArchived?: boolean; showArchived?: boolean; filterType?: string; filterChannel?: string; workspaceId?: string; };
+
+export async function listTouchesByCampaign(params: TouchListParams) : Promise<CampaignTouch[]> {
   const qs = new URLSearchParams();
-  const projectId = getWorkspaceIdFromHash();
+  const projectId = params.workspaceId || getWorkspaceIdFromHash();
   if(projectId) qs.set('projectId', projectId);
+  else return { ok: false, error: 'workspace_required' } as any;
   qs.set('campaignId', params.campaignId);
   if(params.from) qs.set('from', params.from);
   if(params.to) qs.set('to', params.to);
@@ -27,13 +32,16 @@ export async function listTouchesByCampaign(params: { campaignId: string; from?:
   if(params.type) qs.set('type', params.type);
   if(params.includeArchived) qs.set('includeArchived', 'true');
   const res = await fetch(`${API_URL}/m06/campaign-touches/by-campaign?${qs.toString()}`);
-  return res.json();
+  const j = await res.json();
+  if(!res.ok) return { ok: false, error: j.error || 'failed' } as any;
+  return j as any;
 }
 
-export async function listTouchesByLead(params: { leadId: string; from?: string; to?: string; channel?: string; type?: string; includeArchived?: boolean; showArchived?: boolean; filterType?: string; filterChannel?: string; }) : Promise<CampaignTouch[]> {
+export async function listTouchesByLead(params: TouchListLeadParams) : Promise<CampaignTouch[]> {
   const qs = new URLSearchParams();
-  const projectId = getWorkspaceIdFromHash();
+  const projectId = params.workspaceId || getWorkspaceIdFromHash();
   if(projectId) qs.set('projectId', projectId);
+  else return { ok: false, error: 'workspace_required' } as any;
   qs.set('leadId', params.leadId);
   if(params.from) qs.set('from', params.from);
   if(params.to) qs.set('to', params.to);
@@ -41,7 +49,9 @@ export async function listTouchesByLead(params: { leadId: string; from?: string;
   if(params.type) qs.set('type', params.type);
   if(params.includeArchived) qs.set('includeArchived', 'true');
   const res = await fetch(`${API_URL}/m06/campaign-touches/by-lead?${qs.toString()}`);
-  return res.json();
+  const j = await res.json();
+  if(!res.ok) return { ok: false, error: j.error || 'failed' } as any;
+  return j as any;
 }
 
 export async function updateTouch(id: string, payload: { channel?: string; type?: string; touched_at?: string; metadata?: any; }) {
@@ -59,7 +69,7 @@ export async function deleteTouchPermanent(id: string){
   return res.json();
 }
 
-export async function importTouchesCSV(payload: { csv: string; map: any; startRow?: number; endRow?: number; campaignIdentifier?: 'name'|'campaign_id'; duplicatePolicy?: string; }): Promise<CampaignTouchImportSummary> {
+export async function importTouchesCSV(payload: { csv: string; map: any; startRow?: number; endRow?: number; campaignIdentifier?: 'name'|'campaign_id'; leadIdentifier?: 'id'|'email'; duplicatePolicy?: string; }): Promise<CampaignTouchImportSummary> {
   const projectId = getWorkspaceIdFromHash();
   const body = { ...payload, projectId };
   const res = await fetch(`${API_URL}/m06/campaign-touches/import/csv`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });

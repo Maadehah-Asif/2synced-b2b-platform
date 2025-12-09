@@ -365,49 +365,59 @@ export default function CampaignManager(){
           {/* This page is for adding only; listing moved to ViewCampaigns */}
           {/* Listing removed; see ViewCampaigns page */}
           {showForm && (
-            <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8 }}>
-              <h4>{selected ? 'Edit Campaign' : 'New Campaign'}</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ marginTop: 12, padding: 20, background: '#fff', borderRadius: 12, boxShadow: '0 6px 24px rgba(17, 24, 39, 0.08)', maxWidth: 1100 }}>
+              <div style={{ marginBottom: 16 }}>
+                <h4 style={{ margin: 0 }}>{selected ? 'Edit Campaign' : 'New Campaign'}</h4>
+                <div style={{ fontSize: 12, color: '#4b5563', marginTop: 4 }}>Required: name, channel, start date. Optional: spend and tags. Keep dates in YYYY-MM-DD.</div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, alignItems: 'end' }}>
                 <div>
-                  <div style={{ fontSize: 12 }}>Name</div>
-                  <input value={form.name} onChange={e=>setForm({...form, name: e.target.value})} />
+                  <label style={{ fontSize: 12, fontWeight: 600 }}>Name *</label>
+                  <input value={form.name} onChange={e=>setForm({...form, name: e.target.value})} placeholder="e.g., Q1 ABM pilot" style={{ width:'100%' }} />
+                  <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>3-80 characters; something your team recognizes.</div>
                   {formErrors.name && <div style={{ color:'#c33', fontSize:12 }}>{formErrors.name}</div>}
                 </div>
                 <div>
-                  <div style={{ fontSize: 12 }}>Channel</div>
-                  <select value={form.channel} onChange={e=>setForm({...form, channel: e.target.value})}>
+                  <label style={{ fontSize: 12, fontWeight: 600 }}>Channel *</label>
+                  <select value={form.channel} onChange={e=>setForm({...form, channel: e.target.value})} style={{ width:'100%' }}>
                     <option value="email">Email</option>
                     <option value="ads">Ads</option>
                     <option value="linkedin">LinkedIn</option>
                     <option value="webinar">Webinar</option>
                     <option value="other">Other</option>
                   </select>
+                  <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>Sets default channel for touches and reporting.</div>
                   {formErrors.channel && <div style={{ color:'#c33', fontSize:12 }}>{formErrors.channel}</div>}
                 </div>
                 <div>
-                  <div style={{ fontSize: 12 }}>Start date</div>
-                  <input type="date" value={form.startDate} onChange={e=>setForm({...form, startDate: e.target.value})} />
+                  <label style={{ fontSize: 12, fontWeight: 600 }}>Start date *</label>
+                  <input type="date" value={form.startDate} onChange={e=>setForm({...form, startDate: e.target.value})} style={{ width:'100%' }} />
+                  <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>Use YYYY-MM-DD; we use this for timelines.</div>
                   {formErrors.startDate && <div style={{ color:'#c33', fontSize:12 }}>{formErrors.startDate}</div>}
                 </div>
                 <div>
-                  <div style={{ fontSize: 12 }}>End date</div>
-                  <input type="date" value={form.endDate} onChange={e=>setForm({...form, endDate: e.target.value})} />
+                  <label style={{ fontSize: 12, fontWeight: 600 }}>End date</label>
+                  <input type="date" value={form.endDate} onChange={e=>setForm({...form, endDate: e.target.value})} style={{ width:'100%' }} />
+                  <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>Optional; leave blank for ongoing.</div>
                   {formErrors.endDate && <div style={{ color:'#c33', fontSize:12 }}>{formErrors.endDate}</div>}
                 </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={{ fontSize: 12 }}>Description</div>
-                  <input value={form.description} onChange={e=>setForm({...form, description: e.target.value})} />
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600 }}>Total spend</label>
+                  <input value={form.spend} onChange={e=>setForm({...form, spend: e.target.value})} placeholder="e.g., 25000" style={{ width:'100%' }} />
+                  <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>Numbers only; used for ROI.</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 12 }}>Tags (comma separated)</div>
-                  <input value={form.tags} onChange={e=>setForm({...form, tags: e.target.value})} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 12 }}>Total spend</div>
-                  <input value={form.spend} onChange={e=>setForm({...form, spend: e.target.value})} />
+                  <label style={{ fontSize: 12, fontWeight: 600 }}>Tags</label>
+                  <input value={form.tags} onChange={e=>setForm({...form, tags: e.target.value})} placeholder="brand, paid-social" style={{ width:'100%' }} />
+                  <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>Comma-separated; 3-5 short tags recommended.</div>
                 </div>
               </div>
-              <div style={{ marginTop: 12 }}>
+              <div style={{ marginTop: 14 }}>
+                <label style={{ fontSize: 12, fontWeight: 600 }}>Description</label>
+                <textarea rows={3} value={form.description} onChange={e=>setForm({...form, description: e.target.value})} placeholder="Short summary for the team" style={{ width:'100%', marginTop:6 }} />
+                <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>1-2 sentences to remind teammates what this campaign does.</div>
+              </div>
+              <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
                 <button className="btn-primary" onClick={submitForm}>Save</button>
                 <button className="btn-ghost" onClick={()=>{ setShowForm(false); setSelected(null); }}>Cancel</button>
               </div>

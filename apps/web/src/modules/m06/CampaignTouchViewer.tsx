@@ -2,7 +2,6 @@ import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import { useEffect, useState } from 'react';
 import { listTouchesByCampaign, listTouchesByLead, updateTouch, archiveTouch, deleteTouchPermanent, searchCampaigns, searchLeads } from './services/touches';
-import Autocomplete from '../../components/Autocomplete';
 import { useWorkspaceId } from '../../utils/workspace';
 
 interface TouchRow {
@@ -20,9 +19,9 @@ interface TouchRow {
 export default function CampaignTouchViewer(){
   const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
   const [mode, setMode] = useState<'campaign'|'lead'>('campaign');
-  const [query, setQuery] = useState('');
-  const [options, setOptions] = useState<any[]>([]);
   const [selectedEntityId, setSelectedEntityId] = useState<string>('');
+  const [campaignOptions, setCampaignOptions] = useState<any[]>([]);
+  const [leadOptions, setLeadOptions] = useState<any[]>([]);
   const [rows, setRows] = useState<TouchRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingRowId, setEditingRowId] = useState<string|null>(null);
@@ -35,41 +34,79 @@ export default function CampaignTouchViewer(){
   const [filterType, setFilterType] = useState<string>('');
   const [filterChannel, setFilterChannel] = useState<string>('');
 
-  function handleAutocompleteChange(val: string, item?: any){
-    setQuery(val);
-    if(item){
-      const id = mode==='campaign' ? String(item.id) : String(item.lead_id);
-      setSelectedEntityId(id);
-    }
-  }
-
-  useEffect(()=>{
-    let ignore=false;
-    async function run(){
-      if(!query){ setOptions([]); return; }
-      if(mode==='campaign'){
-        const r = await searchCampaigns(query);
-        if(!ignore) setOptions(r.campaigns||[]);
-      } else {
-        const r = await searchLeads(query);
-        if(!ignore) setOptions(r.leads||[]);
-      }
+  // Load campaign list for current workspace when in "By Campaign" mode
+  useEffect(() => {
+    let ignore = false;
+    async function run() {
+      if (!workspaceId || mode !== 'campaign') { if (!ignore) setCampaignOptions([]); return; }
+      const r = await searchCampaigns('');
+      if (!ignore) setCampaignOptions(r.campaigns || []);
     }
     run();
-    return ()=>{ ignore=true };
-  },[query, mode]);
+    return () => { ignore = true; };
+  }, [workspaceId, mode]);
+
+  // Load a small lead list for current workspace when in "By Lead" mode
+  useEffect(() => {
+    let ignore = false;
+    async function run() {
+      if (!workspaceId || mode !== 'lead') { if (!ignore) setLeadOptions([]); return; }
+      const r = await searchLeads('');
+      if (!ignore) setLeadOptions(r.leads || []);
+    }
+    run();
+    return () => { ignore = true; };
+  }, [workspaceId, mode]);
 
   async function load(){
     if(!workspaceId){ setRows([]); return; }
     if(!selectedEntityId){ setRows([]); return; }
     setLoading(true);
     let data: any = [];
+    const common = {
+      includeArchived: showArchived,
+      type: filterType || undefined,
+      channel: filterChannel || undefined,
+      workspaceId: workspaceId || undefined,
+    };
     if(mode==='campaign'){
-      data = await listTouchesByCampaign({ campaignId: selectedEntityId, showArchived, filterType, filterChannel });
+      data = await listTouchesByCampaign({
+        campaignId: selectedEntityId,
+        ...common,
+      } as any);
     } else {
-      data = await listTouchesByLead({ leadId: selectedEntityId, showArchived, filterType, filterChannel });
+      data = await listTouchesByLead({
+        leadId: selectedEntityId,
+        ...common,
+      } as any);
     }
-    if(data && Array.isArray(data)) setRows(data);
+
+    // Accept multiple response shapes and normalise into TouchRow objects
+    try { console.debug('[m06/loadTouches] selectedEntityId=', selectedEntityId, 'mode=', mode, 'response=', data); } catch(e){}
+
+    let raw: any[] = [];
+    if (Array.isArray(data)) raw = data;
+    else if (data && Array.isArray(data.touches)) raw = data.touches;
+    else if (data && data.ok === false && data.error) {
+      setToast({ msg: `Load error: ${data.error}`, type: 'error' });
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
+    const normalised: TouchRow[] = raw.map((t: any) => ({
+      _id: String(t._id || t.id || ''),
+      lead_id: t.lead_id,
+      campaign_id: t.campaign_id,
+      campaign_name: t.campaign_name || t.campaignName,
+      type: t.type,
+      channel: t.channel,
+      touched_at: t.touched_at || t.touchedAt,
+      status: t.status,
+      metadata: t.metadata,
+    })).filter(t => t._id);
+
+    setRows(normalised);
     setLoading(false);
   }
 
@@ -121,22 +158,38 @@ export default function CampaignTouchViewer(){
         <div style={{ fontSize:12, color:'#555' }}>View & manage interaction events. Toggle mode to switch context.</div>
         {!workspaceId && <div style={{ fontSize:12, color:'#c33', marginTop:8 }}>Open a workspace to manage campaign touches.</div>}
         <div style={{ marginTop:12, display:'flex', gap:12 }}>
-          <button className={mode==='campaign'?'btn-primary':'btn-ghost'} onClick={()=>{ setMode('campaign'); setSelectedEntityId(''); setQuery(''); }}>By Campaign</button>
-          <button className={mode==='lead'?'btn-primary':'btn-ghost'} onClick={()=>{ setMode('lead'); setSelectedEntityId(''); setQuery(''); }}>By Lead</button>
+          <button className={mode==='campaign'?'btn-primary':'btn-ghost'} onClick={()=>{ setMode('campaign'); setSelectedEntityId(''); }}>By Campaign</button>
+          <button className={mode==='lead'?'btn-primary':'btn-ghost'} onClick={()=>{ setMode('lead'); setSelectedEntityId(''); }}>By Lead</button>
         </div>
         <div style={{ marginTop:16 }}>
-          <div style={{ fontSize:12 }}>{mode==='campaign'?'Campaign search':'Lead search'}</div>
-          <Autocomplete
-            value={query}
-            placeholder={mode==='campaign'?'Campaign name':'Lead id / name / company'}
-            fetchItems={async (q)=>{
-              if(mode==='campaign'){ const r = await searchCampaigns(q); return r.campaigns||[]; }
-              else { const r = await searchLeads(q); return r.leads||[]; }
-            }}
-            formatItem={(o:any)=> mode==='campaign'? o.name : `#${o.lead_id} ${o.First_Name||''} ${o.Last_Name||''}`.trim() }
-            getValue={(o:any)=> mode==='campaign'? String(o.id) : String(o.lead_id) }
-            onChange={handleAutocompleteChange}
-          />
+          <div style={{ fontSize:12 }}>{mode==='campaign'?'Select campaign':'Select lead'}</div>
+          {mode === 'campaign' ? (
+            <select
+              style={{ width:'100%', padding:6, fontSize:12 }}
+              value={selectedEntityId}
+              onChange={e => setSelectedEntityId(e.target.value)}
+            >
+              <option value="">Choose a campaign</option>
+              {campaignOptions.map((c:any) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <select
+              style={{ width:'100%', padding:6, fontSize:12 }}
+              value={selectedEntityId}
+              onChange={e => setSelectedEntityId(e.target.value)}
+            >
+              <option value="">Choose a lead</option>
+              {leadOptions.map((l:any) => (
+                <option key={l._id} value={String(l._id)}>
+                  #{l.lead_id} {l.name || ''}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <div style={{ marginTop:12 }}>
           <label style={{ fontSize:12 }}>
@@ -166,7 +219,13 @@ export default function CampaignTouchViewer(){
         </div>
         <div style={{ marginTop:16, background:'#fff', borderRadius:8, padding:12 }}>
           {loading && <div style={{ fontSize:12 }}>Loading...</div>}
-          {!loading && filteredRows.length===0 && <div style={{ fontSize:12 }}>No touches found.</div>}
+          {!loading && filteredRows.length===0 && (
+            <div style={{ fontSize:12 }}>
+              {selectedEntityId
+                ? 'No touches found for this selection.'
+                : 'Select a campaign or lead above to see touches.'}
+            </div>
+          )}
           {!loading && filteredRows.length>0 && (
             <table style={{ width:'100%', fontSize:12, borderCollapse:'collapse' }}>
               <thead>

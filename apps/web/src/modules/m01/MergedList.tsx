@@ -21,6 +21,9 @@ export default function MergedList(){
   const [openId] = useState<string | null>(() => getOpenIdFromHash());
 
   useEffect(() => { fetchList(); }, [workspace, sort]);
+  const setPreviewReturn = () => {
+    try { sessionStorage.setItem('m01_preview_return', window.location.hash || ''); } catch (e) { /* ignore */ }
+  };
   useEffect(() => {
     // if there is an open=<id>, auto-open details once list is loaded
     if (!openId || items.length === 0) return;
@@ -72,9 +75,14 @@ export default function MergedList(){
                 <strong>{m.name || m.filename}</strong> — {new Date(m.createdAt).toLocaleString()} — by {m.createdBy?.fullName || m.createdBy?.email || 'Unknown'}
               </div>
               <div>
-                <button type="button" className="ml-6" onClick={() => {
-                  if (workspace) window.location.hash = `#/workspace/${workspace}/m01/merged/preview/${m._id}`; else window.location.hash = `#/m01/merged/preview/${m._id}`;
-                }}>Preview</button>
+                <button
+                  type="button"
+                  className="ml-6"
+                  onClick={() => {
+                    setPreviewReturn();
+                    if (workspace) window.location.hash = `#/workspace/${workspace}/m01/merged/preview/${m._id}`; else window.location.hash = `#/m01/merged/preview/${m._id}`;
+                  }}
+                >Preview</button>
                 <button type="button" className="ml-6" onClick={async () => {
                   const res = await fetch(`${API_URL}/m01/merges/${m._id}?workspace=${workspace}`);
                   const j = await res.json();

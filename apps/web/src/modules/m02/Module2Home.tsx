@@ -32,19 +32,25 @@ export default function Module2Home(){
       <main className="page-root">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix="" label="Back" />
-          <h2 style={{ marginTop:16 }}>Module 2 — Home</h2>
+          <h2 style={{ marginTop:16 }}>Module 2  Home</h2>
         </div>
         <div style={{ fontSize:12, color:'#555' }}>Quick access to Module 2 features.</div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
+          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m02/upload`)}>Upload</button>
+          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m02/upload-wizard`)}>Upload Wizard</button>
+          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m02/leads`)}>Leads</button>
+          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m02/merged`)}>Merged List</button>
+          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m02/merge-columns`)}>Merge Columns</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m02/generate`)}>Generate Intent Scores</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m02/prioritization`)}>Prioritization Dashboard</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m02/behavior`)}>Behavior Timeline</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m02/segment-behavior`)}>Segment Behavior Dashboard</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m02/intent-forecast`)}>Intent Forecast</button>
-          <button className="btn-secondary btn-sm" onClick={seedDemo} disabled={seeding}>{seeding ? 'Seeding…' : 'Seed demo data'}</button>
+          <button className="btn-secondary btn-sm" onClick={seedDemo} disabled={seeding}>{seeding ? 'Seeding' : 'Seed demo data'}</button>
         </div>
         {seedMsg && <div style={{ marginTop:8, fontSize:13 }}>{seedMsg}</div>}
       </main>
     </Layout>
   )
 }
+

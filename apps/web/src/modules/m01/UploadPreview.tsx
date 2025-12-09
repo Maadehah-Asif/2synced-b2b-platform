@@ -84,15 +84,29 @@ export default function UploadPreview(){
   }
 
   function goBack(){
-    if (workspace) window.location.hash = `#/workspace/${workspace}/m01/upload`;
-    else window.location.hash = '#/m01/upload';
+    try {
+      const prev = sessionStorage.getItem('m01_preview_return');
+      sessionStorage.removeItem('m01_preview_return');
+      if (prev) {
+        window.location.hash = prev;
+        return;
+      }
+    } catch (e) { /* ignore */ }
+    // fallback by kind
+    if (kind === 'merged') {
+      window.location.hash = workspace ? `#/workspace/${workspace}/m01/merged` : '#/m01/merged';
+    } else if (kind === 'leads') {
+      window.location.hash = workspace ? `#/workspace/${workspace}/m01/leads` : '#/m01/leads';
+    } else {
+      window.location.hash = workspace ? `#/workspace/${workspace}/m01/upload` : '#/m01/upload';
+    }
   }
 
   return (
     <Layout>
       <div className="p-20">
-          <div className="mb-12" style={{ display: 'flex', alignItems: 'center' }}>
-            <ModuleBackButton toSuffix="/m01" />
+          <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button type="button" className="btn-ghost" onClick={goBack}>Back</button>
             <h2 style={{ margin: 0 }}>Preview {kind === 'merged' ? 'Merged' : (kind==='leads' ? 'Leads Code' : 'Upload')}</h2>
           </div>
         {message && <div className="mt-8 muted">{message}</div>}

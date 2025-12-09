@@ -22,7 +22,7 @@ export default function Module6Home(){
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/element2`)}>Page 2</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/roi-calc`)}>ROI Calculation</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/roi`)}>ROI Dashboard</button>
-          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/element4`)}>Page 4</button>
+          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/forecast`)}>Forecasts</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/campaigns`)}>View Campaigns</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/campaigns/manage`)}>Add Campaign</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m06/touches`)}>Campaign Touches</button>

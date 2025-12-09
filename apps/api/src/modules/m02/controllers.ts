@@ -6,6 +6,11 @@ import IntentRun from './models/IntentRun.js';
 import fs from 'fs';
 import { Readable } from 'stream';
 import { CampaignTouch } from '../m06/models/CampaignTouch.js';
+import M2LeadIntentSummary from './models/M2LeadIntentSummary.js';
+import M2LeadBehaviorEvent from './models/M2LeadBehaviorEvent.js';
+
+type IntentSegment = 'COLD' | 'WARM' | 'HOT' | 'BLAZING';
+type BehaviorEventType = 'email_open' | 'email_click' | 'reply' | 'website_visit' | 'linkedin_view' | 'call' | 'demo_request';
 
 // GET /m02/lead-score-files?workspace=
 export async function listLeadScoreFiles(req: Request, res: Response) {
@@ -617,5 +622,408 @@ export async function seedDemo(req: Request, res: Response) {
   } catch (e) {
     console.error('[m02.seedDemo] error', e);
     return res.status(500).json({ error: 'internal' });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// New M02 CSV ingest + prioritization + timeline
+// ---------------------------------------------------------------------------
+const toNumber = (v: any) => {
+  const s = String(v ?? '').trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+};
+const toBoolean = (v: any) => {
+  const s = String(v ?? '').trim().toLowerCase();
+  if (!s) return false;
+  if (['1', 'true', 'yes', 'y'].includes(s)) return true;
+  return false;
+};
+const toDateSafe = (v: any) => {
+  if (!v && v !== 0) return null;
+  const d = new Date(String(v));
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+const normSegment = (v: any): IntentSegment => {
+  const s = String(v ?? '').toUpperCase();
+  if (s === 'HOT' || s === 'WARM' || s === 'COLD' || s === 'BLAZING') return s as IntentSegment;
+  return 'COLD';
+};
+const normEventType = (v: any): BehaviorEventType | null => {
+  const s = String(v ?? '').toLowerCase().trim();
+  const map: Record<string, BehaviorEventType> = {
+    email_open: 'email_open',
+    open: 'email_open',
+    email_click: 'email_click',
+    click: 'email_click',
+    reply: 'reply',
+    website_visit: 'website_visit',
+    visit: 'website_visit',
+    linkedin_view: 'linkedin_view',
+    linkedin: 'linkedin_view',
+    call: 'call',
+    demo_request: 'demo_request',
+    demo: 'demo_request',
+  };
+  return map[s] || null;
+};
+
+async function parseCsvBuffer(buffer: Buffer, onRow: (row: Record<string, any>) => void, required: string[]) {
+  return new Promise<void>((resolve, reject) => {
+    const parser = parse({ bom: true, columns: true, trim: true, skip_empty_lines: true });
+    let validated = false;
+    parser.on('readable', () => {
+      let rec: any;
+      while ((rec = parser.read()) !== null) {
+        if (!validated) {
+          validated = true;
+          const headers = Object.keys(rec || {});
+          for (const r of required) {
+            if (!headers.includes(r)) {
+              parser.destroy(new Error(`missing required column: ${r}`));
+              return;
+            }
+          }
+        }
+        onRow(rec);
+      }
+    });
+    parser.on('end', () => resolve());
+    parser.on('error', (err) => reject(err));
+    parser.write(buffer);
+    parser.end();
+  });
+}
+
+// POST /m02/upload/leads-intent
+export async function uploadLeadsIntent(req: Request, res: Response) {
+  try {
+    const workspaceId = (req.body.workspaceId as string) || (req.query.workspaceId as string) || null;
+    const file: any = (req as any).file;
+    if (!workspaceId || !mongoose.isValidObjectId(workspaceId)) return res.status(400).json({ error: 'workspaceId_required' });
+    if (!file || !file.buffer) return res.status(400).json({ error: 'file_required' });
+
+    const docs: any[] = [];
+    let skipped = 0;
+    const warnings: string[] = [];
+    await parseCsvBuffer(file.buffer, (row) => {
+      const leadId = String(row['lead_id'] ?? '').trim();
+      if (!leadId) { skipped += 1; return; }
+      const intentScore = toNumber(row['intent_score']);
+      if (intentScore === null) { skipped += 1; return; }
+      const intentSegment = normSegment(row['intent_segment']);
+      const doc: any = {
+        workspaceId,
+        leadId,
+        fullName: row['full_name'] || [row['first_name'], row['last_name']].filter(Boolean).join(' ').trim() || null,
+        firstName: row['first_name'] || null,
+        lastName: row['last_name'] || null,
+        jobTitle: row['job_title'] || null,
+        headline: row['headline'] || null,
+        company: row['company'] || null,
+        companyDomain: row['company_domain'] || null,
+        location: row['location'] || null,
+        workEmail: row['work_email'] || null,
+        intentScore,
+        intentSegment,
+        engagementScoreRecent: toNumber(row['engagement_score_recent']),
+        engagementScore: toNumber(row['engagement_score']),
+        salesPressureIndex: toNumber(row['sales_pressure_index']),
+        isUrgentEscalation: toBoolean(row['is_urgent_escalation']),
+        repPriorityBucket: toNumber(row['rep_priority_bucket']),
+        escalationRiskScore: toNumber(row['escalation_risk_score']),
+        accountActivityIndex: toNumber(row['account_activity_index']),
+        daysSinceLastAction: toNumber(row['days_since_last_action']),
+        lastActionTaken: row['last_action_taken'] || null,
+        lastActionDate: toDateSafe(row['last_action_date']),
+        openRate: toNumber(row['open_rate']),
+        clickRate: toNumber(row['click_rate']),
+        unsubscribeRate: toNumber(row['unsubscribe_rate']),
+        totalEmailsSent: toNumber(row['total_emails_sent']),
+        totalOpenCount: toNumber(row['total_open_count']),
+        totalClickCount: toNumber(row['total_click_count']),
+        totalReplyCount: toNumber(row['total_reply_count']),
+        totalActions: toNumber(row['total_actions']),
+        channelCall: toNumber(row['channel_call']),
+        channelEmail: toNumber(row['channel_email']),
+        channelLinkedin: toNumber(row['channel_linkedin']),
+        predictedClass: row['predicted_class'] || null,
+        predictedLabel: row['predicted_label'] || null,
+        confidence: toNumber(row['confidence']),
+        pLow: toNumber(row['p_low']),
+        pMedium: toNumber(row['p_medium']),
+        pHigh: toNumber(row['p_high']),
+      };
+      const reserved = new Set(Object.keys(doc));
+      const raw: Record<string, unknown> = {};
+      Object.keys(row || {}).forEach((k) => {
+        if (!reserved.has(k) && typeof row[k] !== 'undefined') raw[k] = row[k];
+      });
+      if (Object.keys(raw).length) doc.raw = raw;
+      docs.push(doc);
+    }, ['lead_id', 'intent_score', 'intent_segment']);
+
+    await M2LeadIntentSummary.deleteMany({ workspaceId });
+    if (docs.length) await M2LeadIntentSummary.insertMany(docs, { ordered: false });
+
+    return res.json({ ok: true, workspaceId, importedCount: docs.length, skippedCount: skipped, warnings });
+  } catch (e:any) {
+    console.error('[m02.uploadLeadsIntent]', e);
+    const msg = e?.message?.includes('missing required column') ? e.message : 'upload_failed';
+    return res.status(400).json({ error: msg });
+  }
+}
+
+// POST /m02/upload/behaviors
+export async function uploadBehaviors(req: Request, res: Response) {
+  try {
+    const workspaceId = (req.body.workspaceId as string) || (req.query.workspaceId as string) || null;
+    const file: any = (req as any).file;
+    if (!workspaceId || !mongoose.isValidObjectId(workspaceId)) return res.status(400).json({ error: 'workspaceId_required' });
+    if (!file || !file.buffer) return res.status(400).json({ error: 'file_required' });
+
+    const docs: any[] = [];
+    let skipped = 0;
+    const warnings: string[] = [];
+    await parseCsvBuffer(file.buffer, (row) => {
+      const leadId = String(row['lead_id'] ?? '').trim();
+      const ts = toDateSafe(row['timestamp']);
+      const et = normEventType(row['event_type']);
+      if (!leadId || !ts || !et) { skipped += 1; return; }
+      docs.push({
+        workspaceId,
+        leadId,
+        timestamp: ts,
+        eventType: et,
+        engagementScore: toNumber(row['engagement_score']),
+        recencyDays: toNumber(row['recency_days']),
+        velocity: toNumber(row['velocity']),
+        spikeFlag: toBoolean(row['spike_flag']),
+        dropFlag: toBoolean(row['drop_flag']),
+        intentSegment: normSegment(row['intent_segment']),
+        intentScore: toNumber(row['intent_score']),
+      });
+    }, ['lead_id', 'timestamp', 'event_type']);
+
+    await M2LeadBehaviorEvent.deleteMany({ workspaceId });
+    if (docs.length) await M2LeadBehaviorEvent.insertMany(docs, { ordered: false });
+
+    return res.json({ ok: true, workspaceId, importedCount: docs.length, skippedCount: skipped, warnings });
+  } catch (e:any) {
+    console.error('[m02.uploadBehaviors]', e);
+    const msg = e?.message?.includes('missing required column') ? e.message : 'upload_failed';
+    return res.status(400).json({ error: msg });
+  }
+}
+
+function summarizeDrivers(input: {
+  intentSegment?: IntentSegment;
+  intentScore?: number | null;
+  eventsLast30d: number;
+  topTypes: string[];
+  spikeCount: number;
+  dropCount: number;
+}) {
+  const { intentSegment, intentScore, eventsLast30d, topTypes, spikeCount, dropCount } = input;
+  const seg = intentSegment || 'COLD';
+  let parts: string[] = [];
+  if (seg === 'BLAZING' || (intentScore ?? 0) >= 80) parts.push('Blazing intent');
+  else if (seg === 'HOT' || (intentScore ?? 0) >= 60) parts.push('High intent');
+  else if (seg === 'WARM') parts.push('Warm intent');
+  else parts.push('Cold intent');
+
+  if (eventsLast30d > 15) parts.push('heavy recent activity');
+  else if (eventsLast30d > 5) parts.push('steady recent activity');
+  else parts.push('light recent activity');
+
+  if (topTypes.length) parts.push(`mostly ${topTypes.slice(0,2).join(', ')}`);
+  if (spikeCount > 0) parts.push(`${spikeCount} spikes`);
+  if (dropCount > 0) parts.push(`${dropCount} drops`);
+
+  return parts.join('; ');
+}
+
+// GET /m02/prioritization
+export async function getPrioritization(req: Request, res: Response) {
+  try {
+    const workspaceId = (req.query.workspaceId as string) || (req.query.workspace as string) || null;
+    if (!workspaceId || !mongoose.isValidObjectId(workspaceId)) return res.status(400).json({ error: 'workspaceId_required' });
+    const segment = (req.query.segment as string) || '';
+    const minIntent = Number(req.query.minIntent ?? 0);
+    const maxIntent = Number(req.query.maxIntent ?? 100);
+    const page = Math.max(1, Number(req.query.page || 1));
+    const pageSize = Math.min(100, Math.max(10, Number(req.query.pageSize || 25)));
+
+    const filter: any = { workspaceId };
+    if (segment && segment !== 'ALL') filter.intentSegment = segment;
+    filter.intentScore = { $gte: minIntent, $lte: maxIntent };
+
+    const total = await M2LeadIntentSummary.countDocuments(filter);
+    const intents = await M2LeadIntentSummary.find(filter).sort({ intentScore: -1 }).skip((page - 1) * pageSize).limit(pageSize).lean();
+
+    const leadIds = intents.map((i: any) => i.leadId);
+    let behaviorMap: Record<string, any> = {};
+    if (leadIds.length) {
+      const agg = await M2LeadBehaviorEvent.aggregate([
+        { $match: { workspaceId, leadId: { $in: leadIds } } },
+        { $sort: { timestamp: -1 } },
+        {
+          $group: {
+            _id: '$leadId',
+            eventsTotal: { $sum: 1 },
+            eventsLast30d: { $sum: { $cond: [{ $gte: ['$timestamp', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)] }, 1, 0] } },
+            lastEventDate: { $first: '$timestamp' },
+            lastEventType: { $first: '$eventType' },
+            spikeCount: { $sum: { $cond: ['$spikeFlag', 1, 0] } },
+            dropCount: { $sum: { $cond: ['$dropFlag', 1, 0] } },
+            types: { $push: '$eventType' },
+          }
+        }
+      ]).exec();
+      behaviorMap = {};
+      agg.forEach((a: any) => { behaviorMap[a._id] = a; });
+    }
+
+    const rows = intents.map((i: any) => {
+      const b = behaviorMap[i.leadId] || {};
+      const typeCounts: Record<string, number> = {};
+      (b.types || []).forEach((t: string) => { typeCounts[t] = (typeCounts[t] || 0) + 1; });
+      const topTypes = Object.entries(typeCounts).sort((a,b)=>b[1]-a[1]).map(([k])=>k);
+      const topDriverSummary = summarizeDrivers({
+        intentSegment: i.intentSegment as IntentSegment,
+        intentScore: i.intentScore,
+        eventsLast30d: b.eventsLast30d || 0,
+        topTypes,
+        spikeCount: b.spikeCount || 0,
+        dropCount: b.dropCount || 0,
+      });
+      return {
+        leadId: i.leadId,
+        fullName: i.fullName,
+        jobTitle: i.jobTitle,
+        company: i.company,
+        location: i.location,
+        intentScore: i.intentScore,
+        intentSegment: i.intentSegment,
+        engagementScoreRecent: i.engagementScoreRecent,
+        engagementScore: i.engagementScore,
+        salesPressureIndex: i.salesPressureIndex,
+        isUrgentEscalation: i.isUrgentEscalation,
+        accountActivityIndex: i.accountActivityIndex,
+        daysSinceLastAction: i.daysSinceLastAction,
+        lastActionTaken: i.lastActionTaken,
+        lastActionDate: i.lastActionDate,
+        eventsLast30d: b.eventsLast30d || 0,
+        lastEventDate: b.lastEventDate || null,
+        lastEventType: b.lastEventType || null,
+        spikeCount: b.spikeCount || 0,
+        dropCount: b.dropCount || 0,
+        topDriverSummary,
+      };
+    });
+
+    return res.json({ ok: true, total, page, pageSize, rows });
+  } catch (e) {
+    console.error('[m02.getPrioritization]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+// GET /m02/behaviors/timeline
+export async function getBehaviorTimeline(req: Request, res: Response) {
+  try {
+    const workspaceId = (req.query.workspaceId as string) || null;
+    const leadId = (req.query.leadId as string) || null;
+    if (!workspaceId || !mongoose.isValidObjectId(workspaceId)) return res.status(400).json({ error: 'workspaceId_required' });
+    if (!leadId) return res.status(400).json({ error: 'leadId_required' });
+
+    const events = await M2LeadBehaviorEvent.find({ workspaceId, leadId }).sort({ timestamp: 1 }).lean();
+    const byDayMap: Record<string, { total: number; sumEng: number }> = {};
+    const typeMap: Record<string, number> = {};
+    events.forEach((e) => {
+      const d = new Date(e.timestamp);
+      const day = d.toISOString().slice(0,10);
+      if (!byDayMap[day]) byDayMap[day] = { total: 0, sumEng: 0 };
+      byDayMap[day].total += 1;
+      byDayMap[day].sumEng += Number(e.engagementScore || 0);
+      typeMap[e.eventType] = (typeMap[e.eventType] || 0) + 1;
+    });
+    const series = {
+      byDay: Object.entries(byDayMap).sort((a,b)=>a[0].localeCompare(b[0])).map(([date,v])=>({ date, totalEvents: v.total, avgEngagement: v.total ? v.sumEng / v.total : 0 })),
+      byEventType: Object.entries(typeMap).map(([eventType,count])=>({ eventType, count })),
+    };
+    const totalEvents = events.length;
+    const eventsLast30d = events.filter(e=> new Date(e.timestamp).getTime() >= Date.now() - 30*24*60*60*1000).length;
+    const avgEngagement = totalEvents ? events.reduce((s,e)=>s+Number(e.engagementScore||0),0)/totalEvents : 0;
+    const spikeCount = events.filter(e=>e.spikeFlag).length;
+    const dropCount = events.filter(e=>e.dropFlag).length;
+    let behaviorNarrative = 'No behavior events uploaded for this lead yet.';
+    if (totalEvents > 0) {
+      const first = events[0];
+      const last = events[events.length-1];
+      const spanDays = Math.max(1, Math.round((new Date(last.timestamp).getTime() - new Date(first.timestamp).getTime()) / (1000*60*60*24)));
+      if (avgEngagement >= 0.6 || spikeCount > 2) {
+        behaviorNarrative = `High engagement over ${spanDays} days with spikes and recent activity (${eventsLast30d} in last 30 days).`;
+      } else if (dropCount > spikeCount) {
+        behaviorNarrative = `Engagement softening with ${dropCount} drop signals across ${spanDays} days.`;
+      } else {
+        behaviorNarrative = `Moderate engagement across ${spanDays} days; ${eventsLast30d} recent events.`;
+      }
+    }
+
+    return res.json({ ok: true, events, series, summary: { totalEvents, eventsLast30d, avgEngagement, spikeCount, dropCount }, behaviorNarrative });
+  } catch (e) {
+    console.error('[m02.getBehaviorTimeline]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+// GET /m02/leads/:leadId/behavior-timeline
+export async function getBehaviorTimelineByLead(req: Request, res: Response) {
+  try {
+    const leadId = (req.params.leadId as string) || null;
+    const workspaceId = (req.query.workspaceId as string) || (req.query.workspace as string) || null;
+    if (!leadId) return res.status(400).json({ ok: false, error: 'leadId_required' });
+    if (!workspaceId || !mongoose.isValidObjectId(workspaceId)) return res.status(400).json({ ok: false, error: 'workspaceId_required' });
+
+    const startDateStr = (req.query.startDate as string) || '';
+    const endDateStr = (req.query.endDate as string) || '';
+    const eventTypesStr = (req.query.eventTypes as string) || '';
+    const match: any = { workspaceId, leadId };
+    if (startDateStr) match.timestamp = { ...(match.timestamp || {}), $gte: new Date(startDateStr) };
+    if (endDateStr) match.timestamp = { ...(match.timestamp || {}), $lte: new Date(endDateStr) };
+    if (eventTypesStr) {
+      const types = eventTypesStr.split(',').map(s => s.trim()).filter(Boolean);
+      if (types.length) match.eventType = { $in: types };
+    }
+
+    const lead = await M2LeadIntentSummary.findOne({ workspaceId, leadId }).lean();
+    if (!lead) return res.status(404).json({ ok: false, error: 'lead_not_found' });
+
+    const events = await M2LeadBehaviorEvent.find(match).sort({ timestamp: 1 }).lean();
+    const payloadLead = {
+      lead_id: lead.leadId,
+      first_name: lead.firstName || '',
+      last_name: lead.lastName || '',
+      company: lead.company || '',
+      title: lead.jobTitle || '',
+      intent_score: lead.intentScore ?? null,
+      intent_segment: lead.intentSegment || null,
+    } as any;
+    const payloadEvents = (events || []).map((e:any) => ({
+      timestamp: e.timestamp?.toISOString?.() || new Date(e.timestamp).toISOString(),
+      event_type: e.eventType,
+      engagement_score: Number(e.engagementScore ?? 0),
+      recency_days: Number(e.recencyDays ?? 0),
+      velocity: Number(e.velocity ?? 0),
+      spike_flag: e.spikeFlag ? 1 : 0,
+      drop_flag: e.dropFlag ? 1 : 0,
+    }));
+
+    return res.json({ ok: true, lead: payloadLead, events: payloadEvents });
+  } catch (e:any) {
+    console.error('[m02.getBehaviorTimelineByLead]', e);
+    return res.status(500).json({ ok: false, error: 'internal' });
   }
 }

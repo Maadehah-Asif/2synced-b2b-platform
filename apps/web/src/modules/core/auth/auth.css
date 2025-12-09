@@ -50,14 +50,18 @@
   align-items: stretch;
   justify-content: center;
   overflow: hidden;
-  background: var(--header-primary, #010872);
+  background: #305C5A;
+  padding: 0;
 }
 
 .auth-illustration img {
   width: 100%;
   height: 100%;
-  object-fit: cover; /* fills column, crops nicely if needed */
+  max-height: none;
+  object-fit: cover; /* fill the column horizontally */
+  object-position: center;
   display: block;
+  border-radius: 0;
 }
 
 /* Brand text on top of illustration (optional) */
@@ -229,10 +233,14 @@
 }
 
 .auth-button-primary {
-  background: linear-gradient(180deg,var(--primary),var(--accent));
+  background: linear-gradient(
+    180deg,
+    var(--header-primary, #010872),
+    color-mix(in srgb, var(--header-primary, #010872) 80%, black 15%)
+  );
   color: #fff;
   border: 0;
-  box-shadow: 0 10px 28px rgba(30,86,255,0.18);
+  box-shadow: 0 12px 32px rgba(1, 8, 114, 0.22);
 }
 
 .auth-button:disabled {
@@ -303,6 +311,7 @@
     flex: 0 0 auto;
     width: 100%;
     height: 260px;
+    padding: 8px;
   }
 
   .auth-illustration img {

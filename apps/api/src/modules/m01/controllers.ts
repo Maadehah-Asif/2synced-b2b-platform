@@ -1121,6 +1121,32 @@ export async function previewLeadsCode(req: Request, res: Response) {
   }
 }
 
+// GET /m01/leads/:id/download - download full CSV from GridFS
+export async function downloadLeadsCode(req: Request, res: Response) {
+  try {
+    const id = String(req.params.id || '');
+    const workspace = (req.query.workspace as string) || null;
+    if (!mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'invalid id' });
+    const doc = await LeadsCodeFile.findById(id).lean();
+    if (!doc) return res.status(404).json({ error: 'not found' });
+    if (workspace && String(doc.workspace) !== String(workspace)) return res.status(403).json({ error: 'forbidden' });
+    const db = mongoose.connection.db;
+    if (!db) return res.status(500).json({ error: 'db not ready' });
+    const bucket = new mongoose.mongo.GridFSBucket(db as any, { bucketName: 'm01_leads' });
+    const downloadStream = bucket.openDownloadStream(doc.fileId);
+    res.setHeader('Content-Type', 'text/csv');
+    const filename = doc.filename || doc.name || 'leads.csv';
+    res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"`);
+    downloadStream.on('error', () => {
+      if (!res.headersSent) return res.status(500).json({ error: 'download_failed' });
+    });
+    downloadStream.pipe(res);
+  } catch (e) {
+    console.error('[m01.downloadLeadsCode]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
 // POST /m01/leads/generate  { workspace, mergedId, name }
 export async function generateLeadsCode(req: Request, res: Response) {
   try {
@@ -1128,6 +1154,7 @@ export async function generateLeadsCode(req: Request, res: Response) {
     const workspace = body.workspace;
     const mergedId = body.mergedId;
     const name: string | null = body.name || null;
+    const moduleKey: 'm01' | 'm02' = body.moduleKey === 'm02' ? 'm02' : 'm01';
     if (!workspace || !mongoose.isValidObjectId(workspace)) return res.status(400).json({ error: 'workspace is required' });
     if (!mergedId || !mongoose.isValidObjectId(mergedId)) return res.status(400).json({ error: 'mergedId is required' });
 
@@ -1250,8 +1277,10 @@ export async function generateLeadsCode(req: Request, res: Response) {
 
     // 4) Run Python inference via testing_catboost.py (now defaulting to RandomForest) with no args
     const pyExe = process.env.M01_ML_PYTHON || process.env.PYTHON || 'python';
-    const scriptPath = path.join(mlDir, 'testing_catboost.py');
-    const child = spawn(pyExe, [scriptPath], { cwd: mlDir, stdio: 'inherit' });
+    const scriptPath = path.join(mlDir, 'm01', 'testing_catboost.py');
+    const modelPath = path.join(mlDir, 'models', moduleKey, 'randomforest.pkl');
+    const childEnv = { ...process.env, MODULE_KEY: moduleKey, MODEL_PATH: modelPath };
+    const child = spawn(pyExe, [scriptPath], { cwd: mlDir, stdio: 'inherit', env: childEnv });
     const exitCode: number = await new Promise((resolve) => child.on('close', (code) => resolve(code ?? 1)));
     if (exitCode !== 0) return res.status(500).json({ error: 'model inference failed' });
 
@@ -1293,7 +1322,13 @@ export async function generateLeadsCode(req: Request, res: Response) {
 
     // Identify prediction columns from output header
     // Expect: predicted_class, predicted_label, confidence, p_low, p_medium, p_high
-    const predCols = ['predicted_class','predicted_label','confidence','p_low','p_medium','p_high'];
+    // Only when moduleKey === 'm02' do we add intent columns if present
+    const basePredCols = ['predicted_class','predicted_label','confidence','p_low','p_medium','p_high'];
+    const predCols = [...basePredCols];
+    if (moduleKey === 'm02') {
+      if (Array.isArray(outHeader) && outHeader.includes('intent_score')) predCols.splice(2, 0, 'intent_score');
+      if (Array.isArray(outHeader) && outHeader.includes('intent_segment')) predCols.splice(3, 0, 'intent_segment');
+    }
     const predIdx = predCols.map(c => outHeader.indexOf(c));
 
     // 7) Compose final CSV: merged header + prediction columns

@@ -107,51 +107,57 @@ export default function DealViewer(){
         <h2 style={{ marginTop:16 }}>Deals</h2>
         <div style={{ fontSize:12, color:'#555' }}>View, filter, edit, archive or delete deals.</div>
         {!workspaceId && <div style={{ fontSize:12, color:'#c33', marginTop:8 }}>Open a workspace to load deals.</div>}
-        <div style={{ marginTop:12, display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:12 }}>
-          <div>
-            <div style={{ fontSize:12 }}>Lead</div>
-            <Autocomplete
-              value={leadQuery}
-              placeholder="Lead id / name / company"
-              fetchItems={async (q)=>{ const r = await searchLeads(q); return r.leads||[]; }}
-              formatItem={(l:any)=>`#${l.lead_id} ${l.First_Name||''} ${l.Last_Name||''}`.trim()}
-              getValue={(l:any)=>String(l.lead_id)}
-              onChange={(val,item)=>{ setLeadQuery(val); setLeadId(item? String(item.lead_id):''); }}
-            />
+
+        <div style={{ marginTop:12, background:'#fff', borderRadius:10, padding:14, boxShadow:'0 4px 16px rgba(17,24,39,0.06)' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8 }}>
+            <div style={{ fontSize:12, color:'#4b5563' }}>Tip: leave dates empty to fetch all. Status defaults to Closed Won for the last 90 days.</div>
+            <button className="btn-ghost" onClick={()=>load()}>Reload</button>
           </div>
-          <div>
-            <div style={{ fontSize:12 }}>Closed from</div>
-            <input type="date" value={from} onChange={e=>setFrom(e.target.value)} />
+          <div style={{ marginTop:12, display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12 }}>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600 }}>Lead</label>
+              <Autocomplete
+                value={leadQuery}
+                placeholder="Lead id / name / company"
+                fetchItems={async (q)=>{ const r = await searchLeads(q); return r.leads||[]; }}
+                formatItem={(l:any)=>`#${l.lead_id} ${l.First_Name||''} ${l.Last_Name||''}`.trim()}
+                getValue={(l:any)=>String(l.lead_id)}
+                onChange={(val,item)=>{ setLeadQuery(val); setLeadId(item? String(item.lead_id):''); }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600 }}>Closed from</label>
+              <input type="date" value={from} onChange={e=>setFrom(e.target.value)} />
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600 }}>Closed to</label>
+              <input type="date" value={to} onChange={e=>setTo(e.target.value)} />
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600 }}>Status</label>
+              <select value={status} onChange={e=>setStatus(e.target.value)}>
+                <option value="">All</option>
+                <option value="closed_won">Closed Won</option>
+                <option value="closed_lost">Closed Lost</option>
+                <option value="open">Open</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600 }}>Min amount</label>
+              <input value={minAmount} onChange={e=>setMinAmount(e.target.value)} placeholder="e.g., 1000" />
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600 }}>Max amount</label>
+              <input value={maxAmount} onChange={e=>setMaxAmount(e.target.value)} placeholder="e.g., 50000" />
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600 }}>Stage</label>
+              <input value={stage} onChange={e=>setStage(e.target.value)} placeholder="e.g., Closed Won" />
+            </div>
+            <label style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:18 }}>
+              <input type="checkbox" checked={includeArchived} onChange={e=>setIncludeArchived(e.target.checked)} /> <span style={{ fontSize:12, fontWeight:600 }}>Include archived</span>
+            </label>
           </div>
-          <div>
-            <div style={{ fontSize:12 }}>Closed to</div>
-            <input type="date" value={to} onChange={e=>setTo(e.target.value)} />
-          </div>
-          <div>
-            <div style={{ fontSize:12 }}>Status</div>
-            <select value={status} onChange={e=>setStatus(e.target.value)}>
-              <option value="">All</option>
-              <option value="closed_won">Closed Won</option>
-              <option value="closed_lost">Closed Lost</option>
-              <option value="open">Open</option>
-            </select>
-          </div>
-          <div>
-            <div style={{ fontSize:12 }}>Min amount</div>
-            <input value={minAmount} onChange={e=>setMinAmount(e.target.value)} />
-          </div>
-          <div>
-            <div style={{ fontSize:12 }}>Max amount</div>
-            <input value={maxAmount} onChange={e=>setMaxAmount(e.target.value)} />
-          </div>
-          <div>
-            <div style={{ fontSize:12 }}>Stage</div>
-            <input value={stage} onChange={e=>setStage(e.target.value)} />
-          </div>
-          <label style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
-            <input type="checkbox" checked={includeArchived} onChange={e=>setIncludeArchived(e.target.checked)} /> Include archived
-          </label>
-          <button className="btn-ghost" onClick={()=>load()}>Reload</button>
         </div>
         <div style={{ marginTop:16, background:'#fff', borderRadius:8, padding:12 }}>
           {loadError && (

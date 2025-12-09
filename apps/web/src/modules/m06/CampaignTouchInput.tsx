@@ -276,12 +276,17 @@ export default function CampaignTouchInput(){
     setImporting(true);
     setUploadSummary(null);
     try {
+      let leadHint: 'id'|'email' = 'id';
+      if (resolvedMap.lead && resolvedMap.lead.toLowerCase().includes('email')) {
+        leadHint = 'email';
+      }
       const summary = await importTouchesCSV({
         csv: csvText,
         map: resolvedMap,
         startRow: Number(startRow || 1),
         endRow,
         campaignIdentifier,
+        leadIdentifier: leadHint,
         duplicatePolicy
       });
       setUploadSummary(summary);
@@ -320,11 +325,12 @@ export default function CampaignTouchInput(){
           <button className={activeTab==='csv'?'btn-primary':'btn-ghost'} onClick={()=>setActiveTab('csv')}>Bulk CSV Import</button>
         </div>
         {activeTab==='form' && (
-          <div style={{ marginTop:16, padding:12, background:'#fff', borderRadius:8 }}>
-            <h4>Add Single Touch</h4>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+          <div style={{ marginTop:16, padding:16, background:'#fff', borderRadius:10, boxShadow:'0 4px 20px rgba(17,24,39,0.08)' }}>
+            <h4 style={{ margin:'0 0 6px 0' }}>Add Single Touch</h4>
+            <div style={{ fontSize:12, color:'#4b5563', marginBottom:10 }}>Required: Lead, Campaign, Type, and Touched at. Keep metadata JSON valid if used.</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:12 }}>
               <div>
-                <div style={{ fontSize:12 }}>Lead search</div>
+                <label style={{ fontSize:12, fontWeight:600 }}>Lead *</label>
                 <Autocomplete
                   value={leadQuery}
                   placeholder="Lead id / name / company"
@@ -336,7 +342,7 @@ export default function CampaignTouchInput(){
                 {formErrors.lead && <div style={{ color:'#c33', fontSize:11 }}>{formErrors.lead}</div>}
               </div>
               <div>
-                <div style={{ fontSize:12 }}>Campaign search</div>
+                <label style={{ fontSize:12, fontWeight:600 }}>Campaign *</label>
                 <Autocomplete
                   value={campaignQuery}
                   placeholder="Campaign name"
@@ -348,7 +354,19 @@ export default function CampaignTouchInput(){
                 {formErrors.campaign && <div style={{ color:'#c33', fontSize:11 }}>{formErrors.campaign}</div>}
               </div>
               <div>
-                <div style={{ fontSize:12 }}>Channel</div>
+                <label style={{ fontSize:12, fontWeight:600 }}>Type *</label>
+                <select value={type} onChange={e=>setType(e.target.value)}>
+                  <option value="email_open">Email Open</option>
+                  <option value="email_click">Email Click</option>
+                  <option value="ad_click">Ad Click</option>
+                  <option value="webinar">Webinar</option>
+                  <option value="form_submit">Form Submit</option>
+                  <option value="other">Other</option>
+                </select>
+                <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>Pick the event that happened.</div>
+              </div>
+              <div>
+                <label style={{ fontSize:12, fontWeight:600 }}>Channel</label>
                 <select value={channel} onChange={e=>setChannel(e.target.value)}>
                   <option value="email">Email</option>
                   <option value="ads">Ads</option>
@@ -358,27 +376,18 @@ export default function CampaignTouchInput(){
                 </select>
               </div>
               <div>
-                <div style={{ fontSize:12 }}>Type</div>
-                <select value={type} onChange={e=>setType(e.target.value)}>
-                  <option value="email_open">Email Open</option>
-                  <option value="email_click">Email Click</option>
-                  <option value="ad_click">Ad Click</option>
-                  <option value="webinar">Webinar</option>
-                  <option value="form_submit">Form Submit</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div>
-                <div style={{ fontSize:12 }}>Touched at (datetime)</div>
+                <label style={{ fontSize:12, fontWeight:600 }}>Touched at *</label>
                 <input type="datetime-local" value={touchedAt} onChange={e=>setTouchedAt(e.target.value)} />
+                <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>Use your timezone; ISO format preferred.</div>
                 {formErrors.touched_at && <div style={{ color:'#c33', fontSize:11 }}>{formErrors.touched_at}</div>}
               </div>
-              <div>
-                <div style={{ fontSize:12 }}>Metadata (JSON)</div>
-                <textarea rows={3} value={metadata} onChange={e=>setMetadata(e.target.value)} />
+              <div style={{ gridColumn:'1 / -1' }}>
+                <label style={{ fontSize:12, fontWeight:600 }}>Metadata (JSON)</label>
+                <textarea rows={3} value={metadata} onChange={e=>setMetadata(e.target.value)} style={{ width:'100%' }} />
+                <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>Optional: add UTM, message id, or notes. Must be valid JSON.</div>
               </div>
             </div>
-            <div style={{ marginTop:12 }}>
+            <div style={{ marginTop:12, display:'flex', gap:8 }}>
               <button className="btn-primary" onClick={submitForm}>Create Touch</button>
             </div>
           </div>

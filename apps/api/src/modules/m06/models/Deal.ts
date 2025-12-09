@@ -5,7 +5,8 @@ export interface DealDoc {
   deal_id: string; // external/business id
   lead_id: Types.ObjectId | string;
   project_id: Types.ObjectId | string;
-  revenue: number;
+  // Use Decimal128 to support very large/precise monetary values
+  revenue: mongoose.Types.Decimal128;
   closed_won: boolean;
   closed_at?: Date | null;
   createdAt: Date;
@@ -17,7 +18,7 @@ const DealSchema = new Schema<DealDoc>(
     deal_id: { type: String, required: true, unique: true, index: true },
     lead_id: { type: Schema.Types.ObjectId, ref: 'Lead', required: true },
     project_id: { type: Schema.Types.ObjectId, required: true, index: true },
-    revenue: { type: Number, required: true, default: 0 },
+    revenue: { type: Schema.Types.Decimal128, required: true, default: mongoose.Types.Decimal128.fromString('0') },
     closed_won: { type: Boolean, required: true, default: false },
     closed_at: { type: Date },
   },

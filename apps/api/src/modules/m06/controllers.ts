@@ -11,10 +11,16 @@ import { WorkspaceMember } from '../core/auth/models/WorkspaceMember.js';
 import Lead from '../m01/models/Lead.js';
 import { CHANNEL_SET } from './constants.js';
 import { Module6Lead } from './models/Module6Lead.js';
+import { runForecast } from './forecasting.js';
+import { invokePythonAgent, invokePythonAgentByChannel, type ForecastResult as AgentForecastResult } from './pythonAgentInvoker.js';
 
-// Helper: get project id from query (accept projectId or workspaceId)
+// Helper: get project id from query/body (accept projectId or workspace/workspaceId)
 function getProjectId(req: Request) {
-  const q = (req.query.projectId as string) || (req.query.workspaceId as string) || (req.body && req.body.projectId) || null;
+  const q = (req.query.projectId as string)
+    || (req.query.workspaceId as string)
+    || (req.query.workspace as string)
+    || (req.body && (req.body.projectId as string))
+    || null;
   return q;
 }
 
@@ -50,30 +56,30 @@ async function resolveLeadObjectId(
 
   if (mongoose.isValidObjectId(value)) {
     const direct = await Module6Lead.findOne({ _id: value, project_id: projectOid }).select('_id').lean();
-    if (remember(direct)) return cache[cacheKey];
+    if (remember(direct)) return cache[cacheKey] ?? null;
     const legacy = await Lead.findById(value).select('_id').lean();
-    if (remember(legacy)) return cache[cacheKey];
+    if (remember(legacy)) return cache[cacheKey] ?? null;
   }
 
   const directLead = await Module6Lead.findOne({ project_id: projectOid, lead_id: value }).select('_id').lean();
-  if (remember(directLead)) return cache[cacheKey];
+  if (remember(directLead)) return cache[cacheKey] ?? null;
 
   if (/^\d+$/.test(value)) {
     const legacyNumeric = await Lead.findOne({ lead_id: Number(value) }).select('_id').lean();
-    if (remember(legacyNumeric)) return cache[cacheKey];
+    if (remember(legacyNumeric)) return cache[cacheKey] ?? null;
   }
 
   if (value.includes('@')) {
     const emailRegex = new RegExp(`^${sanitizeRegex(value)}$`, 'i');
     const moduleByEmail = await Module6Lead.findOne({ project_id: projectOid, email: emailRegex }).select('_id').lean();
-    if (remember(moduleByEmail)) return cache[cacheKey];
+    if (remember(moduleByEmail)) return cache[cacheKey] ?? null;
     const legacyByEmail = await Lead.findOne({ Email: emailRegex }).select('_id').lean();
-    if (remember(legacyByEmail)) return cache[cacheKey];
+    if (remember(legacyByEmail)) return cache[cacheKey] ?? null;
   }
 
   const nameRegex = new RegExp(sanitizeRegex(value), 'i');
   const moduleByName = await Module6Lead.findOne({ project_id: projectOid, name: nameRegex }).select('_id').lean();
-  if (remember(moduleByName)) return cache[cacheKey];
+  if (remember(moduleByName)) return cache[cacheKey] ?? null;
 
   return null;
 }
@@ -81,14 +87,14 @@ async function resolveLeadObjectId(
 type AllocationPipelineOptions = {
   projectOid: mongoose.Types.ObjectId;
   runOid: mongoose.Types.ObjectId;
-  minShare?: number;
-  channel?: string | null;
-  closedFrom?: Date;
-  closedTo?: Date;
-  leadRegex?: RegExp | null;
-  minDealAmount?: number;
-  maxDealAmount?: number;
-  status?: 'closed_won' | 'all' | 'open';
+  minShare?: number | undefined;
+  channel?: string | null | undefined;
+  closedFrom?: Date | undefined;
+  closedTo?: Date | undefined;
+  leadRegex?: RegExp | null | undefined;
+  minDealAmount?: number | undefined;
+  maxDealAmount?: number | undefined;
+  status?: 'closed_won' | 'all' | 'open' | undefined;
 };
 
 function buildAllocationBasePipeline(options: AllocationPipelineOptions, initialMatch: Record<string, any> = {}) {
@@ -254,86 +260,117 @@ export async function stats(req: Request, res: Response) {
     const projectId = getProjectId(req);
     if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
     const projectOid = new mongoose.Types.ObjectId(projectId);
+    // Require runId for stats
+    const runId = (req.query.runId as string) || '';
+    if (!runId || !mongoose.isValidObjectId(runId)) return res.status(400).json({ ok: false, error: 'runId_required' });
+    const runOid = new mongoose.Types.ObjectId(runId);
 
-    // Total revenue from deals (closed_won = true)
-    const totalRevenueRes = await Deal.aggregate([
-      { $match: { project_id: projectOid, closed_won: true } },
-      { $group: { _id: null, total: { $sum: '$revenue' } } },
-    ]).exec();
-    const totalRevenue = (totalRevenueRes[0] && totalRevenueRes[0].total) || 0;
+    const runDoc = await AttributionRun.findOne({ _id: runOid, project_id: projectOid }).lean();
+    if (!runDoc || runDoc.status === 'error') return res.status(400).json({ ok: false, error: 'invalid_run' });
 
-    // Find latest successful attribution run for this project
-    const latestRun = await AttributionRun.findOne({ project_id: projectOid, status: 'success' }).sort({ timestamp: -1 }).lean();
-
-    let attributedTotal = 0;
-    let campaignRevenue: Array<{ campaign_id: string; revenue: number; }> = [];
-    let channelRevenue: Array<{ channel: string; revenue: number; }> = [];
-
-    if (latestRun) {
-      const results = await AttributionResult.aggregate([
-        { $match: { run_id: latestRun._id, project_id: projectOid } },
-        { $group: { _id: '$campaign_id', revenue: { $sum: '$revenue_share' } } },
-      ]).exec();
-      attributedTotal = results.reduce((s: number, r: any) => s + (r.revenue || 0), 0);
-      // Map campaign revenue and channel aggregation
-      campaignRevenue = await Promise.all(results.map(async (r: any) => {
-        const camp = await Campaign.findById(r._id).lean();
-        return { campaign_id: String(r._id), revenue: r.revenue || 0, name: camp?.name || null, channel: (camp as any)?.channel || 'other' } as any;
-      }));
-
-      // aggregate by channel
-      const channelMap: Record<string, number> = {};
-      for (const c of campaignRevenue) {
-        const ch = (c as any).channel || 'other';
-        channelMap[ch] = (channelMap[ch] || 0) + (c as any).revenue;
+    // Attribution rows for the run
+    const rows = await AttributionResult.aggregate([
+      { $match: { run_id: runOid, project_id: projectOid } },
+      { $lookup: { from: 'deals', localField: 'deal_id', foreignField: '_id', as: 'deal' } },
+      { $unwind: { path: '$deal', preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: 'campaigns', localField: 'campaign_id', foreignField: '_id', as: 'campaign' } },
+      { $unwind: { path: '$campaign', preserveNullAndEmptyArrays: true } },
+      {
+        $addFields: {
+          revenue: '$revenue_share',
+          spend: { $ifNull: ['$campaign.spend', 0] },
+          channel: { $toLower: { $ifNull: ['$campaign.channel', 'other'] } },
+          name: '$campaign.name',
+          ym: { $cond: [{ $ifNull: ['$deal.closed_at', false] }, { $dateToString: { format: "%Y-%m", date: '$deal.closed_at' } }, 'unknown'] }
+        }
       }
-      channelRevenue = Object.keys(channelMap).map(k => ({ channel: k, revenue: channelMap[k] || 0 }));
-    }
-
-    // Campaign count and spend
-    const campaigns = await Campaign.find({ project_id: projectOid }).lean();
-    const campaignCount = campaigns.length;
-    const totalSpend = campaigns.reduce((s, c: any) => s + (c.spend || 0), 0);
-
-    // Monthly totals (deals) - group by year-month
-    const monthlyDealsAgg = await Deal.aggregate([
-      { $match: { project_id: projectOid, closed_won: true } },
-      { $project: { revenue: 1, ym: { $dateToString: { format: "%Y-%m", date: "$closed_at" } } } },
-      { $group: { _id: "$ym", total: { $sum: "$revenue" } } },
-      { $sort: { _id: 1 } }
     ]).exec();
-    const monthlyDeals = monthlyDealsAgg.map((r: any) => ({ month: r._id, total: r.total }));
 
-    // Monthly attributed totals: join AttributionResult -> Deal to get deal closed_at
-    let monthlyAttributed: Array<{ month: string; total: number }> = [];
-    if (latestRun) {
-      const attribAgg = await AttributionResult.aggregate([
-        { $match: { run_id: latestRun._id, project_id: projectOid } },
-        { $lookup: { from: 'deals', localField: 'deal_id', foreignField: '_id', as: 'deal' } },
-        { $unwind: { path: '$deal', preserveNullAndEmptyArrays: false } },
-        { $project: { revenue_share: 1, ym: { $dateToString: { format: "%Y-%m", date: "$deal.closed_at" } } } },
-        { $group: { _id: '$ym', total: { $sum: '$revenue_share' } } },
-        { $sort: { _id: 1 } }
-      ]).exec();
-      monthlyAttributed = attribAgg.map((r: any) => ({ month: r._id, total: r.total }));
+    const totalRevenue = rows.reduce((s: number, r: any) => s + (Number(r.revenue) || 0), 0);
+    const totalSpend = rows.reduce((s: number, r: any) => s + (Number(r.spend) || 0), 0);
+    const campaignIds = new Set<string>();
+    rows.forEach((r: any) => campaignIds.add(String(r.campaign_id)));
+
+    // Revenue by channel
+    const chMap: Record<string, { channel: string; revenue: number; spend: number; attributedRevenue: number; roi: number }> = {};
+    for (const r of rows) {
+      const key = r.channel || 'other';
+      if (!chMap[key]) chMap[key] = { channel: key, revenue: 0, spend: 0, attributedRevenue: 0, roi: 0 };
+      chMap[key].revenue += Number(r.revenue) || 0;
+      chMap[key].spend += Number(r.spend) || 0;
+      chMap[key].attributedRevenue += Number(r.revenue) || 0;
     }
+    const revenueByChannel = Object.values(chMap).map(c => ({ ...c, roi: c.spend > 0 ? (c.revenue / c.spend) * 100 : 0 }));
+
+    // Revenue over time
+    const overTime: Record<string, { period: string; revenue: number; spend: number; roi: number }> = {};
+    for (const r of rows) {
+      const label = r.ym || 'unknown';
+      if (!overTime[label]) overTime[label] = { period: label, revenue: 0, spend: 0, roi: 0 };
+      overTime[label].revenue += Number(r.revenue) || 0;
+      overTime[label].spend += Number(r.spend) || 0;
+    }
+    const revenueOverTime = Object.values(overTime).map(v => ({ ...v, roi: v.spend > 0 ? (v.revenue / v.spend) * 100 : 0 })).sort((a, b) => a.period.localeCompare(b.period));
+
+    // Campaign ROI lists
+    const campMap: Record<string, { name: string; channel: string; spend: number; revenue: number; roi: number }> = {};
+    for (const r of rows) {
+      const id = String(r.campaign_id || '')
+      if (!id) continue;
+      if (!campMap[id]) campMap[id] = { name: r.name || id, channel: r.channel || 'other', spend: 0, revenue: 0, roi: 0 };
+      campMap[id].spend += Number(r.spend) || 0;
+      campMap[id].revenue += Number(r.revenue) || 0;
+    }
+    const campArr = Object.values(campMap).map(c => ({ ...c, roi: c.spend > 0 ? (c.revenue / c.spend) * 100 : 0 }));
+    const topCampaigns = [...campArr].sort((a, b) => (b.roi - a.roi));
+    const bottomCampaigns = [...campArr].sort((a, b) => (a.roi - b.roi));
 
     return res.json({
       ok: true,
       totalRevenue,
-      attributedTotal,
-      unattributed: Math.max(0, totalRevenue - attributedTotal),
-      campaignCount,
+      attributedRevenue: totalRevenue,
       totalSpend,
-      latestRun: latestRun ? { id: String(latestRun._id), run_id: latestRun.run_id, model_type: latestRun.model_type, timestamp: latestRun.timestamp, status: latestRun.status } : null,
-      campaignRevenue,
-      channelRevenue,
-      monthlyDeals,
-      monthlyAttributed,
+      campaignCount: campaignIds.size,
+      modelName: (runDoc as any).model_type || 'linear',
+      lastRun: runDoc.createdAt || runDoc.timestamp || new Date(),
+      status: runDoc.status || 'success',
+      revenueByChannel,
+      revenueOverTime,
+      topCampaigns,
+      bottomCampaigns,
     });
   } catch (e) {
     console.error('[m06/stats]', e);
     return res.status(500).json({ error: 'internal' });
+  }
+}
+
+// GET /m06/latest-run?workspaceId=...
+export async function latestRun(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ ok: false, error: 'workspaceId_required' });
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const run = await AttributionRun.findOne({ project_id: projectOid, status: 'success' }).sort({ createdAt: -1 }).lean();
+    if (!run) return res.json({ ok: true, run: null });
+    return res.json({ ok: true, run: { runId: String(run._id), model: (run as any).modelType || (run as any).model_type || 'linear', createdAt: (run as any).createdAt || (run as any).timestamp, status: run.status } });
+  } catch (e) {
+    console.error('[m06/latest-run]', e);
+    return res.status(500).json({ ok: false, error: 'internal' });
+  }
+}
+
+// GET /m06/run-list?workspaceId=...
+export async function runList(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ ok: false, error: 'workspaceId_required' });
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const runs = await AttributionRun.find({ project_id: projectOid }).sort({ createdAt: -1 }).select({ _id: 1, modelType: 1, model_type: 1, createdAt: 1, timestamp: 1, status: 1 }).lean();
+    return res.json({ ok: true, runs: runs.map(r => ({ runId: String(r._id), model: (r as any).modelType || (r as any).model_type || 'linear', createdAt: (r as any).createdAt || (r as any).timestamp, status: (r as any).status || 'pending' })) });
+  } catch (e) {
+    console.error('[m06/run-list]', e);
+    return res.status(500).json({ ok: false, error: 'internal' });
   }
 }
 
@@ -625,15 +662,35 @@ export async function listCampaignTouchesByCampaign(req: Request, res: Response)
   try {
     const projectId = getProjectId(req);
     const campaignId = (req.query.campaignId as string) || null;
+    console.debug('[m06/listCampaignTouchesByCampaign] query=', { projectId: req.query.projectId, workspaceId: req.query.workspaceId, campaignId: req.query.campaignId, rawQuery: req.query });
     if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    if (!campaignId || !mongoose.isValidObjectId(campaignId)) return res.status(400).json({ error: 'campaignId_required' });
+    if (!campaignId) return res.status(400).json({ error: 'campaignId_required' });
     const from = (req.query.from as string) || '';
     const to = (req.query.to as string) || '';
     const channelFilter = (req.query.channel as string) || '';
     const typeFilter = (req.query.type as string) || '';
     const includeArchived = req.query.includeArchived === 'true';
     const statusFilter = (req.query.status as string) || '';
-    const match: any = { campaign_id: new mongoose.Types.ObjectId(campaignId) };
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const match: any = {
+      $and: [
+        {
+          $or: [
+            { project_id: projectOid },
+            { project_id: { $exists: false } },
+            { project_id: null }
+          ]
+        },
+        {
+          $or: mongoose.isValidObjectId(campaignId)
+            ? [
+                { campaign_id: new mongoose.Types.ObjectId(campaignId) },
+                { campaign_id: campaignId }
+              ]
+            : [{ campaign_id: campaignId }]
+        }
+      ]
+    };
     if (from || to) {
       match.touched_at = {};
       if (from) match.touched_at.$gte = new Date(from);
@@ -643,6 +700,7 @@ export async function listCampaignTouchesByCampaign(req: Request, res: Response)
     if (typeFilter) match.type = typeFilter;
     if (statusFilter) match.status = statusFilter; else if (!includeArchived) match.status = 'active';
     const rows = await CampaignTouch.find(match).sort({ touched_at: -1 }).limit(500).lean();
+    console.debug('[m06/listCampaignTouchesByCampaign] found rows=', rows.length);
     return res.json({ ok: true, touches: rows.map(r => ({ id: String(r._id), lead_id: String(r.lead_id), campaign_id: String(r.campaign_id), channel: r.channel, type: r.type, touched_at: r.touched_at, status: r.status })) });
   } catch (e) {
     console.error('[m06/listCampaignTouchesByCampaign]', e);
@@ -654,15 +712,35 @@ export async function listCampaignTouchesByLead(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     const leadId = (req.query.leadId as string) || null;
+    console.debug('[m06/listCampaignTouchesByLead] query=', { projectId: req.query.projectId, leadId: req.query.leadId, rawQuery: req.query });
     if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    if (!leadId || !mongoose.isValidObjectId(leadId)) return res.status(400).json({ error: 'leadId_required' });
+    if (!leadId) return res.status(400).json({ error: 'leadId_required' });
     const from = (req.query.from as string) || '';
     const to = (req.query.to as string) || '';
     const channelFilter = (req.query.channel as string) || '';
     const typeFilter = (req.query.type as string) || '';
     const includeArchived = req.query.includeArchived === 'true';
     const statusFilter = (req.query.status as string) || '';
-    const match: any = { lead_id: new mongoose.Types.ObjectId(leadId) };
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const match: any = {
+      $and: [
+        {
+          $or: [
+            { project_id: projectOid },
+            { project_id: { $exists: false } },
+            { project_id: null }
+          ]
+        },
+        {
+          $or: mongoose.isValidObjectId(leadId)
+            ? [
+                { lead_id: new mongoose.Types.ObjectId(leadId) },
+                { lead_id: leadId }
+              ]
+            : [{ lead_id: leadId }]
+        }
+      ]
+    };
     if (from || to) {
       match.touched_at = {};
       if (from) match.touched_at.$gte = new Date(from);
@@ -672,9 +750,33 @@ export async function listCampaignTouchesByLead(req: Request, res: Response) {
     if (typeFilter) match.type = typeFilter;
     if (statusFilter) match.status = statusFilter; else if (!includeArchived) match.status = 'active';
     const rows = await CampaignTouch.find(match).sort({ touched_at: -1 }).limit(500).lean();
+    console.debug('[m06/listCampaignTouchesByLead] found rows=', rows.length);
     return res.json({ ok: true, touches: rows.map(r => ({ id: String(r._id), lead_id: String(r.lead_id), campaign_id: String(r.campaign_id), channel: r.channel, type: r.type, touched_at: r.touched_at, status: r.status })) });
   } catch (e) {
     console.error('[m06/listCampaignTouchesByLead]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+// Debug endpoint: return count and sample of touches for project/campaign/lead
+export async function listTouchesDebug(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const campaignId = (req.query.campaignId as string) || null;
+    const leadId = (req.query.leadId as string) || null;
+    console.debug('[m06/listTouchesDebug] query=', { projectId, campaignId, leadId });
+
+    const match: any = { project_id: projectOid };
+    if (campaignId && mongoose.isValidObjectId(campaignId)) match.campaign_id = new mongoose.Types.ObjectId(campaignId);
+    if (leadId && mongoose.isValidObjectId(leadId)) match.lead_id = new mongoose.Types.ObjectId(leadId);
+
+    const count = await CampaignTouch.countDocuments(match).exec();
+    const sample = await CampaignTouch.find(match).sort({ touched_at: -1 }).limit(10).lean();
+    return res.json({ ok: true, count, sample });
+  } catch (e) {
+    console.error('[m06/listTouchesDebug]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -1193,7 +1295,7 @@ export async function searchModule6Leads(req: Request, res: Response) {
       _id: String(l._id),
       lead_id: String(l.lead_id ?? ''),
       name: `${l.First_Name || ''} ${l.Last_Name || ''}`.trim() || null,
-      email: l.Email || null,
+      email: (l as any).Email || null,
     })) });
   } catch (e) {
     console.error('[m06/searchModule6Leads]', e);
@@ -1322,8 +1424,12 @@ export async function createDeal(req: Request, res: Response) {
     if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
     const { deal_id, lead_id, amount, currency, closed_won, closed_at, stage, notes } = req.body || {};
     if (!lead_id || !mongoose.isValidObjectId(lead_id)) return res.status(400).json({ error: 'lead_id_required' });
-    const revenue = Number(amount);
-    if (isNaN(revenue) || revenue < 0) return res.status(400).json({ error: 'amount_invalid' });
+    const revenueNum = Number(amount);
+    if (isNaN(revenueNum) || revenueNum < 0) return res.status(400).json({ error: 'amount_invalid' });
+    // currency enforcement: only USD supported
+    if (currency && typeof currency === 'string' && currency.toUpperCase() !== 'USD') {
+      return res.status(400).json({ error: 'currency_must_be_usd', message: 'System currently only handles U.S. dollars' });
+    }
     const cw = Boolean(closed_won);
     let closedAt: Date | undefined = undefined;
     if (cw) {
@@ -1337,11 +1443,14 @@ export async function createDeal(req: Request, res: Response) {
       const dup = await Deal.findOne({ deal_id }).lean();
       if (dup) return res.status(409).json({ error: 'duplicate_deal_id' });
     }
+    // closed deals must have a non-zero amount
+    if (cw && (!revenueNum || revenueNum <= 0)) return res.status(400).json({ error: 'closed_deal_amount_required', message: 'Closed deals must have a non-zero amount' });
+
     const doc = await Deal.create({
       deal_id: deal_id || `deal-${Date.now()}`,
       lead_id: new mongoose.Types.ObjectId(lead_id),
       project_id: new mongoose.Types.ObjectId(projectId),
-      revenue,
+      revenue: mongoose.Types.Decimal128.fromString(String(revenueNum)),
       closed_won: cw,
       closed_at: closedAt,
     });
@@ -1381,7 +1490,19 @@ export async function listDeals(req: Request, res: Response) {
     if (stage) match.stage = stage;
     if (!includeArchived) match.status = { $ne: 'archived' };
     const rows = await Deal.find(match).sort({ closed_at: -1, createdAt: -1 }).limit(500).lean();
-    return res.json(rows.map(r => ({ _id: String(r._id), deal_id: r.deal_id, lead_id: String(r.lead_id), amount: r.revenue, currency: (r as any).currency || 'USD', closed_won: r.closed_won, closed_at: r.closed_at, stage: (r as any).stage || undefined, notes: (r as any).notes || undefined, status: (r as any).status || 'active' })));
+    return res.json(rows.map(r => ({
+      _id: String(r._id),
+      deal_id: r.deal_id,
+      lead_id: String(r.lead_id),
+      // revenue stored as Decimal128 — return string to avoid precision loss in JSON
+      amount: r.revenue ? String((r as any).revenue) : '0',
+      currency: (r as any).currency || 'USD',
+      closed_won: r.closed_won,
+      closed_at: r.closed_at,
+      stage: (r as any).stage || undefined,
+      notes: (r as any).notes || undefined,
+      status: (r as any).status || 'active'
+    })));
   } catch (e) {
     console.error('[m06/listDeals]', e);
     return res.status(500).json({ error: 'internal' });
@@ -1398,9 +1519,14 @@ export async function updateDeal(req: Request, res: Response) {
     if (amount !== undefined) {
       const v = Number(amount);
       if (isNaN(v) || v < 0) return res.status(400).json({ error: 'amount_invalid' });
-      d.revenue = v;
+      (d as any).revenue = mongoose.Types.Decimal128.fromString(String(v));
     }
-    if (currency !== undefined) (d as any).currency = currency;
+    if (currency !== undefined) {
+      if (typeof currency === 'string' && currency.toUpperCase() !== 'USD') {
+        return res.status(400).json({ error: 'currency_must_be_usd', message: 'System currently only handles U.S. dollars' });
+      }
+      (d as any).currency = currency;
+    }
     if (closed_won !== undefined) d.closed_won = Boolean(closed_won);
     if (closed_at !== undefined) {
       if (closed_at) {
@@ -1413,6 +1539,17 @@ export async function updateDeal(req: Request, res: Response) {
     }
     if (stage !== undefined) (d as any).stage = stage || undefined;
     if (notes !== undefined) (d as any).notes = notes || undefined;
+
+    // enforce closed deals have non-zero amount
+    try {
+      const revNum = d.revenue ? Number((d.revenue as any).toString()) : 0;
+      if (d.closed_won && (!revNum || revNum <= 0)) {
+        return res.status(400).json({ error: 'closed_deal_amount_required', message: 'Closed deals must have a non-zero amount' });
+      }
+    } catch (err) {
+      return res.status(400).json({ error: 'amount_invalid' });
+    }
+
     await d.save();
     return res.json({ ok: true });
   } catch (e) {
@@ -1464,6 +1601,7 @@ export async function importDealsCSV(req: Request, res: Response) {
     if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
     if (!map || typeof map !== 'object') return res.status(400).json({ error: 'mapping_required' });
     const lines = csv.split(/\r?\n/).filter(l => l.trim().length > 0);
+    const projectOid = new mongoose.Types.ObjectId(projectId);
     if (lines.length < 2) return res.status(400).json({ error: 'csv_no_rows' });
     const header = (lines[0] || '').split(',').map(h => h.trim());
 
@@ -1504,7 +1642,7 @@ export async function importDealsCSV(req: Request, res: Response) {
     if (srow < 1 || erow < srow) return res.status(400).json({ error: 'invalid_row_range' });
 
     let processed = 0, inserted = 0, failed = 0, duplicates = 0;
-    const failedRows: Array<{ row: number; error: string }> = [];
+    const failedRows: Array<{ row: number; error: string; raw?: string; lead?: string; amount?: string }> = [];
 
     // cache lead lookups by id or email string
     const leadCache: Record<string, string> = {};
@@ -1523,18 +1661,27 @@ export async function importDealsCSV(req: Request, res: Response) {
       const notesVal = notesIdx !== null ? (cols[notesIdx] || '') : '';
 
       // resolve lead: numeric id or email
-      const leadId = await resolveLeadObjectId(projectOid, leadVal, leadCache);
-      if (!leadId) { failed++; failedRows.push({ row: rowNum, error: 'lead_not_found' }); continue; }
+        const leadId = await resolveLeadObjectId(projectOid, leadVal, leadCache);
+        if (!leadId) { failed++; failedRows.push({ row: rowNum, error: 'lead_not_found', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
 
-      const revenue = Number(String(amountRaw).replace(/[^0-9.-]/g, ''));
-      if (isNaN(revenue) || revenue < 0) { failed++; failedRows.push({ row: rowNum, error: 'amount_invalid' }); continue; }
+        // currency enforcement: only USD supported
+        const currencyVal = currency ? String(currency).trim() : '';
+        if (currencyVal && currencyVal.toUpperCase() !== 'USD') {
+          failed++; failedRows.push({ row: rowNum, error: 'currency_not_usd', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue;
+        }
+
+        const revenueRaw = String(amountRaw || '').replace(/[^0-9.-]/g, '');
+        const revenue = Number(revenueRaw);
+        if (isNaN(revenue) || revenue < 0) { failed++; failedRows.push({ row: rowNum, error: 'amount_invalid', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
 
       const cw = /^(1|true|yes|y)$/i.test(wonVal);
       let closedAt: Date | undefined = undefined;
       if (cw) {
         const dt = new Date(closedAtVal);
-        if (isNaN(dt.getTime())) { failed++; failedRows.push({ row: rowNum, error: 'closed_at_invalid' }); continue; }
+        if (isNaN(dt.getTime())) { failed++; failedRows.push({ row: rowNum, error: 'closed_at_invalid', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
         closedAt = dt;
+        // closed deals must have non-zero amount
+        if (!revenue || revenue <= 0) { failed++; failedRows.push({ row: rowNum, error: 'closed_deal_amount_required', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
       }
 
       if (dealId) {
@@ -1542,7 +1689,7 @@ export async function importDealsCSV(req: Request, res: Response) {
         if (dup) {
           duplicates++;
           if (duplicatePolicy === 'skip') { continue; }
-          else { failed++; failedRows.push({ row: rowNum, error: 'duplicate_deal_id' }); continue; }
+          else { failed++; failedRows.push({ row: rowNum, error: 'duplicate_deal_id', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
         }
       }
 
@@ -1551,7 +1698,7 @@ export async function importDealsCSV(req: Request, res: Response) {
           deal_id: dealId || `deal-${Date.now()}-${Math.floor(Math.random()*1000)}`,
           lead_id: new mongoose.Types.ObjectId(leadId),
           project_id: new mongoose.Types.ObjectId(projectId),
-          revenue,
+          revenue: mongoose.Types.Decimal128.fromString(String(revenue)),
           closed_won: cw,
           closed_at: closedAt,
           // optional passthrough
@@ -1562,7 +1709,7 @@ export async function importDealsCSV(req: Request, res: Response) {
         inserted++;
       } catch (ie:any) {
         failed++;
-        failedRows.push({ row: rowNum, error: ie.message || 'insert_failed' });
+        failedRows.push({ row: rowNum, error: ie.message || 'insert_failed', raw: lines[i] || '', lead: leadVal, amount: amountRaw });
       }
     }
 
@@ -1601,7 +1748,7 @@ export async function runAttribution(req: Request, res: Response) {
     const requiredChannelSet = new Set(
       toArray(channelInput)
         .map(ch => ch.toLowerCase())
-        .filter(ch => CHANNEL_SET.has(ch))
+        .filter(ch => CHANNEL_SET.has(ch as any))
     );
 
     const campaignInput = req.body?.requiredCampaignIds
@@ -2072,7 +2219,7 @@ export async function previewDeals(req: Request, res: Response) {
     const requiredChannelSet = new Set(
       toArray(channelInput)
         .map(ch => ch.toLowerCase())
-        .filter(ch => CHANNEL_SET.has(ch))
+        .filter(ch => CHANNEL_SET.has(ch as any))
     );
 
     const campaignInput = req.query.campaignIds ?? req.query.campaignId;
@@ -2424,113 +2571,87 @@ export async function roiDashboard(req: Request, res: Response) {
   }
 }
 
-// Forecasting endpoint for Page 4 (ROI Forecasting Dashboard)
+// New CSV-driven forecasting endpoint for Module 6
 export async function forecast(req: Request, res: Response) {
   try {
-    const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
+    // For now, forecast is global over the synthetic dataset and does not
+    // filter by workspace; project/workspace scoping can be layered later.
+    const horizonRaw = (req.body && req.body.horizonMonths as number | string | undefined)
+      ?? (req.query.horizonMonths as string | undefined)
+      ?? (req.query.months as string | undefined);
+    const spendMultRaw = (req.body && req.body.spendMultiplier as number | string | undefined)
+      ?? (req.query.spendMultiplier as string | undefined);
 
-    // months ahead to forecast (default 6)
-    const monthsAhead = req.query.months ? Math.max(1, Math.min(12, Number(req.query.months))) : 6;
-    const targetROI = req.query.target ? Number(req.query.target) : null; // optional alert threshold (percent)
+    const horizon = horizonRaw === undefined ? 6 : Number(horizonRaw);
+    const spendMultiplier = spendMultRaw === undefined ? 1 : Number(spendMultRaw);
 
-    // Get historical monthly attributed revenue (same as roiDashboard monthlySeries)
-    const monthlyPipeline: any[] = [
-      { $match: { project_id: projectOid } },
-      { $lookup: { from: 'deals', localField: 'deal_id', foreignField: '_id', as: 'deal' } },
-      { $unwind: { path: '$deal', preserveNullAndEmptyArrays: false } },
-      { $project: { revenue_share: 1, ym: { $dateToString: { format: '%Y-%m', date: '$deal.closed_at' } }, closed_at: '$deal.closed_at' } },
-      { $group: { _id: '$ym', attributed: { $sum: '$revenue_share' } } },
-      { $sort: { _id: 1 } }
-    ];
-    const monthlyAttribAgg = await AttributionResult.aggregate(monthlyPipeline).exec();
-    const monthlySeries = monthlyAttribAgg.map((r:any) => ({ month: r._id, attributed: Number(r.attributed || 0) }));
+    const result = runForecast({
+      horizonMonths: Number.isFinite(horizon) ? horizon : 6,
+      spendMultiplier: Number.isFinite(spendMultiplier) ? spendMultiplier : 1,
+    });
 
-    if (!monthlySeries || monthlySeries.length < 6) {
-      return res.status(400).json({ error: 'insufficient_history', message: 'Need at least 6 months of historical attributed revenue to forecast.' });
-    }
-
-    // Compute total spend for the project (used to approximate monthly spend)
-    const campaigns = await Campaign.find({ project_id: projectOid }).lean();
-    const totalSpend = campaigns.reduce((s:any, c:any) => s + (Number(c.spend) || 0), 0);
-    const monthsCount = monthlySeries.length;
-    const approxMonthlySpend = monthsCount > 0 ? (totalSpend / monthsCount) : 0;
-
-    // Build arrays for regression: x = 0..n-1, y = attributed revenue
-    const xs: number[] = monthlySeries.map((_, i) => i);
-    const ys: number[] = monthlySeries.map((p:any) => p.attributed);
-    const n = xs.length;
-    const xMean = xs.reduce((a,b) => a+b, 0)/n;
-    const yMean = ys.reduce((a,b) => a+b, 0)/n;
-    const Sxx = xs.reduce((s, xi) => s + Math.pow(xi - xMean, 2), 0);
-    // slope and intercept (simple linear regression)
-    const slope = Sxx === 0 ? 0 : xs.reduce((s, xi, i) => s + (xi - xMean) * ((ys[i] || 0) - yMean), 0) / Sxx;
-    const intercept = yMean - slope * xMean;
-
-    // residuals & standard error
-    const residuals = xs.map((xi, i) => (ys[i] || 0) - (intercept + slope * xi));
-    const rss = residuals.reduce((s, r) => s + r*r, 0);
-    const sigma2 = n > 2 ? rss / (n - 2) : 0;
-    const sigma = Math.sqrt(Math.max(0, sigma2));
-
-    // z for 80% CI (approx)
-    const z80 = 1.28155;
-
-    // Predict next months (month labels continue by adding months)
-    const lastIdx = Math.max(0, monthlySeries.length - 1);
-    const lastEntry = monthlySeries[lastIdx] || { month: '1970-01', attributed: 0 };
-    const lastMonthStr = String(lastEntry.month || '1970-01'); // 'YYYY-MM'
-    const parts = lastMonthStr.split('-');
-    const lastYear = Number(parts[0]) || 1970;
-    const lastM = Number(parts[1]) || 1;
-
-    const predictions: any[] = [];
-    for (let k = 1; k <= monthsAhead; k++) {
-      const xi = n - 1 + k;
-      const predY = intercept + slope * xi; // predicted attributed revenue
-      // standard error for prediction
-      const se_pred = Math.sqrt(sigma2 * (1 + (1/n) + Math.pow(xi - xMean, 2) / (Sxx || 1)));
-      const minY = predY - z80 * se_pred;
-      const maxY = predY + z80 * se_pred;
-
-      // compute month label
-      const date = new Date(lastYear, lastM -1 + k, 1);
-      const mlabel = date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0');
-
-      // future spend by default equals approxMonthlySpend; allow scenario param 'spendMultiplier' to scale
-      const spendMultiplier = req.query.spendMultiplier ? Number(req.query.spendMultiplier) : 1;
-      const futureSpend = approxMonthlySpend * (spendMultiplier || 1);
-
-      const roi = futureSpend === 0 ? null : ((predY - futureSpend) / (futureSpend || 1)) * 100;
-      const roiMin = futureSpend === 0 ? null : ((minY - futureSpend) / (futureSpend || 1)) * 100;
-      const roiMax = futureSpend === 0 ? null : ((maxY - futureSpend) / (futureSpend || 1)) * 100;
-
-      predictions.push({ month: mlabel, attributed: predY, attributed_min: minY, attributed_max: maxY, spend: futureSpend, roi, roi_min: roiMin, roi_max: roiMax });
-    }
-
-    // model accuracy metrics (on historical attribution predictions)
-    const predsHistorical = xs.map(xi => intercept + slope * xi);
-    const errors = ys.map((y,i)=> (y || 0) - (predsHistorical[i] || 0));
-    const mae = errors.reduce((s,e)=> s + Math.abs(e), 0) / n;
-    const mse = errors.reduce((s,e)=> s + e*e, 0) / n;
-
-    // Alerts: if any future predicted ROI falls below targetROI parameter
-    const alerts: string[] = [];
-    if (targetROI !== null) {
-      const below = predictions.filter(p => p.roi !== null && p.roi < targetROI);
-      if (below.length > 0) alerts.push(`Forecasted ROI drops below target (${targetROI}%) in ${below.length} month(s).`);
-    }
-    // Trend indicator based on average of next 3 months vs previous 3 months
-    const last3 = ys.slice(-3).reduce((s,v)=> s+v,0)/3;
-    const next3 = predictions.slice(0,3).reduce((s:any,p:any)=> s + (p.attributed||0),0) / Math.min(3,predictions.length);
-    let trend: 'up' | 'down' | 'stable' = 'stable';
-    if (next3 > last3 * 1.02) trend = 'up';
-    else if (next3 < last3 * 0.98) trend = 'down';
-
-    return res.json({ ok: true, model: { name: 'linear_regression', trained_at: new Date(), mae, mse }, historical: monthlySeries, approxMonthlySpend, totalSpend, predictions, alerts, trend });
+    return res.json(result);
   } catch (e) {
-    console.error('[m06/forecast]', e);
+    console.error('[m06/forecast-csv]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
+
+// Forecast endpoint that delegates to the Python forecasting agent
+export async function forecastViaAgent(req: Request, res: Response) {
+  try {
+    const { campaign_id, campaign_channel, channel, forecast_window, spend_multiplier } = (req.body || {}) as {
+      campaign_id?: unknown;
+      campaign_channel?: unknown;
+      channel?: unknown;
+      forecast_window?: unknown;
+      spend_multiplier?: unknown;
+    };
+
+    const channelStrRaw = (typeof campaign_channel === 'string' ? campaign_channel : (typeof channel === 'string' ? channel : '')).trim();
+    const hasChannel = !!channelStrRaw;
+
+    const campaignIdNum = typeof campaign_id === 'number' ? campaign_id : Number(campaign_id);
+    if (!hasChannel && !Number.isFinite(campaignIdNum)) {
+      return res.status(400).json({ ok: false, error: 'campaign_id_or_channel_required' });
+    }
+
+    const windowStr = typeof forecast_window === 'string' && forecast_window.trim()
+      ? forecast_window.trim()
+      : '3m';
+    const multiplierNum = typeof spend_multiplier === 'number'
+      ? spend_multiplier
+      : (spend_multiplier !== undefined ? Number(spend_multiplier) : 1);
+
+    let result: AgentForecastResult;
+    try {
+      if (hasChannel) {
+        result = await invokePythonAgentByChannel(channelStrRaw.toLowerCase(), windowStr, Number.isFinite(multiplierNum) ? multiplierNum : 1);
+      } else {
+        result = await invokePythonAgent(campaignIdNum, windowStr, Number.isFinite(multiplierNum) ? multiplierNum : 1);
+      }
+    } catch (e: any) {
+      console.error('[m06/forecast-agent]', e);
+      const fallback: AgentForecastResult = {
+        history: [],
+        forecast: [],
+        baselineROI: 0,
+        scenarioROI: 0,
+        confidenceLow: 0,
+        confidenceHigh: 0,
+        trend: 'flat',
+        volatility: 0,
+        seasonality: 0,
+        explanation: 'Forecast agent failed to run. Please try again later or contact support.',
+      };
+      return res.status(200).json({ ok: false, error: 'agent_failed', result: fallback });
+    }
+
+    return res.json({ ok: true, result });
+  } catch (e) {
+    console.error('[m06/forecastViaAgent]', e);
+    return res.status(500).json({ ok: false, error: 'internal' });
+  }
+}
+
+// NOTE: old MongoDB-based forecasting endpoint removed.

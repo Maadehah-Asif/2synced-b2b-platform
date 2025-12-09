@@ -21,7 +21,6 @@ export default function Module1Home(){
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m01/leads`)}>Leads</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m01/merged`)}>Merged List</button>
           <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m01/merge-columns`)}>Merge Columns</button>
-          <button className="btn-primary btn-sm" onClick={()=>go(`#/workspace/:workspaceId/m01/leads/preview`)}>Upload Preview</button>
         </div>
       </main>
     </Layout>

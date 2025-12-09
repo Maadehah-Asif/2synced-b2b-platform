@@ -17,7 +17,8 @@ export default function useFatigueMonitor(workspaceId?: string) {
     setError(null);
     try {
       const qs = new URLSearchParams({ workspace: wid });
-      const res = await window.fetch(`/api/m07/fatigue?${qs.toString()}`);
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+      const res = await window.fetch(`${API_URL}/m07/fatigue?${qs.toString()}`);
       if (!res.ok) throw new Error(`status_${res.status}`);
       const json = await res.json();
       setData(json);
@@ -34,7 +35,8 @@ export default function useFatigueMonitor(workspaceId?: string) {
     setError(null);
     try {
       const body = { workspace: wid, windowDays: optsRun.windowDays || 7, threshold: optsRun.threshold || 8, channels: optsRun.channels || [] };
-      const res = await window.fetch('/api/m07/fatigue/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+      const res = await window.fetch(`${API_URL}/m07/fatigue/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(`status_${res.status}`);
       // after successful kickoff, refetch data
       await fetchData();

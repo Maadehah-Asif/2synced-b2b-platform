@@ -138,12 +138,15 @@ export function useFunnelHealth(workspaceId: string | null, filters: FunnelHealt
       if (filters.campaignId) params.append('campaignId', filters.campaignId);
       if (filters.ownerId) params.append('ownerId', filters.ownerId);
 
-      const response = await window.fetch(`${API_URL}/api/m07/funnel-health?${params.toString()}`, {
+      const response = await window.fetch(`${API_URL}/m07/funnel-health?${params.toString()}`,
+       {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
+
+      
 
       if (!response.ok) {
         if (response.status === 401) {

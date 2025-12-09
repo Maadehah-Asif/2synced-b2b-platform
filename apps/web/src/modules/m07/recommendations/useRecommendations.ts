@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+
 function getWorkspaceId(){
   const hash = window.location.hash || '';
   const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
@@ -33,7 +35,7 @@ export default function useRecommendations(initialFilters: any = {}) {
     setError(null)
     try {
       const qs = buildQuery(f)
-      const res = await fetch(`/api/m07/recommendations?${qs}`)
+      const res = await fetch(`${API_URL}/m07/recommendations?${qs}`)
       if (!res.ok) throw new Error(await res.text())
       const json = await res.json()
       setData(json)
@@ -50,7 +52,7 @@ export default function useRecommendations(initialFilters: any = {}) {
     if (!workspaceId) return
     setLoading(true)
     try {
-      await fetch('/api/m07/recommendations/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace: workspaceId }) })
+      await fetch(`${API_URL}/m07/recommendations/run`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspace: workspaceId }) })
       // background job, poll for results
       setTimeout(() => fetchRecs(filters), 1200)
     } finally { setLoading(false) }
@@ -58,13 +60,13 @@ export default function useRecommendations(initialFilters: any = {}) {
 
   async function markDone(id:string) {
     if (!id) return
-    await fetch(`/api/m07/recommendations/${id}/done`, { method: 'POST' })
+    await fetch(`${API_URL}/m07/recommendations/${id}/done`, { method: 'POST' })
     await fetchRecs(filters)
   }
 
   async function dismiss(id:string, note?:string) {
     if (!id) return
-    await fetch(`/api/m07/recommendations/${id}/dismiss`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ note }) })
+    await fetch(`${API_URL}/m07/recommendations/${id}/dismiss`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ note }) })
     await fetchRecs(filters)
   }
 

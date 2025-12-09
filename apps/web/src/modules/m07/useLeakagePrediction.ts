@@ -54,7 +54,7 @@ export function useLeakagePrediction(workspaceId: string | null, filters: Leakag
     setError(null);
     try {
       const token = localStorage.getItem('token');
-      const res = await window.fetch(`${API_URL}/api/m07/leakage-prediction/run`, {
+      const res = await window.fetch(`${API_URL}/m07/leakage-prediction/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' },
         body: JSON.stringify({ workspace: workspaceId, modelVersion: opts.modelVersion || 'v1' }),

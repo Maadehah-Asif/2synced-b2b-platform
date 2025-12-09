@@ -33,12 +33,8 @@ export default function Module6Home(){
           }}
         >
           <Card onClick={() => go(`#/workspace/:workspaceId/m06/element1`)}
-            title="Page 1 Stats"
+            title="Dashboard"
             desc="View key stats and insights." />
-
-          <Card onClick={() => go(`#/workspace/:workspaceId/m06/element2`)}
-            title="Page 2"
-            desc="Additional analytics view." />
 
           <Card onClick={() => go(`#/workspace/:workspaceId/m06/roi-calc`)}
             title="ROI Calculation"

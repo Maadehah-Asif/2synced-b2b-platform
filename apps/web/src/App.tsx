@@ -31,6 +31,11 @@ import JourneyPreview from './modules/m06/JourneyPreview'
 import RunAttributionScreen from './modules/m06/RunAttributionScreen'
 import AllocationDashboard from './modules/m06/AllocationDashboard'
 import RoiCalculation from './modules/m06/RoiCalculation'
+import Module7Home from './modules/m07/Module7Home'
+import FunnelHealthPage from './modules/m07/FunnelHealthPage'
+import LeakagePredictionPage from './modules/m07/LeakagePredictionPage'
+import FatigueMonitorPage from './modules/m07/FatigueMonitorPage'
+import RecommendationsPage from './modules/m07/recommendations/RecommendationsPage'
 
 function App() {
   const [route, setRoute] = useState<string>(window.location.hash || '#/login')
@@ -72,6 +77,12 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m06/allocation')) return <AllocationDashboard />
   if (route.startsWith('#/workspace/') && route.includes('/m06/element4')) return <Element4Page />
   if (route.startsWith('#/workspace/') && route.includes('/m06/')) return <Element1Page />
+  // Module 7 workspace routes and home
+  if (route.startsWith('#/workspace/') && route.includes('/module7/funnel-health')) return <FunnelHealthPage />
+  if (route.startsWith('#/workspace/') && route.includes('/module7/leakage-prediction')) return <LeakagePredictionPage />
+  if (route.startsWith('#/workspace/') && route.includes('/module7/fatigue-monitor')) return <FatigueMonitorPage />
+  if (route.startsWith('#/workspace/') && route.includes('/module7/recommendations')) return <RecommendationsPage />
+  if (route.startsWith('#/workspace/') && route.includes('/module7')) return <Module7Home />
   // Module 1 workspace routes and home
   if (route.startsWith('#/workspace/') && route.includes('/m01/merge-columns')) return <MergeCSV />
   if (route.startsWith('#/workspace/') && route.includes('/m01/leads/preview')) return <UploadPreview />

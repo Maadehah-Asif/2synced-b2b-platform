@@ -6,6 +6,7 @@ import authRouter from "./modules/core/auth/routes.js";
 import workspaceRouter from "./modules/core/workspaces/routes.js";
 import m01Router from "./modules/m01/routes.js";
 import m06Router from "./modules/m06/routes.js";
+import m07Router from "./modules/m07/routes.js";
 
 const app = express();
 app.use(cors());
@@ -19,9 +20,9 @@ app.use("/auth", authRouter);
 app.use("/workspaces", workspaceRouter);
 // Module 01 (ingestion) routes
 app.use("/m01", m01Router);
-// Module 07 routes (analytics/attribution)
-// Module 06 (was m07) routes
 app.use("/m06", m06Router);
+// Module 07 (analytics)
+app.use("/m07", m07Router);
 
 (async () => {
   await connectDB();

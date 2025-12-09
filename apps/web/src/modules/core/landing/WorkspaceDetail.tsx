@@ -11,7 +11,7 @@ function useParamsHash(){
 
 export default function WorkspaceDetail(){
   const id = useParamsHash();
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [shareId, setShareId] = useState<string|null>(null);
 
   useEffect(()=>{(async()=>{
@@ -58,7 +58,10 @@ export default function WorkspaceDetail(){
               ];
               return Array.from({ length: 9 }).map((_, i) => {
                 const mod = i + 1;
-                const path = mod === 1 ? `#/workspace/${id}/m01` : `#/workspace/${id}/m0${mod}`;
+                let path;
+                if (mod === 1) path = `#/workspace/${id}/m01`;
+                else if (mod === 7) path = `#/workspace/${id}/module7`;
+                else path = `#/workspace/${id}/m0${mod}`;
                 const name = moduleNames[i] || `Module ${mod}`;
                 return (
                   <div key={mod} className="module-card" role="button" tabIndex={0} onClick={() => window.location.hash = path} onKeyDown={(e)=>{ if(e.key==='Enter') window.location.hash = path; }}>

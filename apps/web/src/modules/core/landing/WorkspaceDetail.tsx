@@ -118,14 +118,16 @@ export default function WorkspaceDetail() {
                   "Module 9 - Campaign Performance Aggregation & Optimization",
                 ];
                 const accents = [palette.purple, palette.magenta, palette.gold, palette.aqua];
-                return Array.from({ length: 9 }).map((_, i) => {
-                  const mod = i + 1;
-                  const path = mod === 1 ? `#/workspace/${id}/m01` : `#/workspace/${id}/m0${mod}`;
-                  const name = moduleNames[i] || `Module ${mod}`;
+                // show selected modules only (remove modules 4,5,8,9)
+                const allowed = [1, 2, 3, 6, 7];
+                return allowed.map((modIndex) => {
+                  const i = modIndex - 1;
+                  const path = modIndex === 1 ? `#/workspace/${id}/m01` : `#/workspace/${id}/m0${modIndex}`;
+                  const name = moduleNames[i] || `Module ${modIndex}`;
                   const accent = accents[i % accents.length];
                   return (
                     <div
-                      key={mod}
+                      key={modIndex}
                       role="button"
                       tabIndex={0}
                       onClick={() => (window.location.hash = path)}
@@ -145,7 +147,7 @@ export default function WorkspaceDetail() {
                       }}
                     >
                       <div style={{ fontSize: 14, fontWeight: 700, color: palette.ink }}>{name}</div>
-                      <div style={{ color: "#415274", fontSize: 13 }}>Open Module {mod} tools and reports</div>
+                      <div style={{ color: "#415274", fontSize: 13 }}>Open Module {modIndex} tools and reports</div>
                       <div
                         style={{
                           marginTop: 4,
@@ -163,7 +165,7 @@ export default function WorkspaceDetail() {
                           boxShadow: "0 8px 18px rgba(13,30,60,0.08)",
                         }}
                       >
-                        Module {mod}
+                        Module {modIndex}
                         <span
                           style={{
                             background: accent,

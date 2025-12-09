@@ -100,47 +100,20 @@ export default function Module2Home() {
 
           <Card title="Upload Wizard" desc="Step-by-step guided upload." onClick={() => go(`#/workspace/:workspaceId/m02/upload-wizard`)} />
 
-          <Card title="Leads" desc="Explore and manage leads." onClick={() => go(`#/workspace/:workspaceId/m02/leads`)} />
+          <Card title="Intent Scores" desc="Generate & analyze intent." onClick={() => go(`#/workspace/:workspaceId/m02/leads`)} />
 
           <Card title="Merged List" desc="View all merged records." onClick={() => go(`#/workspace/:workspaceId/m02/merged`)} />
 
-          <Card title="Merge Columns" desc="Map and merge imported columns." onClick={() => go(`#/workspace/:workspaceId/m02/merge-columns`)} />
 
-          <Card title="Intent Scores" desc="Generate & analyze intent." onClick={() => go(`#/workspace/:workspaceId/m02/generate`)} />
+          
 
           <Card title="Prioritization Dashboard" desc="Rank leads by conversion likelihood." onClick={() => go(`#/workspace/:workspaceId/m02/prioritization`)} />
 
-          <Card title="Behavior Timeline" desc="Visualize lead behavior patterns." onClick={() => go(`#/workspace/:workspaceId/m02/behavior`)} />
-
-          <Card title="Segment Behavior" desc="Compare audience segments." onClick={() => go(`#/workspace/:workspaceId/m02/segment-behavior`)} />
+          
 
           <Card title="Intent Forecast" desc="Predict future engagement." onClick={() => go(`#/workspace/:workspaceId/m02/intent-forecast`)} />
 
-          {/* Seed Card (White Style) */}
-          <div
-            onClick={seedDemo}
-            style={{
-              cursor: 'pointer',
-              borderRadius: 14,
-              padding: '26px 26px',
-              background: '#ffffff',
-              border: '1px solid #ddd',
-              minHeight: 150,
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              transition: '0.25s ease',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-4px)')}
-            onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-          >
-            <div style={{ fontSize: 20, fontWeight: 700, color: '#0f4258' }}>
-              {seeding ? 'Seeding…' : 'Seed Demo Data'}
-            </div>
-            <div style={{ fontSize: 14, marginTop: 8, color: '#444' }}>
-              Generate example content.
-            </div>
-          </div>
+          
         </div>
 
         {seedMsg && <div style={{ marginTop: 8, fontSize: 13 }}>{seedMsg}</div>}

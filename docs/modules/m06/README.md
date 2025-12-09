@@ -38,7 +38,7 @@ Notes
 
 Quick test
 1) Start API and web servers.
-2) Open `#/workspace/<workspaceId>/m06` and navigate to module pages (element2/element3/element4).
+2) Open `#/workspace/<workspaceId>/m06` and navigate to module pages (element3/element4).
 
 # Module 06 — Attribution & Revenue
 
@@ -118,7 +118,7 @@ Permissions & safety notes
 - Run protection: currently the `/m06/run` endpoint is callable by whoever can call the API with a valid token. It's recommended to add an authorization check (require `head_manager` or `sales_manager`) before allowing runs in production. The UI will work without that, but adding server-side checks prevents accidental runs.
 
 Frontend integration
-- Route: `#/workspace/<workspaceId>/m06/element2` loads Page 2. The component is implemented at `apps/web/src/modules/m06/Element2Page.tsx`.
+- Route: `#/workspace/<workspaceId>/m06` loads the Module 6 main dashboard (`Module6Main`).
 - Workflow in UI code: the page fetches `GET /m06/preview` to build the preview table. When the user clicks `Run Attribution`, the page calls `POST /m06/run` then fetches `GET /m06/run/:id/results` to display authoritative allocations; it falls back to a client-side computed preview if the backend results are unavailable.
 
 ## Module 06 — Attribution & Revenue
@@ -161,7 +161,7 @@ Notes
 
 Quick test
 1) Start API and web servers.
-2) Open `#/workspace/<workspaceId>/m06` and navigate to module pages (element2/element3/element4).
+2) Open `#/workspace/<workspaceId>/m06` and navigate to module pages (element3/element4).
 	- `historical`: array of `{ month, attributed }` (monthly attributed revenue)
 
 	- `approxMonthlySpend`: approximation of monthly campaign spend (total campaign spend divided by number of historical months)

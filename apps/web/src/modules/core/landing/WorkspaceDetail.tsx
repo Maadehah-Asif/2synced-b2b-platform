@@ -53,7 +53,7 @@ export default function WorkspaceDetail() {
       <main
         style={{
           minHeight: "100vh",
-          background: `linear-gradient(135deg, ${palette.aqua} 0%, #e9f5fb 26%, #f9f4ff 100%)`,
+          background: 'linear-gradient(135deg, #0f1f3a 0%, #0f4258 45%, #1597a7 100%)',
           padding: "22px 0 32px",
         }}
       >
@@ -73,15 +73,15 @@ export default function WorkspaceDetail() {
             }}
           >
             <div>
-              <div style={{ fontSize: 13, color: 'var(--header-secondary)', fontWeight: 700 }}>Workspace Home</div>
+              <div style={{ fontSize: 13, color: 'var(--header-secondary)', fontWeight: 700 }}></div>
               <h1 style={{ margin: "4px 0 0", fontSize: 28, fontWeight: 800, color: palette.ink }}>
-                Modules & quick links
+                Workspace Home
               </h1>
-              <div style={{ color: "#3a4a68", fontSize: 14 }}>Primary color applied to workspace header and CTAs</div>
+              <div style={{ color: "#3a4a68", fontSize: 14 }}>
+                Your marketing intelligence workspace — access scoring, intent insights, conversations, attribution, and revenue tools in one place.
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <ColorPill label="Primary" color="var(--header-secondary)" textColor="#fff" />
-            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }} />
           </div>
 
           {/* Module cards */}
@@ -104,15 +104,15 @@ export default function WorkspaceDetail() {
             >
               {(() => {
                 const moduleNames = [
-                  "Module 1 - Lead Ingestion, Cleaning & AI Scoring",
-                  "Module 2 - Intent Extraction & Categorization",
-                  "Module 3 - Conversation Intelligence & Thread Sentiment Analysis",
-                  "Module 4 - Guided Assistant (Workflow Runner)",
-                  "Module 5 - Sales & Marketing Alignment Dashboard",
-                  "Module 6 - Revenue Attribution & ROI Modeling",
-                  "Module 7 - Funnel Leakage & Campaign Fatigue Predictor",
-                  "MODULE 8 - Executive Proposal & Insight Report Generator",
-                  "Module 9 - Campaign Performance Aggregation & Optimization",
+                  "Lead Ingestion, Cleaning & AI Scoring",
+                  "Intent Extraction & Behavioral Categorization",
+                  "Conversation Intelligence & Thread Sentiment",
+                  "Guided Assistant (Workflow Runner)",
+                  "Sales & Marketing Alignment Dashboard",
+                  "Revenue Attribution & ROI Modeling",
+                  "Funnel Leakage & Campaign Fatigue Predictor",
+                  "Executive Proposal & Insight Report Generator",
+                  "Campaign Performance Aggregation & Optimization",
                 ];
                 const accents = ['var(--header-primary)'];
                 // show selected modules only (remove modules 4,5,8,9)
@@ -143,21 +143,45 @@ export default function WorkspaceDetail() {
                         flexDirection: 'column',
                       }}
                     >
-                      {/* image / placeholder area */}
-                      <div style={{ height: 120, background: '#eaf4fb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <img alt="placeholder" src="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.06 }} />
+                      {/* image area: use matching images from assets */}
+                      <div style={{ height: 140, background: '#eaf4fb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <img
+                          alt="module visual"
+                          src={
+                            modIndex === 1
+                              ? '/src/assets/leadscoring.png'
+                              : modIndex === 2
+                              ? '/src/assets/intentscore.png'
+                              : modIndex === 3
+                              ? '/src/assets/conversation.png'
+                              : modIndex === 6
+                              ? '/src/assets/ROI.png'
+                              : '/src/assets/funnel.png'
+                          }
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderBottom: '1px solid #eef5fb' }}
+                        />
                       </div>
 
                       {/* content area */}
                       <div style={{ padding: 14, background: '#fff', display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <div style={{ fontSize: 16, fontWeight: 800, color: palette.ink }}>{name}</div>
-                        <div style={{ color: '#415274', fontSize: 13 }}>{modIndex === 1 ? 'Ranked leads with explainable scores plus time-window intent forecasts.' : modIndex === 2 ? 'Open Module 2 tools and reports' : modIndex === 3 ? 'Open Module 3 tools and reports' : modIndex === 6 ? 'Open Module 6 tools and reports' : 'Open Module tools and reports'}</div>
+                        <div style={{ color: '#415274', fontSize: 13 }}>
+                          {modIndex === 1
+                            ? 'Rank leads with explainable scores and preview time-window forecasts.'
+                            : modIndex === 2
+                            ? 'Extract intent, analyze behaviors, and access prioritization dashboards.'
+                            : modIndex === 3
+                            ? 'View conversation-level insights, sentiment trends, and decision-maker signals.'
+                            : modIndex === 6
+                            ? 'Measure attributed revenue, compare channels, and generate ROI projections.'
+                            : 'Identify pipeline drop-offs and detect campaign fatigue patterns.'}
+                        </div>
                         <div style={{ marginTop: 8 }}>
                           <button
                             className="btn-ghost"
                             style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid var(--header-secondary, ${palette.purple})33`, background: '#fff', color: 'var(--header-secondary)', fontWeight: 700 }}
                           >
-                            {modIndex === 1 ? 'Preview ranking view' : modIndex === 7 ? 'Open leakage report' : 'Go'}
+                            {'Open'}
                           </button>
                         </div>
                       </div>

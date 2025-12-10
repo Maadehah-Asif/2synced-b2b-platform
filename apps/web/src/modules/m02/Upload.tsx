@@ -373,256 +373,511 @@ export default function UploadM02(){
       setMergedResultId(j.mergedId || null);
     }catch(e){ setMessage('merge error'); }
   }
+return (
+  <Layout>
+    <div className="p-20">
+      <div className="mb-12" style={{ display: 'flex', alignItems: 'center' }}>
+        <ModuleBackButton toSuffix="/m02" />
+        <h2 style={{ margin: 0 }}>Module 02 - Upload CSV</h2>
+      </div>
 
-  return (
-    <Layout>
-      <div className="p-20">
-        <div className="mb-12" style={{ display: 'flex', alignItems: 'center' }}>
-          <ModuleBackButton toSuffix="/m02" />
-          <h2 style={{ margin: 0 }}>Module 02 - Upload CSV</h2>
-        </div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          marginBottom: "20px",
+          flexWrap: "nowrap"
+        }}
+      >
+        <label
+          style={{
+            background: "#0f4258",
+            color: "white",
+            padding: "10px 16px",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "14px",
+            minWidth: "100px",
+            textAlign: "center"
+          }}
+        >
+          Choose File
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            style={{ display: "none" }}
+          />
+        </label>
 
-        <form onSubmit={handleSubmit}>
-          <input type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-          <button type="submit">Upload</button>
-        </form>
-        {message && <div className="mt-8">{message}</div>}
+        <button
+          type="button"
+          onClick={handleSubmit}
+          style={{
+            background: "#0f4258",
+            color: "white",
+            padding: "10px 16px",
+            borderRadius: "6px",
+            border: "none",
+            fontSize: "14px",
+            cursor: "pointer",
+            height: "40px",
+            minWidth: "100px"
+          }}
+        >
+          Upload
+        </button>
 
-        <div className="mt-12 mb-8">
-          <button type="button" className={`btn-ghost ${statusView==='active'?'font-700':''}`} onClick={() => setStatusView('active')}>All Uploads</button>
-          <button type="button" className={`btn-ghost ml-8 ${statusView==='archived'?'font-700':''}`} onClick={() => setStatusView('archived')}>Archive</button>
-          <button
-            type="button"
-            className="btn-primary ml-12"
-            onClick={openMergeModal}
-            disabled={Object.keys(selectedForMerge).filter(k => selectedForMerge[k]).length < 2}
-            title={Object.keys(selectedForMerge).filter(k => selectedForMerge[k]).length < 2 ? 'Select at least 2 uploads to enable' : 'Open merge dialog'}
-          >
-            Merge Selected
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setStatusView("active")}
+          style={{
+            background: "#0f4258",
+            color: "white",
+            padding: "10px 16px",
+            borderRadius: "6px",
+            border: "none",
+            fontSize: "14px",
+            cursor: "pointer",
+            height: "40px",
+            minWidth: "100px"
+          }}
+        >
+          All Uploads
+        </button>
 
-        <h3>Uploads ({statusView})</h3>
-        <ul>
-          {uploads.map((u:any) => (
-            <li key={u._id} className="list-item">
-              <div className="meta">{u.filename} - {u.contentType} - {new Date(u.createdAt).toLocaleString()}</div>
-              <div>
-                {statusView === 'active' && <input type="checkbox" checked={!!selectedForMerge[u._id]} onChange={() => toggleSelectForMerge(u._id)} title="Select for merge" />}
+        <button
+          type="button"
+          onClick={() => setStatusView("archived")}
+          style={{
+            background: "#0f4258",
+            color: "white",
+            padding: "10px 16px",
+            borderRadius: "6px",
+            border: "none",
+            fontSize: "14px",
+            cursor: "pointer",
+            height: "40px",
+            minWidth: "100px"
+          }}
+        >
+          Archive
+        </button>
+
+        <button
+          type="button"
+          onClick={openMergeModal}
+          disabled={Object.keys(selectedForMerge).filter(k => selectedForMerge[k]).length < 2}
+          style={{
+            background: "#0f4258",
+            color: "white",
+            padding: "10px 16px",
+            borderRadius: "6px",
+            border: "none",
+            fontSize: "14px",
+            cursor: "pointer",
+            height: "40px",
+            minWidth: "100px",
+             opacity: 1 
+          }}
+        >
+          Merge Selected
+        </button>
+      </div>
+
+      {message && <div className="mt-8">{message}</div>}
+
+      <h3>Uploads ({statusView})</h3>
+      <ul>
+        {uploads.map((u: any) => (
+          <li key={u._id} className="list-item">
+            <div className="meta">
+              {u.filename} - {u.contentType} - {new Date(u.createdAt).toLocaleString()}
+            </div>
+
+            <div>
+              {statusView === "active" && (
+                <input
+                  type="checkbox"
+                  checked={!!selectedForMerge[u._id]}
+                  onChange={() => toggleSelectForMerge(u._id)}
+                />
+              )}
+
+              <button
+                type="button"
+                className="ml-6"
+                onClick={() => {
+                  setPreviewReturn();
+                  if (workspace)
+                    window.location.hash = `#/workspace/${workspace}/m02/upload/preview/${u._id}`;
+                  else window.location.hash = `#/m02/upload/preview/${u._id}`;
+                }}
+                style={{
+                  background: "#0f4258",
+                  color: "white",
+                  borderRadius: "6px",
+                  padding: "8px 14px",
+                  border: "none",
+                  cursor: "pointer"
+                }}
+              >
+                Preview
+              </button>
+
+              <button
+                type="button"
+                className="ml-6"
+                onClick={async () => {
+                  const res = await fetch(
+                    `${API_URL}/m01/uploads/${u._id}?workspace=${workspace}`,
+                    { headers: getAuthHeaders() }
+                  );
+                  const j = await res.json();
+                  if (j?.ok) setDetailsItem(j.item);
+                  else setMessage("failed to load details");
+                }}
+                style={{
+                  background: "#0f4258",
+                  color: "white",
+                  borderRadius: "6px",
+                  padding: "8px 14px",
+                  border: "none",
+                  cursor: "pointer"
+                }}
+              >
+                Details
+              </button>
+
+              {statusView === "active" ? (
                 <button
                   type="button"
                   className="ml-6"
-                  onClick={() => {
-                    setPreviewReturn();
-                    if (workspace) window.location.hash = `#/workspace/${workspace}/m02/upload/preview/${u._id}`; else window.location.hash = `#/m02/upload/preview/${u._id}`;
-                  }}
-                >Preview</button>
-                <button
-                  type="button"
-                  className="ml-6"
-                  onClick={async () => {
-                    const res = await fetch(`${API_URL}/m01/uploads/${u._id}?workspace=${workspace}`, { headers: getAuthHeaders() });
-                    const j = await res.json();
-                    if (j?.ok) setDetailsItem(j.item); else setMessage('failed to load details');
+                  onClick={() => archiveUpload(u._id)}
+                  style={{
+                    background: "#0f4258",
+                    color: "white",
+                    borderRadius: "6px",
+                    padding: "8px 14px",
+                    border: "none",
+                    cursor: "pointer"
                   }}
                 >
-                  Details
+                  Archive
                 </button>
-                {statusView === 'active' ? (
-                  <button type="button" className="ml-6" onClick={() => archiveUpload(u._id)}>Archive</button>
-                ) : (
-                  <>
-                    <button type="button" className="ml-6" onClick={() => restoreUpload(u._id)}>Restore</button>
-                    <button type="button" className="ml-6" onClick={() => permanentDelete(u._id)}>Permanently Delete</button>
-                  </>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="ml-6"
+                    onClick={() => restoreUpload(u._id)}
+                    style={{
+                      background: "#0f4258",
+                      color: "white",
+                      borderRadius: "6px",
+                      padding: "8px 14px",
+                      border: "none",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Restore
+                  </button>
 
-        {confirmAction && (
-          <div className="modal-overlay" onClick={() => setConfirmAction(null)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h3>Confirm</h3>
-              <div className="mt-8">
-                {confirmAction.type === 'archive' && <div>Move this upload to archive?</div>}
-                {confirmAction.type === 'restore' && <div>Restore this upload to active?</div>}
-                {confirmAction.type === 'permanent' && <div>Permanently delete this upload? This cannot be undone.</div>}
+                  <button
+                    type="button"
+                    className="ml-6"
+                    onClick={() => permanentDelete(u._id)}
+                    style={{
+                      background: "red",
+                      color: "white",
+                      borderRadius: "6px",
+                      padding: "8px 14px",
+                      border: "none",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Permanently Delete
+                  </button>
+                </>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {confirmAction && (
+        <div className="modal-overlay" onClick={() => setConfirmAction(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Confirm</h3>
+            <div className="mt-8">
+              {confirmAction.type === "archive" && <div>Move this upload to archive?</div>}
+              {confirmAction.type === "restore" && <div>Restore this upload to active?</div>}
+              {confirmAction.type === "permanent" && (
+                <div>Permanently delete this upload? This cannot be undone.</div>
+              )}
+            </div>
+            <div className="mt-12 flex justify-between">
+              <div>
+                <button type="button" className="btn-ghost" onClick={() => setConfirmAction(null)}>
+                  Cancel
+                </button>
               </div>
-              <div className="mt-12 flex justify-between">
-                <div>
-                  <button type="button" className="btn-ghost" onClick={() => setConfirmAction(null)}>Cancel</button>
-                </div>
-                <div>
-                  <button type="button" className="btn-primary" onClick={() => performConfirmedAction(confirmAction)}>Confirm</button>
-                </div>
+              <div>
+                <button type="button" className="btn-primary" onClick={() => performConfirmedAction(confirmAction)}>
+                  Confirm
+                </button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {detailsItem && (
-          <div className="modal-overlay" onClick={() => setDetailsItem(null)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h3>Upload details</h3>
-              <div><strong>Filename:</strong> {detailsItem.filename}</div>
-              <div><strong>Original name:</strong> {detailsItem.originalName}</div>
-              <div><strong>Content type:</strong> {detailsItem.contentType}</div>
-              <div><strong>Uploaded by:</strong> {detailsItem.uploadedBy?.fullName || detailsItem.uploadedBy?.email || 'Unknown'}</div>
-              <div><strong>Workspace:</strong> {detailsItem.workspace}</div>
-              <div><strong>Created at:</strong> {new Date(detailsItem.createdAt).toLocaleString()}</div>
-              <div className="mt-12"><button type="button" onClick={() => setDetailsItem(null)}>Close</button></div>
+      {detailsItem && (
+        <div className="modal-overlay" onClick={() => setDetailsItem(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Upload details</h3>
+            <div><strong>Filename:</strong> {detailsItem.filename}</div>
+            <div><strong>Original name:</strong> {detailsItem.originalName}</div>
+            <div><strong>Content type:</strong> {detailsItem.contentType}</div>
+            <div><strong>Uploaded by:</strong> {detailsItem.uploadedBy?.fullName || detailsItem.uploadedBy?.email || "Unknown"}</div>
+            <div><strong>Workspace:</strong> {detailsItem.workspace}</div>
+            <div><strong>Created at:</strong> {new Date(detailsItem.createdAt).toLocaleString()}</div>
+            <div className="mt-12">
+              <button type="button" onClick={() => setDetailsItem(null)}>Close</button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {mergeOpen && (
-          <div className="modal-overlay" onClick={() => setMergeOpen(false)}>
-            <div className="modal-content max-width-900" onClick={(e) => e.stopPropagation()}>
-              <h3>Merge uploads</h3>
-              <div className="mb-8 muted">Follow the two-step merge: 1) choose matching key per file; 2) map source columns to target schema (source-first).</div>
-              <div style={{ maxHeight: '60vh', overflow: 'auto' }}>
-                {mergeLoading ? (
-                  <div style={{ padding: 20 }}>Loading previews</div>
-                ) : (
-                  <>
-                {step === 1 && (
-                  <div>
-                    <div style={{ marginBottom: 8 }}>Choose a single matching column in each file.</div>
-                    <div style={{ marginBottom: 8 }}>
-                      <label style={{ marginRight: 8 }}>Target column to store the matching key</label>
-                      <select value={targetKey} onChange={(e) => setTargetKey(e.target.value)}>
-                        {MERGED_COLUMNS.map(c => (
-                          <option key={c.key} value={c.key}>{c.label} ({c.key})</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div style={{ display: 'grid', gap: 8 }}>
-                      {Object.keys(headersByUpload).map(uid => (
-                        <div key={uid} style={{ padding: 8, border: '1px solid #eee' }}>
-                          <div style={{ fontWeight: 700 }}>{uploads.find(u=>u._id===uid)?.filename || uid}</div>
-                          <div style={{ marginTop: 6 }}>
-                            { (headersByUpload[uid] && headersByUpload[uid].length > 0) ? (
-                              <div>
-                                {headerPromotedByUpload[uid] && (
-                                  <div style={{ marginBottom: 6 }}>
-                                    <label style={{ marginRight: 8 }}>
-                                      <input type="checkbox" checked={!!useDetectedHeader[uid]} onChange={(e) => setUseDetectedHeader(prev => ({ ...prev, [uid]: e.target.checked }))} />
-                                      {' '}Use detected header
-                                    </label>
-                                  </div>
-                                )}
-                                { useDetectedHeader[uid] ? (
-                                  <select value={matchingColumns[uid] ?? ''} onChange={(e) => setMatchingColumns(prev => ({ ...prev, [uid]: e.target.value }))}>
-                                    <option value="">-- select matching column --</option>
-                                    {(headersByUpload[uid] || []).map((h) => <option key={h} value={h}>{h}</option>)}
-                                  </select>
-                                ) : (
-                                  <div>
-                                    <div style={{ marginBottom: 6, color: '#cfc' }}>
-                                      Using manual column name  you unchecked the detected header. Enter the matching column name below.
+      {mergeOpen && (
+        <div className="modal-overlay" onClick={() => setMergeOpen(false)}>
+          <div className="modal-content max-width-900" onClick={(e) => e.stopPropagation()}>
+            <h3>Merge uploads</h3>
+            <div className="mb-8 muted">
+              Follow the two-step merge: 1) choose matching key per file; 2) map source columns to target schema.
+            </div>
+
+            <div style={{ maxHeight: "60vh", overflow: "auto" }}>
+              {mergeLoading ? (
+                <div style={{ padding: 20 }}>Loading previews…</div>
+              ) : (
+                <>
+                  {/* step 1 */}
+                  {step === 1 && (
+                    <div>
+                      <div style={{ marginBottom: 8 }}>Choose a matching column in each file.</div>
+
+                      <div style={{ marginBottom: 8 }}>
+                        <label style={{ marginRight: 8 }}>Target column for match:</label>
+                        <select value={targetKey} onChange={(e) => setTargetKey(e.target.value)}>
+                          {MERGED_COLUMNS.map(c => (
+                            <option key={c.key} value={c.key}>
+                              {c.label} ({c.key})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {Object.keys(headersByUpload).map(uid => (
+                          <div key={uid} style={{ padding: 8, border: "1px solid #eee" }}>
+                            <div style={{ fontWeight: 700 }}>
+                              {uploads.find(u => u._id === uid)?.filename || uid}
+                            </div>
+
+                            <div style={{ marginTop: 6 }}>
+                              {(headersByUpload[uid] && headersByUpload[uid].length > 0) ? (
+                                <div>
+                                  {headerPromotedByUpload[uid] && (
+                                    <div style={{ marginBottom: 6 }}>
+                                      <label>
+                                        <input
+                                          type="checkbox"
+                                          checked={!!useDetectedHeader[uid]}
+                                          onChange={(e) =>
+                                            setUseDetectedHeader(prev => ({
+                                              ...prev,
+                                              [uid]: e.target.checked
+                                            }))
+                                          }
+                                        />
+                                        {" "}Use detected header
+                                      </label>
                                     </div>
-                                    <input placeholder="Enter matching column name" value={matchingColumns[uid] ?? ''} onChange={(e) => setMatchingColumns(prev => ({ ...prev, [uid]: e.target.value }))} />
-                                  </div>
-                                ) }
-                              </div>
-                            ) : (
-                              <div>
-                                <div style={{ marginBottom: 6, color: '#cfc' }}>
-                                  No header row detected for this file  enter the matching column name manually or check the CSV.
-                                </div>
-                                <input placeholder="Enter matching column name" value={matchingColumns[uid] ?? ''} onChange={(e) => setMatchingColumns(prev => ({ ...prev, [uid]: e.target.value }))} />
-                              </div>
-                            ) }
-                            { headerPromotedByUpload[uid] && (
-                              <div style={{ marginTop: 6, color: 'orange' }}>
-                                {headerIndexByUpload[uid] != null ?
-                                  `Auto-detected header at row ${headerIndexByUpload[uid] + 1}. Please verify.` :
-                                  'Auto-detected header. Please verify.'
-                                }
-                              </div>
-                            ) }
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ marginTop: 10 }}>
-                      <button disabled={!matchingKeysCompatible()} onClick={() => setStep(2)}>Next </button>
-                    </div>
-                  </div>
-                )}
+                                  )}
 
-                {step === 2 && (
-                  <div>
-                    <div style={{ marginBottom: 8 }}>Map each source column (left) to a single merged target column (right). The selected join key {targetKey} will be filled automatically from your matching columns and is excluded from the options.</div>
-                    <div style={{ marginBottom: 8 }}>
-                      <label>Merge name (optional): </label>
-                      <input placeholder="Give this merged CSV a name" value={mergedName} onChange={(e)=>setMergedName(e.target.value)} style={{ marginLeft: 8, width: '50%' }} />
-                    </div>
-                    <div style={{ display: 'flex', gap: 12 }}>
-                      {Object.keys(headersByUpload).map(uid => (
-                        <div key={uid} style={{ flex: 1, border: '1px solid #eee', padding: 8 }}>
-                          <div style={{ fontWeight: 700, marginBottom: 6 }}>{uploads.find(u=>u._id===uid)?.filename || uid}</div>
-                          <div style={{ maxHeight: 420, overflow: 'auto' }}>
-                            {(mappingsByFile[uid] || []).filter(r => r.source !== matchingColumns[uid]).map(row => {
-                              return (
-                                <div key={row.source} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                                  <div style={{ width: '45%', fontFamily: 'monospace' }}>{row.source}</div>
-                                  <div style={{ width: '55%' }}>
-                                    <select value={row.target} onChange={(e) => setMapping(uid, row.source, e.target.value)} style={{ width: '100%' }}>
-                                      <option value="__skip">Skip Column</option>
-                                      <option value="__custom">Custom Field</option>
-                                      {availableTargetsFor(uid, row.target).map(k => {
-                                        const meta = MERGED_COLUMNS.find(c => c.key === k);
-                                        const label = meta ? `${meta.label} (${meta.key})` : k;
-                                        return <option key={k} value={k}>{label}</option>;
-                                      })}
+                                  {useDetectedHeader[uid] ? (
+                                    <select
+                                      value={matchingColumns[uid] ?? ""}
+                                      onChange={(e) =>
+                                        setMatchingColumns(prev => ({ ...prev, [uid]: e.target.value }))
+                                      }
+                                    >
+                                      <option value="">-- select --</option>
+                                      {(headersByUpload[uid] || []).map(h => (
+                                        <option key={h} value={h}>{h}</option>
+                                      ))}
                                     </select>
-                                    {row.target === '__custom' && (
-                                      <div style={{ marginTop: 6 }}>
-                                        <input placeholder="custom name" value={row.customName || ''} onChange={(e) => setCustomName(uid, row.source, e.target.value)} style={{ width: '100%' }} />
-                                      </div>
-                                    )}
-                                  </div>
+                                  ) : (
+                                    <div>
+                                      <input
+                                        placeholder="Enter matching column name"
+                                        value={matchingColumns[uid] ?? ""}
+                                        onChange={(e) =>
+                                          setMatchingColumns(prev => ({ ...prev, [uid]: e.target.value }))
+                                        }
+                                      />
+                                    </div>
+                                  )}
                                 </div>
-                              );
-                            })}
+                              ) : (
+                                <div>
+                                  <input
+                                    placeholder="Enter matching column name"
+                                    value={matchingColumns[uid] ?? ""}
+                                    onChange={(e) =>
+                                      setMatchingColumns(prev => ({ ...prev, [uid]: e.target.value }))
+                                    }
+                                  />
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ marginTop: 10 }}>
-                      <div style={{ marginBottom: 8 }}>Selected targets: {Array.from(usedTargets).join(', ') || '<none>'}</div>
-                      {!requiredTargetsSatisfied() && (
-                        <div style={{ color: 'red', marginBottom: 6 }}>Map all required merged columns exactly once.</div>
-                      )}
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button onClick={() => setStep(1)}> Back</button>
-                        <button onClick={submitMerge} disabled={!requiredTargetsSatisfied()}>Merge and save</button>
-                        {mergedResultId && (
-                          <button type="button" onClick={() => {
-                            if (workspace) window.location.hash = `#/workspace/${workspace}/m02/merged?open=${mergedResultId}`;
-                            else window.location.hash = `#/m02/merged`;
-                          }}>Open / View merged CSVs</button>
-                        )}
+                        ))}
+                      </div>
+
+                      <div style={{ marginTop: 10 }}>
+                        <button
+                          onClick={() => setStep(2)}
+                          disabled={!matchingKeysCompatible()}
+                        >
+                          Next
+                        </button>
                       </div>
                     </div>
-                  </div>
-                )}
-                  </>
-                )}
-              </div>
-              <div className="mt-12 flex justify-between">
-                <div>
-                  <button type="button" className="btn-ghost" onClick={() => setMergeOpen(false)}>Cancel</button>
-                </div>
+                  )}
+
+                  {/* step 2 */}
+                  {step === 2 && (
+                    <div>
+                      <div style={{ marginBottom: 8 }}>
+                        Map each source column to a merged target field.
+                      </div>
+
+                      <div style={{ marginBottom: 8 }}>
+                        <label>Merge name: </label>
+                        <input
+                          placeholder="Optional name"
+                          value={mergedName}
+                          onChange={(e) => setMergedName(e.target.value)}
+                          style={{ marginLeft: 8, width: "50%" }}
+                        />
+                      </div>
+
+                      <div style={{ display: "flex", gap: 12 }}>
+                        {Object.keys(headersByUpload).map(uid => (
+                          <div key={uid} style={{ flex: 1, border: "1px solid #eee", padding: 8 }}>
+                            <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                              {uploads.find(u => u._id === uid)?.filename || uid}
+                            </div>
+
+                            <div style={{ maxHeight: 420, overflow: "auto" }}>
+                              {(mappingsByFile[uid] || [])
+                                .filter(r => r.source !== matchingColumns[uid])
+                                .map(row => (
+                                  <div
+                                    key={row.source}
+                                    style={{
+                                      display: "flex",
+                                      gap: 8,
+                                      alignItems: "center",
+                                      marginBottom: 6
+                                    }}
+                                  >
+                                    <div style={{ width: "45%", fontFamily: "monospace" }}>
+                                      {row.source}
+                                    </div>
+
+                                    <div style={{ width: "55%" }}>
+                                      <select
+                                        value={row.target}
+                                        onChange={(e) => setMapping(uid, row.source, e.target.value)}
+                                        style={{ width: "100%" }}
+                                      >
+                                        <option value="__skip">Skip</option>
+                                        <option value="__custom">Custom</option>
+                                        {availableTargetsFor(uid, row.target).map(k => {
+                                          const meta = MERGED_COLUMNS.find(c => c.key === k);
+                                          const label = meta ? `${meta.label} (${meta.key})` : k;
+                                          return (
+                                            <option key={k} value={k}>
+                                              {label}
+                                            </option>
+                                          );
+                                        })}
+                                      </select>
+
+                                      {row.target === "__custom" && (
+                                        <div style={{ marginTop: 6 }}>
+                                          <input
+                                            placeholder="custom name"
+                                            value={row.customName || ""}
+                                            onChange={(e) =>
+                                              setCustomName(uid, row.source, e.target.value)
+                                            }
+                                            style={{ width: "100%" }}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ marginBottom: 8 }}>
+                          Selected targets: {Array.from(usedTargets).join(", ") || "<none>"}
+                        </div>
+
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button onClick={() => setStep(1)}>Back</button>
+                          <button onClick={submitMerge}>Merge and Save</button>
+
+                          {mergedResultId && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (workspace)
+                                  window.location.hash = `#/workspace/${workspace}/m02/merged?open=${mergedResultId}`;
+                                else window.location.hash = `#/m02/merged`;
+                              }}
+                            >
+                              View Merged CSVs
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="mt-12 flex justify-between">
+              <div>
+                <button type="button" className="btn-ghost" onClick={() => setMergeOpen(false)}>
+                  Cancel
+                </button>
               </div>
             </div>
           </div>
-        )}
-      </div>
-    </Layout>
-  );
+        </div>
+      )}
+    </div>
+  </Layout>
+);
 }
-

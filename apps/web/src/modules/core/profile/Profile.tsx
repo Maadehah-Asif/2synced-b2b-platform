@@ -124,11 +124,10 @@ export default function Profile() {
 
         {/* Form */}
         <form onSubmit={onChange} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <label style={{ fontSize: 14, fontWeight: 600, color: "var(--header-secondary)" }}>
-            Change Password
-          </label>
+          <label style={{ fontSize: 14, fontWeight: 700, color: "var(--header-secondary)", marginBottom: 6 }}>Change Password</label>
 
           {/* New password */}
+          <label style={{ fontSize: 12, color: '#415274', marginBottom: 4 }}>Enter new password</label>
           <input
             className="auth-input"
             style={{ borderRadius: 12, padding: "12px 14px", border: "1px solid rgba(15,66,88,0.12)", background: "#ffffff" }}
@@ -138,6 +137,7 @@ export default function Profile() {
             placeholder="Enter new password"
           />
 
+          <label style={{ fontSize: 12, color: '#415274', margin: '8px 0 4px' }}>Confirm new password</label>
           <input
             className="auth-input"
             style={{ borderRadius: 12, padding: "12px 14px", border: "1px solid rgba(15,66,88,0.12)", background: "#ffffff" }}

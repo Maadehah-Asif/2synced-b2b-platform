@@ -138,7 +138,7 @@ textarea:focus {
 .module-card:hover, .module-card:focus {
   transform: translateY(-6px);
   box-shadow: 0 20px 40px rgba(1,8,114,0.12);
-  border-color: var(--header-primary);
+  border-color: var(--header-secondary);
 }
 .module-card:active { transform: translateY(-2px); }
 

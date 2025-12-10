@@ -35,7 +35,10 @@ export default function CreateWorkspace() {
     <Layout>
       <div style={{ maxWidth: 680, margin: '0 auto' }}>
         <form onSubmit={onCreate} className="auth-card">
-          <h2 className="auth-title">Create Workspace</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+            <button type="button" className="btn-ghost" onClick={() => (window.location.hash = '#/landing')}>Back</button>
+            <h2 className="auth-title" style={{ margin: 0 }}>Create Workspace</h2>
+          </div>
           <label>Workspace Name</label>
           <input className="auth-input" value={name} onChange={(e) => setName(e.target.value)} required />
           {message && <div className="auth-error">{message}</div>}

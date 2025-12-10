@@ -16,6 +16,17 @@ export default function Login() {
     setLoading(true);
     setError(null);
     try {
+      // client-side empty-field validation
+      if (!email) {
+        setError('Email is required.');
+        setLoading(false);
+        return;
+      }
+      if (!password) {
+        setError('Password is required.');
+        setLoading(false);
+        return;
+      }
       const res = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

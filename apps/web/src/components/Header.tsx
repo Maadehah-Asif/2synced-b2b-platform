@@ -1,8 +1,6 @@
 import type React from 'react';
 import '../styles/components.css';
 
-const navItems = ['Synced', 'Modules', 'Workflows', 'Reporting', 'Why us', 'Pricing'];
-
 export default function Header() {
   return (
     <header
@@ -39,23 +37,14 @@ export default function Header() {
             padding: 0,
           }}
         >
-          Synced
+          2-Synced
         </button>
-
-        <nav style={{ display: 'flex', gap: 16, fontSize: 14, color: '#2b3a54' }}>
-          {navItems.map((item) => (
-            <span key={item} style={{ cursor: 'pointer', fontWeight: item === 'Synced' ? 700 : 500 }}>
-              {item}
-            </span>
-          ))}
-        </nav>
-
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 12 }}>
           <button
             style={{
               ...ghostBtn,
               padding: '10px 16px',
-              minWidth: 118,
+              minWidth: 110,
             }}
             onClick={() => (window.location.hash = '#/workspaces')}
           >
@@ -70,6 +59,20 @@ export default function Header() {
             onClick={() => (window.location.hash = '#/profile')}
           >
             Profile
+          </button>
+          <button
+            style={{
+              ...ghostBtn,
+              padding: '10px 12px',
+              minWidth: 90,
+              background: 'var(--header-secondary)',
+              color: '#fff',
+              border: 'none',
+              boxShadow: '0 10px 24px rgba(15,66,88,0.15)'
+            }}
+            onClick={() => { localStorage.removeItem('token'); window.location.hash = '#/login'; }}
+          >
+            Logout
           </button>
         </div>
       </div>

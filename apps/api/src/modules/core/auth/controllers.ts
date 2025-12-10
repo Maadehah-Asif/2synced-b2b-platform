@@ -88,18 +88,17 @@ export async function changePassword(req: Request, res: Response) {
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : undefined;
     if (!token) return res.status(401).json({ error: "missing_token" });
     const payload = verifyToken(token);
-
-    const { oldPassword, newPassword } = req.body || {};
-    if (!oldPassword || !newPassword) return res.status(400).json({ error: "old_and_new_required" });
+    // Accept token-authenticated password change. Old password is optional when
+    // the request is authenticated via a valid token. This allows users to
+    // change their password from the profile UI without re-entering the old password.
+    const { newPassword } = req.body || {};
+    if (!newPassword) return res.status(400).json({ error: "new_password_required" });
 
     const passwordError = validatePassword(newPassword);
     if (passwordError) return res.status(400).json({ error: passwordError });
 
     const user = await User.findById(payload.sub).exec();
-    if (!user || !user.passwordHash) return res.status(404).json({ error: "user_not_found" });
-
-    const ok = await verifyPassword(oldPassword, user.passwordHash);
-    if (!ok) return res.status(401).json({ error: "invalid_credentials" });
+    if (!user) return res.status(404).json({ error: "user_not_found" });
 
     const passwordHash = await hashPassword(newPassword);
     user.passwordHash = passwordHash;

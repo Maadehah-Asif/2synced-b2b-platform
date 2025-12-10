@@ -29,7 +29,7 @@ export default function WorkspaceHeader(){
   }, []);
 
   return (
-    <div style={{ position: 'fixed', top: 64, left: 0, right: 0, height: 48, background: 'var(--header-secondary)', zIndex: 1900 }}>
+    <div style={{ position: 'fixed', top: 72, left: 0, right: 0, height: 56, background: 'var(--header-secondary)', zIndex: 1900, boxShadow: '0 6px 18px rgba(4,12,24,0.06)' }}>
       <div className="header-row" style={{ height: '100%', padding: '0 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <div className="flex gap-12 align-center">

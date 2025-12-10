@@ -17,6 +17,22 @@ export default function Signup(){
     e.preventDefault();
     setLoading(true); setError(null);
     try{
+      // empty-field validation
+      if (!email) {
+        setError('Email is required.');
+        setLoading(false);
+        return;
+      }
+      if (!password) {
+        setError('Password is required.');
+        setLoading(false);
+        return;
+      }
+      if (!confirmPassword) {
+        setError('Please confirm your password.');
+        setLoading(false);
+        return;
+      }
       if (password !== confirmPassword) {
         setLoading(false);
         setError('Passwords do not match. Please re-enter them.');

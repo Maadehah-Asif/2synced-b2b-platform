@@ -73,17 +73,14 @@ export default function WorkspaceDetail() {
             }}
           >
             <div>
-              <div style={{ fontSize: 13, color: palette.purple, fontWeight: 700 }}>Workspace Home</div>
+              <div style={{ fontSize: 13, color: 'var(--header-secondary)', fontWeight: 700 }}>Workspace Home</div>
               <h1 style={{ margin: "4px 0 0", fontSize: 28, fontWeight: 800, color: palette.ink }}>
                 Modules & quick links
               </h1>
-              <div style={{ color: "#3a4a68", fontSize: 14 }}>Palette test: gold / magenta / purple / aqua</div>
+              <div style={{ color: "#3a4a68", fontSize: 14 }}>Primary color applied to workspace header and CTAs</div>
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <ColorPill label="Gold" color={palette.gold} />
-              <ColorPill label="Magenta" color={palette.magenta} />
-              <ColorPill label="Purple" color={palette.purple} />
-              <ColorPill label="Aqua" color={palette.aqua} textColor="#0f213e" />
+              <ColorPill label="Primary" color="var(--header-secondary)" textColor="#fff" />
             </div>
           </div>
 
@@ -117,14 +114,14 @@ export default function WorkspaceDetail() {
                   "MODULE 8 - Executive Proposal & Insight Report Generator",
                   "Module 9 - Campaign Performance Aggregation & Optimization",
                 ];
-                const accents = [palette.purple, palette.magenta, palette.gold, palette.aqua];
+                const accents = ['var(--header-primary)'];
                 // show selected modules only (remove modules 4,5,8,9)
                 const allowed = [1, 2, 3, 6, 7];
                 return allowed.map((modIndex) => {
                   const i = modIndex - 1;
                   const path = modIndex === 1 ? `#/workspace/${id}/m01` : `#/workspace/${id}/m0${modIndex}`;
                   const name = moduleNames[i] || `Module ${modIndex}`;
-                  const accent = accents[i % accents.length];
+                  const accent = accents[0];
                   return (
                     <div
                       key={modIndex}
@@ -135,49 +132,34 @@ export default function WorkspaceDetail() {
                         if (e.key === "Enter") window.location.hash = path;
                       }}
                       style={{
-                        background: `linear-gradient(135deg, ${accent}1a 0%, #ffffff 100%)`,
-                        borderRadius: 14,
-                        padding: 14,
-                        border: `1px solid ${accent}33`,
-                        boxShadow: "0 12px 28px rgba(13,30,60,0.08)",
-                        display: "grid",
-                        gap: 8,
-                        cursor: "pointer",
-                        transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease",
+                        borderRadius: 12,
+                        overflow: 'hidden',
+                        background: '#fff',
+                        border: `1px solid ${accent}22`,
+                        boxShadow: '0 12px 28px rgba(13,30,60,0.06)',
+                        cursor: 'pointer',
+                        transition: 'transform 140ms ease, box-shadow 140ms ease',
+                        display: 'flex',
+                        flexDirection: 'column',
                       }}
                     >
-                      <div style={{ fontSize: 14, fontWeight: 700, color: palette.ink }}>{name}</div>
-                      <div style={{ color: "#415274", fontSize: 13 }}>Open Module {modIndex} tools and reports</div>
-                      <div
-                        style={{
-                          marginTop: 4,
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 8,
-                          background: "#fff",
-                          padding: "6px 10px",
-                          borderRadius: 999,
-                          border: `1px solid ${accent}55`,
-                          color: accent,
-                          fontWeight: 700,
-                          fontSize: 12,
-                          width: "fit-content",
-                          boxShadow: "0 8px 18px rgba(13,30,60,0.08)",
-                        }}
-                      >
-                        Module {modIndex}
-                        <span
-                          style={{
-                            background: accent,
-                            color: "#0f213e",
-                            padding: "4px 8px",
-                            borderRadius: 8,
-                            fontWeight: 800,
-                            boxShadow: `0 8px 20px ${accent}44`,
-                          }}
-                        >
-                          Go
-                        </span>
+                      {/* image / placeholder area */}
+                      <div style={{ height: 120, background: '#eaf4fb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <img alt="placeholder" src="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.06 }} />
+                      </div>
+
+                      {/* content area */}
+                      <div style={{ padding: 14, background: '#fff', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: palette.ink }}>{name}</div>
+                        <div style={{ color: '#415274', fontSize: 13 }}>{modIndex === 1 ? 'Ranked leads with explainable scores plus time-window intent forecasts.' : modIndex === 2 ? 'Open Module 2 tools and reports' : modIndex === 3 ? 'Open Module 3 tools and reports' : modIndex === 6 ? 'Open Module 6 tools and reports' : 'Open Module tools and reports'}</div>
+                        <div style={{ marginTop: 8 }}>
+                          <button
+                            className="btn-ghost"
+                            style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid var(--header-secondary, ${palette.purple})33`, background: '#fff', color: 'var(--header-secondary)', fontWeight: 700 }}
+                          >
+                            {modIndex === 1 ? 'Preview ranking view' : modIndex === 7 ? 'Open leakage report' : 'Go'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -207,13 +189,13 @@ export default function WorkspaceDetail() {
             <button
               className="btn-primary"
               style={{
-                background: palette.magenta,
+                background: 'var(--header-secondary)',
                 border: "none",
                 color: "#fff",
                 borderRadius: 12,
                 padding: "10px 14px",
                 fontWeight: 700,
-                boxShadow: "0 12px 26px rgba(167,45,115,0.35)",
+                boxShadow: "0 12px 26px rgba(1,8,114,0.28)",
                 cursor: "pointer",
               }}
               onClick={() => shareId && navigator.clipboard?.writeText(shareId)}

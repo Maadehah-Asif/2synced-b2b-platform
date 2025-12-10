@@ -1,6 +1,6 @@
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import {
   listTouchesByCampaign,
   listTouchesByLead,
@@ -24,32 +24,48 @@ interface TouchRow {
   metadata?: any;
 }
 
-const btnPrimary: React.CSSProperties = {
+/* THEME STYLES */
+
+
+const btnPrimary: CSSProperties = {
   background: '#0f4258',
   color: '#fff',
   padding: '8px 16px',
   borderRadius: 8,
   border: 'none',
   cursor: 'pointer',
-  fontSize: 13
+  fontSize: 13,
+  height: 40,
+  width: 140,         // ← ADD THIS
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center'
 };
 
-const btnGhost: React.CSSProperties = {
+const btnGhost: CSSProperties = {
   background: 'transparent',
   border: '1px solid #0f4258',
   color: '#0f4258',
   padding: '8px 16px',
   borderRadius: 8,
   cursor: 'pointer',
-  fontSize: 13
+  fontSize: 13,
+  height: 40,
+  width: 140,         // ← ADD THIS
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center'
 };
 
-const inputStyle: React.CSSProperties = {
+
+const inputStyle: CSSProperties = {
   width: '100%',
   padding: '8px 10px',
   borderRadius: 8,
   border: '1px solid #d0d0d0',
-  fontSize: 13
+  fontSize: 13,
+  height: 40,
+  boxSizing: 'border-box'
 };
 
 export default function CampaignTouchViewer() {
@@ -72,7 +88,7 @@ export default function CampaignTouchViewer() {
   const [filterType, setFilterType] = useState<string>('');
   const [filterChannel, setFilterChannel] = useState<string>('');
 
-  // Load campaigns
+  /* Load Campaigns */
   useEffect(() => {
     let ignore = false;
     async function run() {
@@ -84,12 +100,10 @@ export default function CampaignTouchViewer() {
       if (!ignore) setCampaignOptions(r.campaigns || []);
     }
     run();
-    return () => {
-      ignore = true;
-    };
+    return () => { ignore = true; };
   }, [workspaceId, mode]);
 
-  // Load leads
+  /* Load Leads */
   useEffect(() => {
     let ignore = false;
     async function run() {
@@ -101,18 +115,16 @@ export default function CampaignTouchViewer() {
       if (!ignore) setLeadOptions(r.leads || []);
     }
     run();
-    return () => {
-      ignore = true;
-    };
+    return () => { ignore = true; };
   }, [workspaceId, mode]);
 
+  /* Load Touches */
   async function load() {
     if (!workspaceId || !selectedEntityId) {
       setRows([]);
       return;
     }
     setLoading(true);
-    let data: any = [];
 
     const common = {
       includeArchived: showArchived,
@@ -121,6 +133,7 @@ export default function CampaignTouchViewer() {
       workspaceId
     };
 
+    let data: any = [];
     if (mode === 'campaign') {
       data = await listTouchesByCampaign({ campaignId: selectedEntityId, ...common } as any);
     } else {
@@ -131,7 +144,7 @@ export default function CampaignTouchViewer() {
     if (Array.isArray(data)) raw = data;
     else if (data?.touches) raw = data.touches;
 
-    const formatted = raw
+    const formatted: TouchRow[] = raw
       .map((t: any) => ({
         _id: String(t._id || t.id || ''),
         lead_id: t.lead_id,
@@ -153,6 +166,8 @@ export default function CampaignTouchViewer() {
     load();
   }, [selectedEntityId, showArchived, filterType, filterChannel, mode, workspaceId]);
 
+  /* Editing helpers */
+
   function beginEdit(r: TouchRow) {
     setEditingRowId(r._id);
     setEditChannel(r.channel || '');
@@ -164,6 +179,7 @@ export default function CampaignTouchViewer() {
   async function saveEdit() {
     if (!editingRowId) return;
     let metadataObj: any = undefined;
+
     if (editMetadata.trim()) {
       try {
         metadataObj = JSON.parse(editMetadata);
@@ -172,14 +188,17 @@ export default function CampaignTouchViewer() {
         return;
       }
     }
+
     const res = await updateTouch(editingRowId, {
       channel: editChannel,
       type: editType,
       touched_at: editTouchedAt,
       metadata: metadataObj
     });
-    if ((res as any).error) setToast({ msg: 'Update failed', type: 'error' });
-    else {
+
+    if ((res as any).error) {
+      setToast({ msg: 'Update failed', type: 'error' });
+    } else {
       setToast({ msg: 'Updated', type: 'success' });
       setEditingRowId(null);
       load();
@@ -215,7 +234,20 @@ export default function CampaignTouchViewer() {
           View & manage interaction events. Toggle mode to switch context.
         </div>
 
-        <div style={{ marginTop: 16, display: 'flex', gap: 12 }}>
+        {/* SINGLE CRM-STYLE CONTROL BAR */}
+        <div
+          style={{
+            marginTop: 18,
+            background: '#fff',
+            padding: 12,
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap'
+          }}
+        >
+          {/* Mode buttons */}
           <button
             style={mode === 'campaign' ? btnPrimary : btnGhost}
             onClick={() => {
@@ -235,93 +267,94 @@ export default function CampaignTouchViewer() {
           >
             By Lead
           </button>
-        </div>
 
-        {/* SELECT BLOCK */}
-        <div style={{ marginTop: 20 }}>
-          <div style={{ fontSize: 12, marginBottom: 4 }}>
-            {mode === 'campaign' ? 'Select Campaign' : 'Select Lead'}
+          {/* Entity select */}
+          <div style={{ minWidth: 260, maxWidth: 360, flexShrink: 0 }}>
+            <select
+              style={inputStyle}
+              value={selectedEntityId}
+              onChange={e => setSelectedEntityId(e.target.value)}
+            >
+              <option value="">
+                {mode === 'campaign' ? 'Choose a campaign' : 'Choose a lead'}
+              </option>
+              {mode === 'campaign'
+                ? campaignOptions.map(c => (
+                    <option key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </option>
+                  ))
+                : leadOptions.map(l => (
+                    <option key={l._id} value={String(l._id)}>
+                      #{l.lead_id} {l.name || ''}
+                    </option>
+                  ))}
+            </select>
           </div>
 
-          <select
-            style={inputStyle}
-            value={selectedEntityId}
-            onChange={e => setSelectedEntityId(e.target.value)}
+          {/* Type filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12 }}>Type</span>
+            <select
+              value={filterType}
+              onChange={e => setFilterType(e.target.value)}
+              style={{ ...inputStyle, width: 140 }}
+            >
+              <option value="">All</option>
+              <option value="email_open">Email Open</option>
+              <option value="email_click">Email Click</option>
+              <option value="ad_click">Ad Click</option>
+              <option value="webinar">Webinar</option>
+              <option value="form_submit">Form Submit</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          {/* Channel filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12 }}>Channel</span>
+            <select
+              value={filterChannel}
+              onChange={e => setFilterChannel(e.target.value)}
+              style={{ ...inputStyle, width: 140 }}
+            >
+              <option value="">All</option>
+              <option value="email">Email</option>
+              <option value="ads">Ads</option>
+              <option value="linkedin">LinkedIn</option>
+              <option value="webinar">Webinar</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          {/* Spacer */}
+          <div style={{ flexGrow: 1 }} />
+
+          {/* Show archived */}
+          <label
+            style={{
+              fontSize: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              whiteSpace: 'nowrap'
+            }}
           >
-            <option value="">
-              {mode === 'campaign' ? 'Choose a campaign' : 'Choose a lead'}
-            </option>
-
-            {mode === 'campaign'
-              ? campaignOptions.map(c => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </option>
-                ))
-              : leadOptions.map(l => (
-                  <option key={l._id} value={String(l._id)}>
-                    #{l.lead_id} {l.name || ''}
-                  </option>
-                ))}
-          </select>
-        </div>
-
-        {/* FILTER BAR */}
-        <div
-          style={{
-            marginTop: 18,
-            padding: 12,
-            background: '#fff',
-            borderRadius: 8,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 18
-          }}
-        >
-          <label style={{ fontSize: 12 }}>
             <input
               type="checkbox"
               checked={showArchived}
               onChange={e => setShowArchived(e.target.checked)}
             />
-            <span style={{ marginLeft: 6 }}>Show archived</span>
+            Show archived
           </label>
 
-          <div style={{ fontSize: 12 }}>Type:</div>
-          <select
-            value={filterType}
-            onChange={e => setFilterType(e.target.value)}
-            style={inputStyle}
-          >
-            <option value="">All</option>
-            <option value="email_open">Email Open</option>
-            <option value="email_click">Email Click</option>
-            <option value="ad_click">Ad Click</option>
-            <option value="webinar">Webinar</option>
-            <option value="form_submit">Form Submit</option>
-            <option value="other">Other</option>
-          </select>
-
-          <div style={{ fontSize: 12 }}>Channel:</div>
-          <select
-            value={filterChannel}
-            onChange={e => setFilterChannel(e.target.value)}
-            style={inputStyle}
-          >
-            <option value="">All</option>
-            <option value="email">Email</option>
-            <option value="ads">Ads</option>
-            <option value="linkedin">LinkedIn</option>
-            <option value="webinar">Webinar</option>
-            <option value="other">Other</option>
-          </select>
-
+          {/* Reload */}
           <button style={btnGhost} onClick={() => load()}>
             Reload
           </button>
         </div>
 
-        {/* TABLE */}
+        {/* RESULTS TABLE */}
         <div style={{ marginTop: 20, background: '#fff', borderRadius: 8, padding: 12 }}>
           {loading && <div style={{ fontSize: 12 }}>Loading...</div>}
 
@@ -337,14 +370,14 @@ export default function CampaignTouchViewer() {
             <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#f5f5f5' }}>
-                  <th style={{ padding: 6 }}>Lead</th>
-                  <th style={{ padding: 6 }}>Campaign</th>
-                  <th style={{ padding: 6 }}>Type</th>
-                  <th style={{ padding: 6 }}>Channel</th>
-                  <th style={{ padding: 6 }}>Touched At</th>
-                  <th style={{ padding: 6 }}>Status</th>
-                  <th style={{ padding: 6 }}>Metadata</th>
-                  <th style={{ padding: 6 }}>Actions</th>
+                  <th style={{ padding: 6, textAlign: 'left' }}>Lead</th>
+                  <th style={{ padding: 6, textAlign: 'left' }}>Campaign</th>
+                  <th style={{ padding: 6, textAlign: 'left' }}>Type</th>
+                  <th style={{ padding: 6, textAlign: 'left' }}>Channel</th>
+                  <th style={{ padding: 6, textAlign: 'left' }}>Touched At</th>
+                  <th style={{ padding: 6, textAlign: 'left' }}>Status</th>
+                  <th style={{ padding: 6, textAlign: 'left' }}>Metadata</th>
+                  <th style={{ padding: 6, textAlign: 'left' }}>Actions</th>
                 </tr>
               </thead>
 
@@ -357,7 +390,6 @@ export default function CampaignTouchViewer() {
                       <td style={{ padding: 6 }}>#{r.lead_id}</td>
                       <td style={{ padding: 6 }}>{r.campaign_name}</td>
 
-                      {/* TYPE */}
                       <td style={{ padding: 6 }}>
                         {editing ? (
                           <select
@@ -377,7 +409,6 @@ export default function CampaignTouchViewer() {
                         )}
                       </td>
 
-                      {/* CHANNEL */}
                       <td style={{ padding: 6 }}>
                         {editing ? (
                           <select
@@ -396,7 +427,6 @@ export default function CampaignTouchViewer() {
                         )}
                       </td>
 
-                      {/* DATE */}
                       <td style={{ padding: 6 }}>
                         {editing ? (
                           <input
@@ -412,7 +442,6 @@ export default function CampaignTouchViewer() {
 
                       <td style={{ padding: 6 }}>{r.status || 'active'}</td>
 
-                      {/* METADATA */}
                       <td style={{ padding: 6, maxWidth: 160 }}>
                         {editing ? (
                           <textarea
@@ -428,7 +457,6 @@ export default function CampaignTouchViewer() {
                         )}
                       </td>
 
-                      {/* ACTIONS */}
                       <td style={{ padding: 6 }}>
                         {!editing ? (
                           <>

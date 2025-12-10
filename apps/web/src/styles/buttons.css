@@ -1,3 +1,14 @@
+/* Rectangular button style unification */
+.btn,
+.btn-primary,
+.btn-secondary,
+.btn-outline,
+.btn-ghost,
+.auth-button,
+.auth-button-primary,
+.auth-button-secondary {
+  border-radius: 6px;
+}
 /* Centralized button styles used across the app
    - Use `--header-primary` as the canonical primary color
    - Provides filled primary buttons and outline variants

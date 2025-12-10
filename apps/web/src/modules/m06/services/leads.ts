@@ -5,7 +5,6 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 export interface Module6Lead {
   _id: string;
   lead_id: string;
-  row_number?: number | null;
   name?: string | null;
   email?: string | null;
   createdAt?: string;
@@ -45,8 +44,18 @@ export async function importModule6LeadsCSV(payload: { csv: string; map: Record<
     body: JSON.stringify({ ...payload, projectId }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'failed' }));
-    throw new Error(err.error || 'Import failed');
+    let message = 'Import failed';
+    try {
+      const err = await res.json();
+      if (err && (err.error || err.message)) message = `${res.status} ${err.error || err.message}`;
+      else message = `${res.status} Import failed`;
+    } catch {
+      try {
+        const text = await res.text();
+        if (text) message = `${res.status} ${text}`;
+      } catch {}
+    }
+    throw new Error(message);
   }
   return res.json();
 }

@@ -326,7 +326,7 @@ export default function CampaignManager(){
     if(form.endDate && form.startDate && new Date(form.endDate) < new Date(form.startDate)) errs.endDate = 'End date cannot be before start date';
     setFormErrors(errs);
     if(Object.keys(errs).length) return;
-    const payload: any = { name: form.name, channel: form.channel, startDate: form.startDate || undefined, endDate: form.endDate || undefined, description: form.description || undefined, tags: form.tags ? form.tags.split(',').map((s:string)=>s.trim()).filter(Boolean) : [], spend: form.spend ? Number(form.spend) : 0 };
+    const payload: any = { projectId: workspaceId, name: form.name, channel: form.channel, startDate: form.startDate || undefined, endDate: form.endDate || undefined, description: form.description || undefined, tags: form.tags ? form.tags.split(',').map((s:string)=>s.trim()).filter(Boolean) : [], spend: form.spend ? Number(form.spend) : 0 };
     try{
       const url = selected ? `${API_URL}/m06/campaigns/${selected.id}` : `${API_URL}/m06/campaigns`;
       const method = selected ? 'PUT' : 'POST';
@@ -358,7 +358,6 @@ export default function CampaignManager(){
         <div style={{ marginTop: 12 }}>
           <div style={{ marginBottom: 8 }}>
             <button className="btn-primary" onClick={()=>{ setShowForm(true); setSelected(null); }}>New Campaign</button>
-            <button className="btn-ghost" onClick={fetchCampaigns} style={{ marginLeft: 8 }}>Refresh</button>
             <button className="btn-ghost" onClick={()=>setShowWizard(true)} style={{ marginLeft: 8 }}>Upload CSV (Wizard)</button>
           </div>
 

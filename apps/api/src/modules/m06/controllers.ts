@@ -1142,7 +1142,6 @@ export async function listModule6Leads(req: Request, res: Response) {
       leads: leads.map(l => ({
         _id: String(l._id),
         lead_id: l.lead_id,
-        row_number: l.row_number ?? null,
         name: l.name || null,
         email: l.email || null,
         createdAt: l.createdAt,
@@ -1168,7 +1167,6 @@ export async function importModule6LeadsCSV(req: Request, res: Response) {
     const header = (lines[0] || '').split(',').map(h => h.trim());
 
     const mapping = map && typeof map === 'object' ? map : {
-      row_number: 'row_number',
       lead_id: 'lead_id',
       name: 'name',
       email: 'email',
@@ -1183,7 +1181,8 @@ export async function importModule6LeadsCSV(req: Request, res: Response) {
       return match >= 0 ? match : null;
     };
 
-    const rowIdx = indexOf(mapping.row_number ?? mapping.row);
+    // Row number mapping removed
+    const rowIdx: number | null = null;
     const leadIdIdx = indexOf(mapping.lead_id ?? mapping.lead);
     const nameIdx = indexOf(mapping.name);
     const emailIdx = indexOf(mapping.email);
@@ -1212,11 +1211,7 @@ export async function importModule6LeadsCSV(req: Request, res: Response) {
         continue;
       }
 
-      let rowNumberValue: number | null = null;
-      if (rowIdx !== null && columns[rowIdx]) {
-        const parsed = Number(columns[rowIdx]);
-        rowNumberValue = Number.isNaN(parsed) ? null : parsed;
-      }
+      // Row number value removed
 
       const nameValue = nameIdx !== null ? (columns[nameIdx] || '').trim() : '';
       const emailValue = emailIdx !== null ? (columns[emailIdx] || '').trim() : '';
@@ -1230,7 +1225,7 @@ export async function importModule6LeadsCSV(req: Request, res: Response) {
         await Module6Lead.create({
           project_id: projectOid,
           lead_id: leadIdentifier,
-          row_number: rowNumberValue,
+          // row_number removed
           name: nameValue || undefined,
           email: emailValue || undefined,
         });
@@ -1275,7 +1270,6 @@ export async function searchModule6Leads(req: Request, res: Response) {
         lead_id: l.lead_id,
         name: l.name || null,
         email: l.email || null,
-        row_number: l.row_number ?? null,
       })) });
     }
 

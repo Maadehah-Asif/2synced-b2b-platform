@@ -16,7 +16,7 @@ export default function Module6Leads(){
   const [blankRowCount, setBlankRowCount] = useState(0);
   const [previewPage, setPreviewPage] = useState(0);
   const [headerError, setHeaderError] = useState<string|null>(null);
-  const [mapRowNumber, setMapRowNumber] = useState('row_number');
+  // Row number mapping removed per request
   const [mapLeadId, setMapLeadId] = useState('lead_id');
   const [mapName, setMapName] = useState('name');
   const [mapEmail, setMapEmail] = useState('email');
@@ -62,9 +62,9 @@ export default function Module6Leads(){
         if(fallbackIndex !== undefined && cols[fallbackIndex]) return cols[fallbackIndex];
         return '';
       };
-      setMapRowNumber(prev => pickHeader(prev, ['row_number','row','row number']));
-      setMapLeadId(prev => pickHeader(prev, ['lead_id','lead id','lead','leadid']));
-      setMapName(prev => pickHeader(prev, ['name','full_name','full name']));
+      // Row number mapping removed
+      setMapLeadId(prev => pickHeader(prev, ['lead_id','lead_external_id','lead id','lead','leadid']));
+      setMapName(prev => pickHeader(prev, ['name','full_name','full name','first_name last_name']));
       setMapEmail(prev => pickHeader(prev, ['email','email_address','email address']));
       if(cols.length < 2) setHeaderError('Could not detect valid headers. Ensure first row has column names.'); else setHeaderError(null);
     };
@@ -91,7 +91,7 @@ export default function Module6Leads(){
     if(!mapLeadId) missing.push('lead_id');
     if(missing.length){ setToast({ msg:`Missing required mappings: ${missing.join(', ')}`, type:'error' }); return null; }
     const resolved = {
-      row_number: resolveHeader(mapRowNumber),
+      // row_number removed
       lead_id: resolveHeader(mapLeadId),
       name: resolveHeader(mapName),
       email: resolveHeader(mapEmail),
@@ -105,15 +105,29 @@ export default function Module6Leads(){
     const resolved = verifyMappings();
     if(!resolved) return;
     if(!mappingConfirmed){ setToast({ msg:'Confirm mappings to proceed', type:'error' }); return; }
+    const first = Number(startRow || 1);
+    const last = endRow ? Number(endRow) : undefined;
+    if(first < 1){ setToast({ msg:'Start row must be at least 1', type:'error' }); return; }
+    if(last !== undefined && last < first){ setToast({ msg:'End row must be greater than or equal to start row', type:'error' }); return; }
     setSubmitStatus(null);
     try{
-      const payload = { csv: csvText, map: resolved, startRow: Number(startRow || 1), endRow };
+      // Reduce payload size: send only selected rows with header
+      const normalized = csvText.replace(/\r\n?/g,'\n');
+      const lines = normalized.split('\n');
+      const header = lines[0] || '';
+      const lastRowIndex = last !== undefined ? last : (lines.length - 1);
+      const selected = [header, ...lines.slice(first, lastRowIndex + 1)];
+      const csvToSend = selected.join('\n');
+      const payload = { csv: csvToSend, map: resolved, startRow: 1, endRow: (lastRowIndex - first + 1) };
       const res = await importModule6LeadsCSV(payload);
       setImportSummary(res);
       setSubmitStatus(`Processed ${res.processed || 0}, inserted ${res.inserted || 0}, failed ${res.failed || 0}`);
       if(res.inserted) setToast({ msg:`Inserted ${res.inserted} leads`, type:'success' });
       else if(res.failed) setToast({ msg:`Import finished with ${res.failed} failures`, type:'error' });
-    }catch(e:any){ setToast({ msg: String(e.message||'Import failed'), type:'error' }); }
+    }catch(e:any){
+      const msg = typeof e?.message === 'string' ? e.message : 'Import failed';
+      setToast({ msg, type:'error' });
+    }
   }
 
   return (
@@ -160,10 +174,7 @@ export default function Module6Leads(){
           )}
 
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:12, marginTop:12 }}>
-            <div>
-              <div style={{ fontSize:12 }}>Row number header</div>
-              <input list="m06-leads-headers" value={mapRowNumber} onChange={e=>setMapRowNumber(e.target.value)} placeholder="Optional" style={{ width:'100%' }} />
-            </div>
+            {/** Row number header UI removed */}
             <div>
               <div style={{ fontSize:12 }}>Lead ID header *</div>
               <input list="m06-leads-headers" value={mapLeadId} onChange={e=>setMapLeadId(e.target.value)} placeholder="Column name" style={{ width:'100%' }} />

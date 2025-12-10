@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react'; 
 import Layout from '../../components/Layout';
 import { getWorkspaceIdFromHash } from '../../utils/workspace';
 
@@ -22,17 +22,36 @@ function Pagination({ page, hasMore, onPage }: { page: number, hasMore: boolean,
   const pages = [] as number[];
   for (let i = 0; i < windowSize; i++) pages.push(start + i);
 
+  const btnStyle = {
+    background: '#0f4258',
+    color: 'white',
+    border: 'none',
+    borderRadius: 6,
+    padding: '6px 12px',
+    cursor: 'pointer'
+  };
+
   return (
     <span className="pagination">
       {start > 1 && (
-        <button type="button" className="page-btn" onClick={() => onPage(1)}>1</button>
+        <button type="button" className="page-btn" style={btnStyle} onClick={() => onPage(1)}>1</button>
       )}
       {start > 2 && <span className="mx-8 muted">...</span>}
       {pages.map(p => (
-        <button key={p} type="button" className={`page-btn ${p === page ? 'active' : ''}`} onClick={() => onPage(p)}>{p}</button>
+        <button 
+          key={p}
+          type="button"
+          className={`page-btn ${p === page ? 'active' : ''}`}
+          style={btnStyle}
+          onClick={() => onPage(p)}
+        >
+          {p}
+        </button>
       ))}
       {hasMore && <>
-        <button type="button" className="page-btn" onClick={() => onPage(pages[pages.length-1] + 1)}>{pages[pages.length-1] + 1}</button>
+        <button type="button" className="page-btn" style={btnStyle} onClick={() => onPage(pages[pages.length-1] + 1)}>
+          {pages[pages.length-1] + 1}
+        </button>
         <span className="mx-8 muted">...</span>
       </>}
     </span>
@@ -54,7 +73,6 @@ export default function UploadPreviewM02(){
   useEffect(() => {
     if(!previewId) return setMessage('No file selected');
     fetchPage(page, perPage);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewId]);
 
   async function fetchPage(p: number, pp: number){
@@ -66,13 +84,18 @@ export default function UploadPreviewM02(){
       const res = await fetch(`${API_URL}/m01/${path}/${previewId}/preview?page=${p}&perPage=${pp}&workspace=${workspace}`);
       if(res.status === 404){ setMessage('File not found in storage'); return; }
       let j: any = null;
-      try { j = await res.json(); } catch (err) {
+      try { j = await res.json(); } catch (_) {
         const txt = await res.text().catch(() => 'Unable to parse response');
         setMessage(`Preview error: ${txt}`);
         return;
       }
-      if(res.ok && j?.ok){ setHeader(j.header || null); setRows(j.rows || null); setPage(p); setPerPage(pp); setHasMore(Boolean(j.hasMore)); }
-      else {
+      if(res.ok && j?.ok){
+        setHeader(j.header || null);
+        setRows(j.rows || null);
+        setPage(p);
+        setPerPage(pp);
+        setHasMore(Boolean(j.hasMore));
+      } else {
         setMessage(j?.error || `Preview failed (status ${res.status})`);
       }
     }catch(e){ setMessage('Preview error'); }
@@ -86,7 +109,7 @@ export default function UploadPreviewM02(){
         window.location.hash = prev;
         return;
       }
-    } catch (e) { /* ignore */ }
+    } catch (_) {}
     if (kind === 'merged') {
       window.location.hash = workspace ? `#/workspace/${workspace}/m02/merged` : '#/m02/merged';
     } else if (kind === 'leads') {
@@ -96,28 +119,54 @@ export default function UploadPreviewM02(){
     }
   }
 
+  const btn = {
+    background: '#0f4258',
+    color: 'white',
+    border: 'none',
+    borderRadius: 6,
+    padding: '6px 12px',
+    cursor: 'pointer'
+  };
+
   return (
     <Layout>
       <div className="p-20">
-          <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button type="button" className="btn-ghost" onClick={goBack}>Back</button>
-            <h2 style={{ margin: 0 }}>Preview {kind === 'merged' ? 'Merged' : (kind==='leads' ? 'Leads Code' : 'Upload')}</h2>
-          </div>
+
+        {/* BACK BUTTON — DEFAULT STYLE RESTORED */}
+        <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button type="button" className="btn-ghost" onClick={goBack}>Back</button>
+          <h2 style={{ margin: 0 }}>Preview {kind === 'merged' ? 'Merged' : (kind==='leads' ? 'Leads Code' : 'Upload')}</h2>
+        </div>
+
         {message && <div className="mt-8 muted">{message}</div>}
 
         <div className="mt-8 mb-8">
-          <label>Per page: <select value={perPage} onChange={(e) => { const v = Number(e.target.value); fetchPage(1, v); }}>
-            <option value={10}>10</option>
-            <option value={20}>20</option>
-            <option value={50}>50</option>
-          </select></label>
-          <button type="button" className="ml-8" disabled={page <= 1} onClick={() => { const np = Math.max(1, page - 1); fetchPage(np, perPage); }}>Prev</button>
+          <label>Per page: 
+            <select value={perPage} onChange={(e) => { const v = Number(e.target.value); fetchPage(1, v); }}>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+          </label>
+
+          <button type="button" className="ml-8" style={btn} disabled={page <= 1} 
+            onClick={() => { const np = Math.max(1, page - 1); fetchPage(np, perPage); }}>
+            Prev
+          </button>
+
           <span className="mx-8">&nbsp;</span>
+
           <Pagination page={page} hasMore={hasMore} onPage={(np:number)=>fetchPage(np, perPage)} />
+
           <span className="mx-8">&nbsp;</span>
-          <button type="button" disabled={!hasMore} onClick={() => { const np = page + 1; fetchPage(np, perPage); }}>Next</button>
-          <button type="button" className="ml-8" onClick={() => fetchPage(page, perPage)}>Retry</button>
-          <button type="button" className="ml-8" onClick={() => setIsFullscreen(true)}>Zoom</button>
+
+          <button type="button" style={btn} disabled={!hasMore} 
+            onClick={() => { const np = page + 1; fetchPage(np, perPage); }}>
+            Next
+          </button>
+
+          <button type="button" className="ml-8" style={btn} onClick={() => fetchPage(page, perPage)}>Retry</button>
+          <button type="button" className="ml-8" style={btn} onClick={() => setIsFullscreen(true)}>Zoom</button>
         </div>
 
         {header && rows && (
@@ -137,7 +186,8 @@ export default function UploadPreviewM02(){
                     const displayIndex = (page - 1) * perPage + i + 1;
                     const selected = selectedRow === displayIndex;
                     return (
-                      <tr key={i} className={selected ? 'row-selected' : ''} onClick={() => setSelectedRow(selected ? null : displayIndex)}>
+                      <tr key={i} className={selected ? 'row-selected' : ''} 
+                        onClick={() => setSelectedRow(selected ? null : displayIndex)}>
                         <td className="preview-rownum-cell">{displayIndex}</td>
                         {r.map((c:any, j:number) => <td key={j}>{c}</td>)}
                       </tr>
@@ -155,22 +205,39 @@ export default function UploadPreviewM02(){
         <div className="fullscreen-overlay" role="dialog" aria-modal="true">
           <div className="fullscreen-panel">
             <div className="fullscreen-header">
+
               <div className="font-700">Preview {kind === 'merged' ? 'Merged' : (kind==='leads' ? 'Leads Code' : 'Upload')}</div>
+
               <div>
-                <label>Per page: <select value={perPage} onChange={(e) => { const v = Number(e.target.value); fetchPage(1, v); }}>
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                </select></label>
-                <button type="button" className="ml-8" disabled={page <= 1} onClick={() => { const np = Math.max(1, page - 1); fetchPage(np, perPage); }}>Prev</button>
+                <label>Per page: 
+                  <select value={perPage} onChange={(e) => { const v = Number(e.target.value); fetchPage(1, v); }}>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                  </select>
+                </label>
+
+                <button type="button" className="ml-8" style={btn} disabled={page <= 1} 
+                  onClick={() => { const np = Math.max(1, page - 1); fetchPage(np, perPage); }}>
+                  Prev
+                </button>
+
                 <span className="mx-8">&nbsp;</span>
+
                 <Pagination page={page} hasMore={hasMore} onPage={(np:number)=>fetchPage(np, perPage)} />
+
                 <span className="mx-8">&nbsp;</span>
-                <button type="button" disabled={!hasMore} onClick={() => { const np = page + 1; fetchPage(np, perPage); }}>Next</button>
-                <button type="button" className="ml-8" onClick={() => fetchPage(page, perPage)}>Retry</button>
-                <button type="button" className="ml-8" onClick={() => setIsFullscreen(false)}>Close</button>
+
+                <button type="button" style={btn} disabled={!hasMore} 
+                  onClick={() => { const np = page + 1; fetchPage(np, perPage); }}>
+                  Next
+                </button>
+
+                <button type="button" className="ml-8" style={btn} onClick={() => fetchPage(page, perPage)}>Retry</button>
+                <button type="button" className="ml-8" style={btn} onClick={() => setIsFullscreen(false)}>Close</button>
               </div>
             </div>
+
             <div className="fullscreen-body">
               {header && rows ? (
                 <div className="preview-table-container">
@@ -189,7 +256,8 @@ export default function UploadPreviewM02(){
                           const displayIndex = (page - 1) * perPage + i + 1;
                           const selected = selectedRow === displayIndex;
                           return (
-                            <tr key={i} className={selected ? 'row-selected' : ''} onClick={() => setSelectedRow(selected ? null : displayIndex)}>
+                            <tr key={i} className={selected ? 'row-selected' : ''} 
+                              onClick={() => setSelectedRow(selected ? null : displayIndex)}>
                               <td className="preview-rownum-cell">{displayIndex}</td>
                               {r.map((c:any, j:number) => <td key={j}>{c}</td>)}
                             </tr>
@@ -203,9 +271,11 @@ export default function UploadPreviewM02(){
                 <div className="p-18">Loading…</div>
               )}
             </div>
+
           </div>
         </div>
       )}
+
     </Layout>
   );
 }

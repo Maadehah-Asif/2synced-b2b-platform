@@ -138,7 +138,7 @@ textarea:focus {
 .module-card:hover, .module-card:focus {
   transform: translateY(-6px);
   box-shadow: 0 20px 40px rgba(1,8,114,0.12);
-  border-color: var(--header-primary);
+  border-color: var(--header-secondary);
 }
 .module-card:active { transform: translateY(-2px); }
 
@@ -174,14 +174,14 @@ textarea:focus {
 
 /* App root/layout */
 .app-root { min-height: 100vh; width: 100vw; }
-.app-layout { display: flex; padding-top: 80px; min-height: calc(100vh - 64px); background: var(--page-bg, #F9FBFE); width: 100%; }
-.app-main { flex: 1; padding: 20px; background: var(--page-bg, #F9FBFE); min-height: calc(100vh - 64px); overflow: auto; }
+.app-layout { display: flex; padding-top: 120px; min-height: calc(100vh - 72px); background: var(--page-bg, #F9FBFE); width: 100%; }
+.app-main { flex: 1; padding: 20px; background: var(--page-bg, #F9FBFE); min-height: calc(100vh - 120px); overflow: auto; }
 
 /* Prevent double scrollbars: delegate all scrolling to the inner app container */
 html, body, #root { height: 100%; margin: 0; padding: 0; overflow: hidden; }
 .app-root, .app-layout { height: 100%; }
 .app-main { overflow: auto; -webkit-overflow-scrolling: touch; }
-.card-pad { padding: 18px; max-height: calc(100vh - 140px); overflow: auto; box-sizing: border-box; }
+.card-pad { padding: 18px; max-height: calc(100vh - 200px); overflow: auto; box-sizing: border-box; }
 
 /* Spacing helpers */
 .ml-6 { margin-left: 6px; }

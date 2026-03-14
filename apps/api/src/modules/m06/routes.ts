@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-	stats,
+ 	/* stats (already exported below) */
 	listCampaigns,
 	createCampaign,
 	updateCampaign,
@@ -32,10 +32,16 @@ import {
 	roiDashboard,
 	roiByRun,
 	forecast,
+	forecastViaAgent,
+	latestRun,
+	runList,
+	stats,
 	journeyDetail,
+	listModule6Leads,
+	importModule6LeadsCSV,
+	searchModule6Leads,
+	listTouchesDebug,
 } from './controllers.js';
-import mongoose from 'mongoose';
-import Lead from '../m01/models/Lead.js';
 import { seedHttp, demoProjects } from './seedController.js';
 import { createDeal, listDeals, updateDeal, archiveDeal, deleteDealPermanent, importDealsCSV } from './controllers.js';
 
@@ -44,7 +50,7 @@ const router = Router();
 // Basic module routes
 router.get('/', (_req, res) => res.json({ ok: true, module: 'm06' }));
 // GET /m06/stats?projectId=...  (projectId may be workspaceId)
-router.get('/stats', stats);
+ // stats already declared earlier; keep route as is
 // POST /m06/seed  -> run demo seeder (safe, non-destructive by default)
 router.post('/seed', seedHttp);
 // GET /m06/demo-projects -> list projects with demo data
@@ -62,7 +68,10 @@ router.get('/journey/:id', journeyDetail);
 router.get('/run/:id/results', getRunResults);
 router.get('/roi', roiDashboard);
 router.get('/roi-by-run', roiByRun);
-router.get('/forecast', forecast);
+router.post('/forecast', forecast);
+router.post('/forecast-agent', forecastViaAgent);
+router.get('/latest-run', latestRun);
+router.get('/run-list', runList);
 // Campaign management
 router.get('/campaigns', listCampaigns);
 router.post('/campaigns', createCampaign);
@@ -95,31 +104,11 @@ router.post('/campaign-touches/:id/archive', archiveCampaignTouch);
 router.delete('/campaign-touches/:id/permanent', deleteCampaignTouchPermanent);
 router.post('/campaign-touches/import/csv', importCampaignTouches);
 
-// Lightweight lead search for autocomplete (by numeric id or partial company/email fields)
-router.get('/leads/search', async (req, res) => {
-	try {
-		const { projectId, q } = req.query as { projectId?: string; q?: string };
-		// projectId currently unused; placeholder for future multi-tenancy filter
-		const query = (q || '').trim();
-		if (!query) return res.json({ leads: [] });
-		let mongoQuery: any = {};
-		if (/^\d+$/.test(query)) {
-			// numeric search by lead_id
-			mongoQuery.lead_id = Number(query);
-		} else {
-			// partial match across First_Name, Last_Name, Company
-			const regex = new RegExp(query.replace(/[-/\\^$*+?.()|[\]{}]/g, ''), 'i');
-			mongoQuery.$or = [
-				{ First_Name: regex },
-				{ Last_Name: regex },
-				{ Company: regex },
-			];
-		}
-		const leads = await Lead.find(mongoQuery).limit(15).select('lead_id First_Name Last_Name Company').lean();
-		return res.json({ leads });
-	} catch (err:any) {
-		return res.status(500).json({ error: 'lead_search_failed', message: err.message });
-	}
-});
+// Debug: touch counts and sample rows
+router.get('/debug/touches', listTouchesDebug);
+
+router.get('/leads', listModule6Leads);
+router.post('/leads/import/csv', importModule6LeadsCSV);
+router.get('/leads/search', searchModule6Leads);
 
 export default router;

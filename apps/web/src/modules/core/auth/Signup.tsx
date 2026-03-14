@@ -17,6 +17,22 @@ export default function Signup(){
     e.preventDefault();
     setLoading(true); setError(null);
     try{
+      // empty-field validation
+      if (!email) {
+        setError('Email is required.');
+        setLoading(false);
+        return;
+      }
+      if (!password) {
+        setError('Password is required.');
+        setLoading(false);
+        return;
+      }
+      if (!confirmPassword) {
+        setError('Please confirm your password.');
+        setLoading(false);
+        return;
+      }
       if (password !== confirmPassword) {
         setLoading(false);
         setError('Passwords do not match. Please re-enter them.');
@@ -71,24 +87,31 @@ export default function Signup(){
             required
           />
 
-          <div style={{ marginTop: 8 }}>
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input type="checkbox" checked={agree} onChange={(e)=>setAgree(e.target.checked)} />
-              <span style={{ color: 'var(--muted)' }}>Agree to our <a href="#">Terms of use</a> and <a href="#">Privacy Policy</a></span>
-            </label>
-          </div>
+            {/* Temporarily disabled: agreement & newsletter checkboxes
+              and reCAPTCHA placeholder. Keep for future restore. */}
+          {false && (
+            <>
+              <div style={{ marginTop: 8 }}>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input type="checkbox" checked={agree} onChange={(e)=>setAgree(e.target.checked)} />
+                  <span style={{ color: 'var(--muted)' }}>Agree to our <a href="#">Terms of use</a> and <a href="#">Privacy Policy</a></span>
+                </label>
+              </div>
 
-          <div style={{ marginTop: 8 }}>
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input type="checkbox" checked={newsletter} onChange={(e)=>setNewsletter(e.target.checked)} />
-              <span style={{ color: 'var(--muted)' }}>Subscribe to our monthly newsletter</span>
-            </label>
-          </div>
+              <div style={{ marginTop: 8 }}>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input type="checkbox" checked={newsletter} onChange={(e)=>setNewsletter(e.target.checked)} />
+                  <span style={{ color: 'var(--muted)' }}>Subscribe to our monthly newsletter</span>
+                </label>
+              </div>
 
-          {/* reCAPTCHA placeholder */}
-          <div style={{ marginTop: 12, border: '1px solid var(--border)', padding: 10, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ color: 'var(--muted)' }}>[ reCAPTCHA widget placeholder ]</span>
-          </div>
+              {/* reCAPTCHA placeholder */}
+              <div style={{ marginTop: 12, border: '1px solid var(--border)', padding: 10, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ color: 'var(--muted)' }}>[ reCAPTCHA widget placeholder ]</span>
+              </div>
+            </>
+          )}
+
 
           {error && <div className="auth-error" style={{ marginTop: 12 }}>{error}</div>}
           <button className="auth-button auth-button-primary" type="submit" disabled={loading} style={{ marginTop: 12 }}>{loading ? 'Signing up...' : 'Create an account'}</button>

@@ -4,17 +4,15 @@ import ModuleBackButton from '../../components/ModuleBackButton';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-function getWorkspaceFromHash(){
-  const m = window.location.hash.match(/workspace=([a-f0-9]+)/i);
-  return m ? m[1] : null;
-}
+import { getWorkspaceIdFromHash } from '../../utils/workspace';
 
 export default function LeadsList(){
-  const [workspace] = useState<string|null>(() => getWorkspaceFromHash());
+  const [workspace] = useState<string|null>(() => getWorkspaceIdFromHash());
   const [items, setItems] = useState<any[]>([]);
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<'createdAt_desc'|'createdAt_asc'|'name_asc'|'name_desc'>('createdAt_desc');
   const [message, setMessage] = useState<string| null>(null);
+  const [retryAction, setRetryAction] = useState<null | (() => void)>(null);
   const [details, setDetails] = useState<any|null>(null);
   const [mergedOptions, setMergedOptions] = useState<any[]>([]);
   const [selMerged, setSelMerged] = useState<string>('');
@@ -22,6 +20,9 @@ export default function LeadsList(){
   const [creating, setCreating] = useState<boolean>(false);
 
   useEffect(() => { fetchList(); fetchMerged(); }, [workspace, sort]);
+  const setPreviewReturn = () => {
+    try { sessionStorage.setItem('m01_preview_return', window.location.hash || ''); } catch (e) { /* ignore */ }
+  };
 
   async function fetchList(){
     if (!workspace) { setMessage('Workspace required'); return; }
@@ -44,6 +45,7 @@ export default function LeadsList(){
   async function createLeads(){
     if (!workspace) { setMessage('Workspace required'); return; }
     if (!selMerged) { setMessage('Select a merged CSV'); return; }
+    setRetryAction(null);
     setCreating(true);
     setMessage(null);
     try{
@@ -55,8 +57,8 @@ export default function LeadsList(){
       });
       const j = await res.json();
       if (j?.ok) { setNewName(''); setSelMerged(''); await fetchList(); }
-      else setMessage(j?.error || 'failed to generate');
-    }catch(e){ setMessage('network error'); }
+      else { setMessage(j?.error || 'failed to generate'); setRetryAction(()=>createLeads); }
+    }catch(e){ setMessage('network error'); setRetryAction(()=>createLeads); }
     setCreating(false);
   }
 
@@ -95,7 +97,12 @@ export default function LeadsList(){
             <option value="name_desc">Name Z→A</option>
           </select>
         </div>
-        {message && <div className="mt-8 muted">{message}</div>}
+        {message && (
+          <div className="mt-8 muted" style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <span>{message}</span>
+            {retryAction && <button className="btn-ghost btn-sm" onClick={retryAction}>Retry</button>}
+          </div>
+        )}
         <ul className="mt-12">
           {sorted.map((m:any) => (
             <li key={m._id} className="list-item">
@@ -103,9 +110,14 @@ export default function LeadsList(){
                 <strong>{m.name || m.filename}</strong> — {new Date(m.createdAt).toLocaleString()}
               </div>
               <div>
-                <button type="button" className="ml-6" onClick={() => {
-                  if(workspace) window.location.hash = `#/m01/leads/preview/${m._id}?workspace=${workspace}`; else window.location.hash = `#/m01/leads/preview/${m._id}`;
-                }}>Preview</button>
+                <button
+                  type="button"
+                  className="ml-6"
+                  onClick={() => {
+                    setPreviewReturn();
+                    if (workspace) window.location.hash = `#/workspace/${workspace}/m01/leads/preview/${m._id}`; else window.location.hash = `#/m01/leads/preview/${m._id}`;
+                  }}
+                >Preview</button>
                 <button type="button" className="ml-6" onClick={async () => {
                   const res = await fetch(`${API_URL}/m01/leads/${m._id}?workspace=${workspace}`);
                   const j = await res.json();

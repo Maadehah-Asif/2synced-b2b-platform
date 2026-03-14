@@ -16,6 +16,17 @@ export default function Login() {
     setLoading(true);
     setError(null);
     try {
+      // client-side empty-field validation
+      if (!email) {
+        setError('Email is required.');
+        setLoading(false);
+        return;
+      }
+      if (!password) {
+        setError('Password is required.');
+        setLoading(false);
+        return;
+      }
       const res = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -63,10 +74,13 @@ export default function Login() {
             />
             <input className="auth-input" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
           </div>
-          <div className="auth-row">
-            <input id="remember" type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-            <label htmlFor="remember">Remember me</label>
-          </div>
+          {/** Temporarily disabled: Remember me checkbox and label */}
+          {false && (
+            <div className="auth-row">
+              <input id="remember" type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+              <label htmlFor="remember">Remember me</label>
+            </div>
+          )}
           {error && <div className="auth-error">{error}</div>}
           <button className="auth-button auth-button-primary" disabled={loading}>
             {loading ? "Logging in..." : "Login"}

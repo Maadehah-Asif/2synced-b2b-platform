@@ -15,27 +15,32 @@ import MergedList from './modules/m01/MergedList'
 import LeadsList from './modules/m01/LeadsList'
 import MergeCSV from './modules/m01/MergeCSV'
 import Module6Dropdown from './modules/m06/Module6Dropdown'
-import Element1Page from './modules/m06/Element1Page'
+import Module6Main from './modules/m06/Module6Main'
 import Module6Home from './modules/m06/Module6Home'
 import Module1Home from './modules/m01/Module1Home'
-import Element2Page from './modules/m06/Element2Page'
+import Module2Home from './modules/m02/Module2Home'
 import RoiDashboard from './modules/m06/RoiDashboard'
-import Element4Page from './modules/m06/Element4Page'
 import CampaignManager from './modules/m06/CampaignManager'
 import ViewCampaigns from './modules/m06/ViewCampaigns'
 import CampaignTouchInput from './modules/m06/CampaignTouchInput'
 import CampaignTouchViewer from './modules/m06/CampaignTouchViewer'
+import Module6Leads from './modules/m06/Module6Leads'
 import DealInput from './modules/m06/DealInput'
 import DealViewer from './modules/m06/DealViewer'
 import JourneyPreview from './modules/m06/JourneyPreview'
 import RunAttributionScreen from './modules/m06/RunAttributionScreen'
 import AllocationDashboard from './modules/m06/AllocationDashboard'
 import RoiCalculation from './modules/m06/RoiCalculation'
-import Module7Home from './modules/m07/Module7Home'
-import FunnelHealthPage from './modules/m07/FunnelHealthPage'
-import LeakagePredictionPage from './modules/m07/LeakagePredictionPage'
-import FatigueMonitorPage from './modules/m07/FatigueMonitorPage'
-import RecommendationsPage from './modules/m07/recommendations/RecommendationsPage'
+import GenerateIntent from './modules/m02/GenerateIntent'
+import Prioritization from './modules/m02/Prioritization'
+import IntentForecast from './modules/m02/IntentForecast'
+import UploadM02 from './modules/m02/Upload'
+import UploadPreviewM02 from './modules/m02/UploadPreview'
+import MergedListM02 from './modules/m02/MergedList'
+import LeadsListM02 from './modules/m02/LeadsList'
+import MergeCSVM02 from './modules/m02/MergeCSV'
+import ForecastPage from './modules/m06/ForecastPage'
+import UploadWizardM02 from './modules/m02/UploadWizard'
 
 function App() {
   const [route, setRoute] = useState<string>(window.location.hash || '#/login')
@@ -62,41 +67,62 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m06/roi-calc')) return <RoiCalculation />
   if (route.startsWith('#/workspace/') && route.includes('/m06/roi')) return <RoiDashboard />
   if (route.startsWith('#/workspace/') && route.includes('/m06/element3')) return <RoiDashboard />
-  if (route.startsWith('#/workspace/') && route.includes('/m06/element2')) return <Element2Page />
-  if (route.startsWith('#/workspace/') && route.includes('/m06/element1')) return <Element1Page />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/element1')) return <Module6Main />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/forecast')) return <ForecastPage />
   // Module 6 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m06') && !route.includes('/m06/')) return <Module6Home />
   if (route.startsWith('#/workspace/') && route.includes('/m06/campaigns/manage')) return <CampaignManager />
   if (route.startsWith('#/workspace/') && route.includes('/m06/campaigns')) return <ViewCampaigns />
   if (route.startsWith('#/workspace/') && route.includes('/m06/touches/input')) return <CampaignTouchInput />
   if (route.startsWith('#/workspace/') && route.includes('/m06/touches')) return <CampaignTouchViewer />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/leads')) return <Module6Leads />
   if (route.startsWith('#/workspace/') && route.includes('/m06/deals/input')) return <DealInput />
   if (route.startsWith('#/workspace/') && route.includes('/m06/deals')) return <DealViewer />
   if (route.startsWith('#/workspace/') && route.includes('/m06/journeys')) return <JourneyPreview />
   if (route.startsWith('#/workspace/') && route.includes('/m06/run-attribution')) return <RunAttributionScreen />
   if (route.startsWith('#/workspace/') && route.includes('/m06/allocation')) return <AllocationDashboard />
-  if (route.startsWith('#/workspace/') && route.includes('/m06/element4')) return <Element4Page />
-  if (route.startsWith('#/workspace/') && route.includes('/m06/')) return <Element1Page />
-  // Module 7 workspace routes and home
-  if (route.startsWith('#/workspace/') && route.includes('/module7/funnel-health')) return <FunnelHealthPage />
-  if (route.startsWith('#/workspace/') && route.includes('/module7/leakage-prediction')) return <LeakagePredictionPage />
-  if (route.startsWith('#/workspace/') && route.includes('/module7/fatigue-monitor')) return <FatigueMonitorPage />
-  if (route.startsWith('#/workspace/') && route.includes('/module7/recommendations')) return <RecommendationsPage />
-  if (route.startsWith('#/workspace/') && route.includes('/module7')) return <Module7Home />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/')) return <Module6Main />
   // Module 1 workspace routes and home
-  if (route.startsWith('#/workspace/') && route.includes('/m01/merge-columns')) return <MergeCSV />
+  if (route.startsWith('#/workspace/') && route.includes('/m01/upload/preview')) return <UploadPreview />
+  if (route.startsWith('#/workspace/') && route.includes('/m01/merged/preview')) return <UploadPreview />
   if (route.startsWith('#/workspace/') && route.includes('/m01/leads/preview')) return <UploadPreview />
+  if (route.startsWith('#/workspace/') && route.includes('/m01/merge-columns')) return <MergeCSV />
   if (route.startsWith('#/workspace/') && route.includes('/m01/merged')) return <MergedList />
   if (route.startsWith('#/workspace/') && route.includes('/m01/leads')) return <LeadsList />
   if (route.startsWith('#/workspace/') && route.includes('/m01/upload')) return <Upload />
+  // Module 02 routes (duplicate Module 1 flows + intent features)
+  if (route.startsWith('#/workspace/') && route.includes('/m02/upload/preview')) return <UploadPreviewM02 />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/merged/preview')) return <UploadPreviewM02 />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/leads/preview')) return <UploadPreviewM02 />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/merge-columns')) return <MergeCSVM02 />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/merged')) return <MergedListM02 />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/leads')) return <LeadsListM02 />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/upload')) return <UploadM02 />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/generate')) return <GenerateIntent />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/prioritization')) return <Prioritization />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/intent-forecast')) return <IntentForecast />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/upload-wizard')) return <UploadWizardM02 />
+  // Module 2 workspace home (no trailing slash)
+  if (route.startsWith('#/workspace/') && route.includes('/m02') && !route.includes('/m02/')) return <Module2Home />
   // Module 1 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m01') && !route.includes('/m01/')) return <Module1Home />
   if (route.startsWith('#/workspace/')) return <WorkspaceDetail />
   if (route.startsWith('#/workspaces')) return <WorkspacesList />
 
   // Existing m01 routes
-  if (route.startsWith('#/m01/merge-columns')) return <MergeCSV />
+  // Module 02 (non-workspace)
+  if (route.startsWith('#/m02/upload/preview')) return <UploadPreviewM02 />
+  if (route.startsWith('#/m02/merged/preview')) return <UploadPreviewM02 />
+  if (route.startsWith('#/m02/leads/preview')) return <UploadPreviewM02 />
+  if (route.startsWith('#/m02/merge-columns')) return <MergeCSVM02 />
+  if (route.startsWith('#/m02/merged')) return <MergedListM02 />
+  if (route.startsWith('#/m02/leads')) return <LeadsListM02 />
+  if (route.startsWith('#/m02/upload')) return <UploadM02 />
+  // Module 01 (non-workspace)
+  if (route.startsWith('#/m01/upload/preview')) return <UploadPreview />
+  if (route.startsWith('#/m01/merged/preview')) return <UploadPreview />
   if (route.startsWith('#/m01/leads/preview')) return <UploadPreview />
+  if (route.startsWith('#/m01/merge-columns')) return <MergeCSV />
   if (route.startsWith('#/m01/merged')) return <MergedList />
   if (route.startsWith('#/m01/leads')) return <LeadsList />
   if (route.startsWith('#/m01/upload')) return <Upload />

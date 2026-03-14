@@ -4,18 +4,16 @@ import ModuleBackButton from '../../components/ModuleBackButton';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-function getWorkspaceFromHash() {
-  const m = window.location.hash.match(/workspace=([a-f0-9]+)/i);
-  return m ? m[1] : null;
-}
+import { getWorkspaceIdFromHash } from '../../utils/workspace';
 
 function getKindAndIdFromHash(): { kind: 'upload' | 'merged' | 'leads', id: string | null }{
   const h = window.location.hash;
-  let m = h.match(/#\/m01\/upload\/preview\/([^\?\/]+)/i);
+  // support both path-style with workspace prefix and older root-style
+  let m = h.match(/#\/workspace\/[^^\/]+\/m01\/upload\/preview\/([^\?\/]+)/i) || h.match(/#\/m01\/upload\/preview\/([^\?\/]+)/i);
   if (m) return { kind: 'upload', id: m[1] };
-  m = h.match(/#\/m01\/merged\/preview\/([^\?\/]+)/i);
+  m = h.match(/#\/workspace\/[^^\/]+\/m01\/merged\/preview\/([^\?\/]+)/i) || h.match(/#\/m01\/merged\/preview\/([^\?\/]+)/i);
   if (m) return { kind: 'merged', id: m[1] };
-  m = h.match(/#\/m01\/leads\/preview\/([^\?\/]+)/i);
+  m = h.match(/#\/workspace\/[^^\/]+\/m01\/leads\/preview\/([^\?\/]+)/i) || h.match(/#\/m01\/leads\/preview\/([^\?\/]+)/i);
   if (m) return { kind: 'leads', id: m[1] };
   return { kind: 'upload', id: null };
 }
@@ -47,7 +45,7 @@ function Pagination({ page, hasMore, onPage }: { page: number, hasMore: boolean,
 }
 
 export default function UploadPreview(){
-  const [workspace] = useState<string | null>(() => getWorkspaceFromHash());
+  const [workspace] = useState<string | null>(() => getWorkspaceIdFromHash());
   const [{ kind, id: previewId }] = useState(() => getKindAndIdFromHash());
   const [page, setPage] = useState<number>(1);
   const [perPage, setPerPage] = useState<number>(20);
@@ -86,15 +84,29 @@ export default function UploadPreview(){
   }
 
   function goBack(){
-    if(workspace) window.location.hash = `#/m01/upload?workspace=${workspace}`;
-    else window.location.hash = '#/m01/upload';
+    try {
+      const prev = sessionStorage.getItem('m01_preview_return');
+      sessionStorage.removeItem('m01_preview_return');
+      if (prev) {
+        window.location.hash = prev;
+        return;
+      }
+    } catch (e) { /* ignore */ }
+    // fallback by kind
+    if (kind === 'merged') {
+      window.location.hash = workspace ? `#/workspace/${workspace}/m01/merged` : '#/m01/merged';
+    } else if (kind === 'leads') {
+      window.location.hash = workspace ? `#/workspace/${workspace}/m01/leads` : '#/m01/leads';
+    } else {
+      window.location.hash = workspace ? `#/workspace/${workspace}/m01/upload` : '#/m01/upload';
+    }
   }
 
   return (
     <Layout>
       <div className="p-20">
-          <div className="mb-12" style={{ display: 'flex', alignItems: 'center' }}>
-            <ModuleBackButton toSuffix="/m01" />
+          <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button type="button" className="btn-ghost" onClick={goBack}>Back</button>
             <h2 style={{ margin: 0 }}>Preview {kind === 'merged' ? 'Merged' : (kind==='leads' ? 'Leads Code' : 'Upload')}</h2>
           </div>
         {message && <div className="mt-8 muted">{message}</div>}

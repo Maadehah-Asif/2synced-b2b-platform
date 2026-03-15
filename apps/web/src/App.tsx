@@ -19,6 +19,16 @@ import Module6Main from './modules/m06/Module6Main'
 import Module6Home from './modules/m06/Module6Home'
 import Module1Home from './modules/m01/Module1Home'
 import Module2Home from './modules/m02/Module2Home'
+import Module7Home from './modules/m07/Module7Home'
+import LeadAddUpload from './modules/m07/LeadAddUpload'
+import LeadList from './modules/m07/LeadList'
+import LeadDetail from './modules/m07/LeadDetail'
+import StageAddUpload from './modules/m07/StageAddUpload'
+import StageList from './modules/m07/StageList'
+import StageDetail from './modules/m07/StageDetail'
+import InteractionAddUpload from './modules/m07/InteractionAddUpload'
+import InteractionList from './modules/m07/InteractionList'
+import InteractionDetail from './modules/m07/InteractionDetail'
 import RoiDashboard from './modules/m06/RoiDashboard'
 import CampaignManager from './modules/m06/CampaignManager'
 import ViewCampaigns from './modules/m06/ViewCampaigns'
@@ -104,6 +114,26 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m02/upload-wizard')) return <UploadWizardM02 />
   // Module 2 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m02') && !route.includes('/m02/')) return <Module2Home />
+  // Module 7 workspace home (no trailing slash)
+  if (route.startsWith('#/workspace/') && route.includes('/m07') && !route.includes('/m07/')) return <Module7Home />
+  // More specific m07 routes first so upload/list resolve before detail
+  if (route.startsWith('#/workspace/') && route.includes('/m07/leads/upload')) return <LeadAddUpload />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/leads') && !route.includes('/m07/leads/')) return <LeadList />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/leads/')) return <LeadDetail />
+  // m07 stage history routes
+  if (route.startsWith('#/workspace/') && route.includes('/m07/stages/upload')) return <StageAddUpload />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/stages') && !route.includes('/m07/stages/')) return <StageList />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/stages/')) return <StageDetail />
+  // m07 interaction routes
+  if (route.startsWith('#/workspace/') && route.includes('/m07/interactions/upload')) return <InteractionAddUpload />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/interactions') && !route.includes('/m07/interactions/')) return <InteractionList />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/interactions/')) return <InteractionDetail />
+  if (route.startsWith('#/m07/leads/')) return <LeadDetail />
+  if (route.startsWith('#/m07/leads')) return <LeadList />
+  if (route.startsWith('#/m07/leads/upload')) return <LeadAddUpload />
+  if (route.startsWith('#/m07/stages/upload')) return <StageAddUpload />
+  if (route.startsWith('#/m07/stages/') ) return <StageDetail />
+  if (route.startsWith('#/m07/stages')) return <StageList />
   // Module 1 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m01') && !route.includes('/m01/')) return <Module1Home />
   if (route.startsWith('#/workspace/')) return <WorkspaceDetail />

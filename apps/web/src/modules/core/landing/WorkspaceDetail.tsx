@@ -127,9 +127,21 @@ export default function WorkspaceDetail() {
                       key={modIndex}
                       role="button"
                       tabIndex={0}
-                      onClick={() => (window.location.hash = path)}
+                      onClick={() => {
+                        console.log('navigating to', path);
+                        window.location.hash = path;
+                        setTimeout(() => {
+                          if (window.location.hash !== path) window.location.assign(path);
+                        }, 120);
+                      }}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") window.location.hash = path;
+                        if (e.key === "Enter") {
+                          console.log('navigating to (kbd)', path);
+                          window.location.hash = path;
+                          setTimeout(() => {
+                            if (window.location.hash !== path) window.location.assign(path);
+                          }, 120);
+                        }
                       }}
                       style={{
                         borderRadius: 12,

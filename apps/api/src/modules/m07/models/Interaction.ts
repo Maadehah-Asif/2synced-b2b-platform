@@ -1,24 +1,3 @@
-import mongoose from 'mongoose';
-
-const InteractionSchema = new mongoose.Schema(
-  {
-    workspace_id: { type: mongoose.Types.ObjectId, required: true, index: true },
-    lead_id: { type: mongoose.Types.ObjectId, required: true, index: true },
-    timestamp: { type: Date, required: true, index: true },
-    interaction_type: { type: String, required: true },
-    channel: { type: String },
-    campaign_id: { type: mongoose.Types.ObjectId },
-    outcome: { type: String },
-    engagement_score: { type: Number },
-    meta: { type: mongoose.Schema.Types.Mixed },
-    archived: { type: Boolean, default: false, index: true },
-  },
-  { timestamps: true }
-);
-
-InteractionSchema.index({ workspace_id: 1, lead_id: 1, timestamp: 1, interaction_type: 1 }, { unique: false });
-
-export default mongoose.model('FunnelInteraction', InteractionSchema, 'funnel_interactions');
 import mongoose, { Schema, Types, Model } from 'mongoose';
 
 export interface InteractionDoc {

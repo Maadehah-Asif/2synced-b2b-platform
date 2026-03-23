@@ -55,3 +55,5 @@ FunnelLeadSchema.index({ workspace_id: 1, lead_id: 1 }, { unique: true });
 FunnelLeadSchema.index({ workspace_id: 1, created_at: -1 });
 
 export const FunnelLead: Model<FunnelLeadDoc> = (mongoose.models.FunnelLead as Model<FunnelLeadDoc>) || mongoose.model<FunnelLeadDoc>('FunnelLead', FunnelLeadSchema);
+
+export default FunnelLead;

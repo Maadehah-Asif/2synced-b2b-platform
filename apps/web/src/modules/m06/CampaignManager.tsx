@@ -352,7 +352,7 @@ export default function CampaignManager(){
       <main className="page-root">
         <h2 style={{ marginTop: 16 }}>Add Campaigns</h2>
         <div style={{ marginTop: 8 }}>
-          <ModuleBackButton toSuffix="/m06" />
+          <ModuleBackButton toSuffix="" />
         </div>
         {!workspaceId && <div style={{ fontSize: 13 }}>Open a workspace to manage campaigns.</div>}
         <div style={{ marginTop: 12 }}>

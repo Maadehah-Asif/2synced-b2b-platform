@@ -213,7 +213,7 @@ export default function UploadWizard(){
     <Layout>
       <main className="page-root">
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <ModuleBackButton toSuffix="/m02" />
+          <ModuleBackButton toSuffix="" />
           <div>
             <h2 style={{ marginTop:16 }}>Module 2 — Upload Wizard</h2>
             <div style={{ fontSize:12, color:'#555' }}>Preview and map headers before import. Required columns will be renamed to the expected schema on upload.</div>

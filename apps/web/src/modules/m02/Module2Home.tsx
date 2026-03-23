@@ -1,124 +1,134 @@
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
-import { useState } from 'react';
 import { getWorkspaceIdFromHash } from '../../utils/workspace';
-
-const API_URL = import.meta.env.VITE_API_URL || '';
 
 export default function Module2Home() {
   const wid = getWorkspaceIdFromHash();
-  const [seeding, setSeeding] = useState(false);
-  const [seedMsg, setSeedMsg] = useState<string | null>(null);
 
   function go(path: string) {
     if (wid) window.location.hash = path.replace(':workspaceId', wid);
     else window.location.hash = '#/workspaces';
   }
 
-  async function seedDemo() {
-    if (!wid) {
-      window.location.hash = '#/workspaces';
-      return setSeedMsg('workspace not found');
-    }
-    setSeeding(true);
-    setSeedMsg(null);
-    try {
-      const res = await fetch(`${API_URL}/m02/seed-demo`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspace: wid })
-      });
-      const j = await res.json();
-      setSeeding(false);
-      if (j?.ok) {
-        setSeedMsg(`Seed created runId=${j.runId}`);
-        window.location.hash = `#/workspace/${wid}/m02/prioritization`;
-      } else setSeedMsg(j?.error || 'seed failed');
-    } catch (e) {
-      setSeeding(false);
-      setSeedMsg('network error');
-    }
-  }
-
-  /* ------- CARD COMPONENT ------- */
-  function Card({
-    title,
-    desc,
-    onClick
-  }: {
-    title: string;
-    desc: string;
-    onClick: () => void;
-  }) {
-    return (
-      <div
-        onClick={onClick}
-        style={{
-          cursor: 'pointer',
-          borderRadius: 14,
-          padding: '26px 26px',
-          background: 'linear-gradient(135deg, #0f4258 0%, #083242 100%)',
-          color: 'white',
-          minHeight: 150,      // 🔥 bigger height
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          boxShadow: '0 6px 16px rgba(0,0,0,0.1)',
-          transition: '0.25s ease',
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-4px)')}
-        onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-      >
-        <div style={{ fontSize: 20, fontWeight: 700 }}>{title}</div>
-        <div style={{ fontSize: 14, marginTop: 8, opacity: 0.9 }}>{desc}</div>
-      </div>
-    );
-  }
-
   return (
     <Layout>
-      <main className="page-root">
-
+      <main className="page-root" style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix="" label="Back" />
-          <h2 style={{ marginTop: 16 }}>Module 2 — Home</h2>
+          <h2 style={{ marginTop: 16 }}>Module 2</h2>
         </div>
 
-        <div style={{ fontSize: 12, color: '#555' }}>Quick access to Module 2 features.</div>
-
-        {/* ⭐ FIXED 4 CARDS PER ROW + BIGGER WIDTH */}
-        <div
+        <section
           style={{
-            marginTop: 20,
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',   // ⭐ 4 cards per row
-            gap: '20px',
+            marginTop: 18,
+            borderRadius: 24,
+            overflow: 'hidden',
+            border: '1px solid rgba(15,66,88,0.08)',
+            boxShadow: '0 20px 46px rgba(13,30,60,0.08)',
+            background: 'linear-gradient(135deg, rgba(18,59,87,0.98) 0%, rgba(15,66,88,0.94) 52%, rgba(72,177,217,0.24) 100%)',
+            color: '#fff',
           }}
         >
+          <div style={{ padding: 28 }}>
+            <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              M02
+            </div>
+            <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>Intent Signals & Prioritization</h1>
+            <div style={{ maxWidth: 760, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
+              Module 2 turns lead and behavior data into prioritization signals. Use it when the question is not just who exists in the pipeline, but who is most worth acting on next.
+            </div>
+          </div>
+        </section>
 
-          <Card title="Upload" desc="Import lead data files." onClick={() => go(`#/workspace/:workspaceId/m02/upload`)} />
+        <section
+          style={{
+            marginTop: 18,
+            display: 'grid',
+            gridTemplateColumns: '1.15fr 1fr',
+            gap: 18,
+          }}
+        >
+          <div
+            style={{
+              borderRadius: 22,
+              padding: 22,
+              background: 'linear-gradient(180deg, rgba(255,255,255,1), rgba(247,250,253,0.98))',
+              border: '1px solid rgba(15,66,88,0.08)',
+              boxShadow: '0 16px 38px rgba(13,30,60,0.06)',
+            }}
+          >
+            <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(15,66,88,0.08)', color: 'var(--header-secondary)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Insight Tools
+            </div>
+            <h3 style={{ margin: '14px 0 12px', fontSize: 28, color: '#0B2540' }}>Where to work inside M02</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+              <InsightCard title="Generate Intent Scores" desc="Run the scoring pipeline on prepared datasets before reviewing prioritization and forecast outputs." onClick={() => go(`#/workspace/:workspaceId/m02/generate`)} />
+              <InsightCard title="Prioritization Dashboard" desc="Rank leads by conversion likelihood and identify who deserves immediate attention." onClick={() => go(`#/workspace/:workspaceId/m02/prioritization`)} />
+              <InsightCard title="Intent Forecast" desc="Review projected engagement direction and anticipate where interest is increasing." onClick={() => go(`#/workspace/:workspaceId/m02/intent-forecast`)} />
+            </div>
+          </div>
 
-          <Card title="Upload Wizard" desc="Step-by-step guided upload." onClick={() => go(`#/workspace/:workspaceId/m02/upload-wizard`)} />
-
-          <Card title="Intent Scores" desc="Generate & analyze intent." onClick={() => go(`#/workspace/:workspaceId/m02/leads`)} />
-
-          <Card title="Merged List" desc="View all merged records." onClick={() => go(`#/workspace/:workspaceId/m02/merged`)} />
-
-
-          
-
-          <Card title="Prioritization Dashboard" desc="Rank leads by conversion likelihood." onClick={() => go(`#/workspace/:workspaceId/m02/prioritization`)} />
-
-          
-
-          <Card title="Intent Forecast" desc="Predict future engagement." onClick={() => go(`#/workspace/:workspaceId/m02/intent-forecast`)} />
-
-          
-        </div>
-
-        {seedMsg && <div style={{ marginTop: 8, fontSize: 13 }}>{seedMsg}</div>}
-
+          <div
+            style={{
+              borderRadius: 22,
+              padding: 22,
+              background: 'linear-gradient(180deg, rgba(243,248,252,0.98), rgba(255,255,255,1))',
+              border: '1px solid rgba(15,66,88,0.08)',
+              boxShadow: '0 16px 38px rgba(13,30,60,0.05)',
+            }}
+          >
+            <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(72,177,217,0.12)', color: '#0B2540', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Useful Context
+            </div>
+            <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>What changed</h3>
+            <div style={{ display: 'grid', gap: 12 }}>
+              <MiniInfo title="Operational pages moved" text="Uploads, merged records, and raw lead-facing management now live in the workspace Data Hub." />
+              <MiniInfo title="This page is for scoring and outputs" text="Stay here when you want to generate intent scores, review prioritization, and inspect forecast-oriented views." />
+              <MiniInfo title="Best use case" text="Use M02 after lead intake is stable and you want to decide where sales or marketing effort should focus next." />
+            </div>
+          </div>
+        </section>
       </main>
     </Layout>
+  );
+}
+
+function InsightCard({ title, desc, onClick }: { title: string; desc: string; onClick: () => void }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        cursor: 'pointer',
+        borderRadius: 18,
+        padding: '22px',
+        background: 'linear-gradient(145deg, #0f4258 0%, #195b74 50%, #1e6b88 100%)',
+        color: 'white',
+        minHeight: 160,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        boxShadow: '0 10px 24px rgba(0,0,0,0.10)',
+        transition: '0.25s ease',
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-4px)')}
+      onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+    >
+      <div>
+        <div style={{ fontSize: 18, fontWeight: 800 }}>{title}</div>
+        <div style={{ fontSize: 13, marginTop: 8, opacity: 0.9, lineHeight: 1.6 }}>{desc}</div>
+      </div>
+      <div style={{ marginTop: 18, display: 'inline-flex', alignItems: 'center', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.14)', fontSize: 12, fontWeight: 800, alignSelf: 'flex-start' }}>
+        Open Insight
+      </div>
+    </div>
+  );
+}
+
+function MiniInfo({ title, text }: { title: string; text: string }) {
+  return (
+    <div style={{ borderRadius: 16, padding: 16, border: '1px solid rgba(15,66,88,0.08)', background: 'rgba(255,255,255,0.8)' }}>
+      <div style={{ fontSize: 15, fontWeight: 800, color: '#0B2540', marginBottom: 4 }}>{title}</div>
+      <div style={{ fontSize: 13, color: '#415274', lineHeight: 1.65 }}>{text}</div>
+    </div>
   );
 }

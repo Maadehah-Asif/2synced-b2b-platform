@@ -133,7 +133,7 @@ export default function Module6Leads(){
   return (
     <Layout>
       <main className="page-root">
-        <ModuleBackButton toSuffix="/m06" />
+        <ModuleBackButton toSuffix="" />
         <h2 style={{ marginTop:16 }}>Module 6 — Leads</h2>
         <div style={{ fontSize:12, color:'#555' }}>Upload and manage Module 6 leads (collection `m06_leads`). Required import columns: `lead_id`.</div>
         <div style={{ marginTop:12, padding:12, background:'#fff', borderRadius:8 }}>

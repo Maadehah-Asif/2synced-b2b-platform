@@ -317,7 +317,7 @@ export default function CampaignTouchInput(){
   return (
     <Layout>
       <main className="page-root">
-        <ModuleBackButton toSuffix="/m06" />
+        <ModuleBackButton toSuffix="" />
         <h2 style={{ marginTop:16 }}>Campaign Touch Import</h2>
         <div style={{ fontSize:12, color:'#555' }}>Connect leads to campaigns via interaction events.</div>
         <div style={{ marginTop:16, display:'flex', gap:12 }}>

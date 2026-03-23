@@ -103,7 +103,7 @@ export default function DealViewer(){
   return (
     <Layout>
       <main className="page-root">
-        <ModuleBackButton toSuffix="/m06" />
+        <ModuleBackButton toSuffix="" />
         <h2 style={{ marginTop:16 }}>Deals</h2>
         <div style={{ fontSize:12, color:'#555' }}>View, filter, edit, archive or delete deals.</div>
         {!workspaceId && <div style={{ fontSize:12, color:'#c33', marginTop:8 }}>Open a workspace to load deals.</div>}

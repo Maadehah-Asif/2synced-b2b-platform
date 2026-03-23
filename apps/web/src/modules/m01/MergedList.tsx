@@ -54,7 +54,7 @@ export default function MergedList(){
     <Layout>
       <div className="p-20">
         <div className="mb-12" style={{ display: 'flex', alignItems: 'center' }}>
-          <ModuleBackButton toSuffix="/m01" />
+          <ModuleBackButton toSuffix="" />
           <h2 style={{ margin: 0 }}>Merged CSVs</h2>
         </div>
         <div className="mt-8" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>

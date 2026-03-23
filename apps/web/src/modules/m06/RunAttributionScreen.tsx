@@ -529,9 +529,20 @@ export default function RunAttributionScreen() {
 
   return (
     <Layout>
+      <main className="page-root m06-page">
       <div style={{ marginTop: 8 }}>
         <ModuleBackButton toSuffix="/m06" />
       </div>
+
+      <section className="m06-hero">
+        <div className="m06-hero-inner">
+          <div className="m06-pill">Run Attribution</div>
+          <h1>Attribution Run Builder</h1>
+          <div className="m06-hero-copy">
+            Configure the attribution model, choose the analysis window, optionally narrow the journey scope, then run and review a fresh attribution summary for this workspace.
+          </div>
+        </div>
+      </section>
 
       {renderMessage()}
 
@@ -539,12 +550,18 @@ export default function RunAttributionScreen() {
         <section className="run-attribution-main">
           <div className="card">
             <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <h2 style={{ margin: 0 }}>Run Attribution</h2>
+              <div>
+                <div className="m06-section-label">Configuration</div>
+                <h2 style={{ margin: '12px 0 0 0' }}>Build an attribution run</h2>
+              </div>
               <button className="btn-ghost btn-sm" type="button" onClick={resetFilters}>Reset window</button>
             </div>
             <div className="card-body">
               <div>
                 <h4 style={{ margin: '0 0 8px 0', fontSize: 14, color: '#4d4f67' }}>Attribution model</h4>
+                <div className="m06-helper" style={{ marginBottom: 12 }}>
+                  Choose how revenue credit should be assigned across the touches in each deal journey.
+                </div>
                 <div className="run-config-options">
                   {modelOptions.map(option => {
                     const active = config.model_type === option.value;
@@ -565,6 +582,9 @@ export default function RunAttributionScreen() {
 
               <div style={{ marginTop: 18 }}>
                 <h4 style={{ margin: '0 0 8px 0', fontSize: 14, color: '#4d4f67' }}>Analysis window</h4>
+                <div className="m06-helper" style={{ marginBottom: 12 }}>
+                  Limit the run to a specific deal-close period and optionally exclude very small deals.
+                </div>
                 <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
                   <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <span>From</span>
@@ -593,6 +613,9 @@ export default function RunAttributionScreen() {
 
               <div style={{ marginTop: 18 }}>
                 <h4 style={{ margin: '0 0 8px 0', fontSize: 14, color: '#4d4f67' }}>Deal filters</h4>
+                <div className="m06-helper" style={{ marginBottom: 12 }}>
+                  Decide whether the run should focus only on won revenue or also include lost deals for comparison.
+                </div>
                 <div className="run-config-options">
                   {statusOptions.map(option => {
                     const active = statusFilter === option.value;
@@ -756,9 +779,12 @@ export default function RunAttributionScreen() {
 
           {!summaryLoading && summary && (
             <div className="card">
-              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                <h3 style={{ margin: 0 }}>Summary for {modelLabel(summary.run.model_type)}</h3>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <div>
+                <div className="m06-section-label">Summary</div>
+                <h3 style={{ margin: '12px 0 0 0' }}>Summary for {modelLabel(summary.run.model_type)}</h3>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button
                     className="btn-ghost btn-sm"
                     type="button"
@@ -1000,7 +1026,10 @@ export default function RunAttributionScreen() {
         <aside className="run-attribution-side">
           <div className="card">
             <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <h3 style={{ margin: 0 }}>Attribution runs</h3>
+              <div>
+                <div className="m06-section-label">History</div>
+                <h3 style={{ margin: '12px 0 0 0' }}>Attribution runs</h3>
+              </div>
               <button className="btn-ghost btn-sm" type="button" onClick={() => projectId && refreshRuns(projectId)}>Refresh</button>
             </div>
             <div className="card-body">
@@ -1055,6 +1084,7 @@ export default function RunAttributionScreen() {
           </div>
         </aside>
       </div>
+      </main>
     </Layout>
   );
 }

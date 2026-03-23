@@ -148,12 +148,17 @@ export default function JourneyPreview() {
 
   return (
     <Layout>
-      <main className="page-root">
+      <main className="page-root m06-page">
         <ModuleBackButton toSuffix="/m06" />
-        <h2 style={{ marginTop: 16 }}>Journey Preview</h2>
-        <div style={{ fontSize: 12, color: '#555' }}>
-          Inspect journeys for deals within an analysis window (pre-attribution).
-        </div>
+        <section className="m06-hero">
+          <div className="m06-hero-inner">
+            <div className="m06-pill">Journey Preview</div>
+            <h1>Deal Journey Explorer</h1>
+            <div className="m06-hero-copy">
+              Inspect deal journeys inside a chosen analysis window, filter them by campaign and lead context, and open touch-level details without changing attribution logic.
+            </div>
+          </div>
+        </section>
         {!workspaceId && (
           <div style={{ fontSize: 12, color: '#c33', marginTop: 8 }}>
             Open a workspace to inspect journeys.
@@ -162,14 +167,20 @@ export default function JourneyPreview() {
 
         {/* FILTER GRID – 4 columns, 2 rows */}
         <div
+          className="m06-panel"
           style={{
-            marginTop: 16,
             display: 'grid',
             gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
             gap: 16,
             alignItems: 'flex-end',
           }}
         >
+          <div style={{ gridColumn: '1 / span 4' }}>
+            <div className="m06-section-label">Filters</div>
+            <div className="m06-helper" style={{ marginTop: 8 }}>
+              Narrow the journey list by closed date, channel, campaign, lead, and deal size before opening a specific deal path.
+            </div>
+          </div>
           {/* Closed from */}
           <div>
             <span style={filterLabelStyle}>Closed from</span>
@@ -333,7 +344,7 @@ export default function JourneyPreview() {
         </div>
 
         {/* RESULTS TABLE */}
-        <div style={{ marginTop: 16, background: '#fff', borderRadius: 8, padding: 12 }}>
+        <div className="m06-panel">
           {error && (
             <div
               style={{

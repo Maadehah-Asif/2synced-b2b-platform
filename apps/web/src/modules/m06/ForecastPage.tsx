@@ -185,18 +185,27 @@ export default function ForecastPage() {
 
   return (
     <Layout>
-      <main className="page-root">
+      <main className="page-root m06-page">
         <div style={{ marginTop: 8 }}>
           <ModuleBackButton toSuffix="/m06" label="Module 6 Home" />
         </div>
+        <section className="m06-hero">
+          <div className="m06-hero-inner">
+            <div className="m06-pill">Forecasts</div>
+            <h1>ROI Forecast Explorer</h1>
+            <div className="m06-hero-copy">
+              Test spend scenarios by channel, compare expected ROI shifts, and export the generated forecast without changing campaign or attribution data.
+            </div>
+          </div>
+        </section>
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
           <div style={{ flex: 2 }}>
-            <h2>Forecast: ROI by Channel</h2>
-            <div style={{ marginTop: 8, color: '#4d4f67', fontSize: 13 }}>
-              Run scenario-based ROI forecasts for a specific campaign using the Python forecasting agent.
-            </div>
-
-            <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8, boxShadow: '0 4px 10px rgba(0,0,0,0.04)' }}>
+            <div className="m06-panel">
+              <div className="m06-section-label">Scenario Setup</div>
+              <h3 className="m06-panel-title" style={{ marginTop: 12 }}>Forecast ROI by channel</h3>
+              <div className="m06-helper" style={{ marginBottom: 14 }}>
+                Run scenario-based ROI forecasts for a selected channel using the Python forecasting agent.
+              </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: 12, color: '#666' }}>Channel</div>
@@ -250,6 +259,16 @@ export default function ForecastPage() {
               )}
             </div>
 
+            {!result && !loading && !error && (
+              <div className="m06-panel soft" style={{ marginTop: 16 }}>
+                <div className="m06-section-label">How To Use</div>
+                <h3 className="m06-panel-title" style={{ marginTop: 12 }}>What this screen is for</h3>
+                <div className="m06-helper">
+                  Start with a channel, choose a short or medium forecast window, then adjust the spend multiplier to see how ROI might shift before making budget decisions.
+                </div>
+              </div>
+            )}
+
             {result && (
               <>
                 {/* KPI cards */}
@@ -285,19 +304,19 @@ export default function ForecastPage() {
                 </div>
 
                 {/* ROI line / timeline chart */}
-                <div style={{ marginTop: 18 }}>
+                <div className="m06-panel" style={{ marginTop: 18 }}>
                   <div style={{ fontWeight: 700, marginBottom: 6 }}>Historical ROI</div>
                   <TimelineChart data={timelineData} />
                 </div>
 
                 {/* Scenario comparison bar chart */}
-                <div style={{ marginTop: 18 }}>
+                <div className="m06-panel" style={{ marginTop: 18 }}>
                   <div style={{ fontWeight: 700, marginBottom: 6 }}>Scenario Comparison</div>
                   <BarChart data={comparisonData} height={140} />
                 </div>
 
                 {/* Heatmap */}
-                <div style={{ marginTop: 18, padding: 12, background: '#fff', borderRadius: 8 }}>
+                <div className="m06-panel soft" style={{ marginTop: 18 }}>
                   <div style={{ fontWeight: 700, marginBottom: 8 }}>Historical ROI Heatmap</div>
                   {heatmapYears.length === 0 ? (
                     <div style={{ fontSize: 12, color: '#666' }}>No history found for this campaign.</div>

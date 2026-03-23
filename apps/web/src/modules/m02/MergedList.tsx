@@ -93,7 +93,7 @@ export default function MergedListM02() {
 
         {/* HEADER */}
         <div className="mb-12" style={{ display: "flex", alignItems: "center" }}>
-          <ModuleBackButton toSuffix="/m02" />
+          <ModuleBackButton toSuffix="" />
           <h2 style={{ margin: 0 }}>Module 02 - Merged CSVs</h2>
         </div>
 

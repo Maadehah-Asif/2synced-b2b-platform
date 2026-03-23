@@ -62,7 +62,7 @@ export default function StageAddUpload(){
     <Layout>
       <div className="p-20">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <ModuleBackButton toSuffix="/m07" />
+          <ModuleBackButton toSuffix="" />
           <h2 style={{ margin: 0 }}>Module 07 - Stage History (Add / Upload)</h2>
         </div>
 

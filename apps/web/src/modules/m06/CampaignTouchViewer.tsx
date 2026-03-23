@@ -227,7 +227,7 @@ export default function CampaignTouchViewer() {
   return (
     <Layout>
       <main className="page-root">
-        <ModuleBackButton toSuffix="/m06" />
+        <ModuleBackButton toSuffix="" />
 
         <h2 style={{ marginTop: 16 }}>Campaign Touches</h2>
         <div style={{ fontSize: 12, color: '#555' }}>

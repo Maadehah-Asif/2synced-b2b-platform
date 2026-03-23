@@ -19,7 +19,9 @@ import Module6Main from './modules/m06/Module6Main'
 import Module6Home from './modules/m06/Module6Home'
 import Module1Home from './modules/m01/Module1Home'
 import Module2Home from './modules/m02/Module2Home'
+import Module3Home from './modules/m03/Module3Home'
 import Module7Home from './modules/m07/Module7Home'
+import FunnelOverview from './modules/m07/FunnelOverview'
 import LeadAddUpload from './modules/m07/LeadAddUpload'
 import LeadList from './modules/m07/LeadList'
 import LeadDetail from './modules/m07/LeadDetail'
@@ -114,8 +116,11 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m02/upload-wizard')) return <UploadWizardM02 />
   // Module 2 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m02') && !route.includes('/m02/')) return <Module2Home />
+  // Module 3 workspace home (no trailing slash)
+  if (route.startsWith('#/workspace/') && route.includes('/m03') && !route.includes('/m03/')) return <Module3Home />
   // Module 7 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m07') && !route.includes('/m07/')) return <Module7Home />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/overview')) return <FunnelOverview />
   // More specific m07 routes first so upload/list resolve before detail
   if (route.startsWith('#/workspace/') && route.includes('/m07/leads/upload')) return <LeadAddUpload />
   if (route.startsWith('#/workspace/') && route.includes('/m07/leads') && !route.includes('/m07/leads/')) return <LeadList />

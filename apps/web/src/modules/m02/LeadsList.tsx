@@ -130,7 +130,7 @@ export default function LeadsListM02() {
 
         {/* HEADER */}
         <div className="mb-12" style={{ display: "flex", alignItems: "center" }}>
-          <ModuleBackButton toSuffix="/m02" />
+          <ModuleBackButton toSuffix="" />
           <h2 style={{ margin: 0 }}>Module 02 - Leads Code CSVs</h2>
         </div>
 

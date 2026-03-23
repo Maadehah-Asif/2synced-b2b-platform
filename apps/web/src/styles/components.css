@@ -173,7 +173,10 @@ textarea:focus {
 .nav-column { display: flex; flex-direction: column; gap: 8px; }
 
 /* App root/layout */
-.app-root { min-height: 100vh; width: 100vw; }
+.app-root {
+  min-height: 100vh;
+  width: 100vw;
+}
 .app-layout { display: flex; padding-top: 120px; min-height: calc(100vh - 72px); background: var(--page-bg, #F9FBFE); width: 100%; }
 .app-main { flex: 1; padding: 20px; background: var(--page-bg, #F9FBFE); min-height: calc(100vh - 120px); overflow: auto; }
 

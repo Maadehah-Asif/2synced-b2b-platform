@@ -17,6 +17,7 @@ export interface ConversationEntityDocument extends Document {
   value: string;
   confidence: number; // 0..1
   sourceSnippet?: string;
+  status?: "active" | "obsolete";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,6 +33,7 @@ export interface ConversationEntityCreateInput {
   value: string;
   confidence: number;
   sourceSnippet?: string;
+  status?: "active" | "obsolete";
 }
 
 const ConversationEntitySchema = new Schema<ConversationEntityDocument>(
@@ -73,6 +75,12 @@ const ConversationEntitySchema = new Schema<ConversationEntityDocument>(
     sourceSnippet: {
       type: String,
       trim: true,
+    },
+    status: {
+      type: String,
+      enum: ["active", "obsolete"],
+      default: "active",
+      index: true,
     },
   },
   {

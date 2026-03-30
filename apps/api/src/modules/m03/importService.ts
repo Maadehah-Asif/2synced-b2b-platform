@@ -14,6 +14,7 @@ import ConversationMessage, {
   type ConversationMessageDocument,
 } from "./models/ConversationMessage.js";
 import UploadFile from "../m01/models/UploadFile.js";
+import { resolveOrCreateCompanyForInput } from "./utils/companyResolver.js";
 
 /**
  * Params for starting an import from an existing UploadFile
@@ -59,7 +60,7 @@ export async function startConversationImport(
 
   const upload = await UploadFile.findOne({
     _id: fileId,
-    workspaceId: wsId,
+    workspace: wsId, // Module 1 uses 'workspace' field
   }).exec();
 
   if (!upload) {
@@ -117,6 +118,8 @@ interface NormalizedRow {
     role: "prospect" | "rep" | "other";
   };
   bodyText: string;
+  company?: string; // Company name from CSV
+  prospectEmail?: string; // Prospect email for company resolution
 }
 
 function mapRowToMessageInput(row: Record<string, string>): NormalizedRow | null {
@@ -128,6 +131,8 @@ function mapRowToMessageInput(row: Record<string, string>): NormalizedRow | null
   const senderEmail = (row["sender_email"] || "").trim();
   const senderRoleRaw = (row["sender_role"] || "").toLowerCase();
   const bodyText = (row["body_text"] || "").toString();
+  const company = (row["company"] || row["company_name"] || row["account"] || "").trim();
+  const toEmail = (row["to_email"] || "").trim();
 
   if (!subject || !channelRaw || !directionRaw || !sentAtStr || !senderName) {
     return null; // skip incomplete row
@@ -165,7 +170,17 @@ function mapRowToMessageInput(row: Record<string, string>): NormalizedRow | null
     senderObj.email = senderEmail;
   }
 
-  return {
+  // Determine prospect email for company resolution
+  let prospectEmail: string | undefined = undefined;
+  if (channel === "email") {
+    if (direction === "inbound") {
+      prospectEmail = senderEmail || undefined;
+    } else if (direction === "outbound") {
+      prospectEmail = toEmail || undefined;
+    }
+  }
+
+  const result: NormalizedRow = {
     threadSubject: subject,
     channel,
     direction,
@@ -173,16 +188,33 @@ function mapRowToMessageInput(row: Record<string, string>): NormalizedRow | null
     sender: senderObj,
     bodyText,
   };
+  
+  if (company) {
+    result.company = company;
+  }
+  if (prospectEmail) {
+    result.prospectEmail = prospectEmail;
+  }
+  
+  return result;
 }
 
 async function upsertThreadAndMessage(
   workspaceId: Types.ObjectId,
   input: NormalizedRow
 ): Promise<{ thread: ConversationThreadDocument; message: ConversationMessageDocument }> {
-  const { threadSubject, channel, sentAt, sender, bodyText, direction } = input;
+  const { threadSubject, channel, sentAt, sender, bodyText, direction, company, prospectEmail } = input;
+
+  // Resolve or create company
+  const companyDoc = await resolveOrCreateCompanyForInput(
+    workspaceId,
+    company || null,
+    prospectEmail || null
+  );
 
   const query: any = {
     workspaceId,
+    companyId: companyDoc._id,
     subject: threadSubject,
     source: "upload",
   };
@@ -192,6 +224,7 @@ async function upsertThreadAndMessage(
   if (!thread) {
     thread = await ConversationThread.create({
       workspaceId,
+      companyId: companyDoc._id,
       channel,
       subject: threadSubject,
       participants: [],
@@ -247,7 +280,7 @@ export async function processConversationImport(
 
   const upload = await UploadFile.findOne({
     _id: conversationImport.uploadFileId,
-    workspaceId,
+    workspace: workspaceId, // Module 1 uses 'workspace' field
   }).exec();
 
   if (!upload) {

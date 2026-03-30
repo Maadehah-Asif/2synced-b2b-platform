@@ -5,7 +5,7 @@ import ConversationEntity from "./models/ConversationEntity.js";
 import FollowUpReminder from "./models/FollowUpReminder.js";
 
 export interface HealthBandSummaryItem {
-  band: "healthy" | "neutral" | "at_risk";
+  band: "healthy" | "steady" | "at_risk";
   count: number;
 }
 
@@ -111,7 +111,7 @@ export async function getConversationSummary(
   // Parse healthAgg
   let healthByBand: HealthBandSummaryItem[] = [
     { band: "healthy", count: 0 },
-    { band: "neutral", count: 0 },
+    { band: "steady", count: 0 },
     { band: "at_risk", count: 0 },
   ];
   let averageHealthScore: number | null = null;
@@ -123,7 +123,9 @@ export async function getConversationSummary(
 
     const bandCounts: Record<string, number> = {};
     for (const item of row.bands as { band: string; score: number }[]) {
-      bandCounts[item.band] = (bandCounts[item.band] || 0) + 1;
+      // Handle backward compatibility: "neutral" and "monitor" map to "steady"
+      const normalizedBand = item.band === "neutral" || item.band === "monitor" ? "steady" : item.band;
+      bandCounts[normalizedBand] = (bandCounts[normalizedBand] || 0) + 1;
     }
 
     healthByBand = [
@@ -132,8 +134,8 @@ export async function getConversationSummary(
         count: bandCounts["healthy"] || 0,
       },
       {
-        band: "neutral",
-        count: bandCounts["neutral"] || 0,
+        band: "steady",
+        count: (bandCounts["steady"] || 0) + (bandCounts["monitor"] || 0) + (bandCounts["neutral"] || 0), // Include legacy "neutral" and "monitor"
       },
       {
         band: "at_risk",

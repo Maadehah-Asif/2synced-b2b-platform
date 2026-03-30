@@ -1,0 +1,357 @@
+/* Module 3 Analysis Page Styles */
+
+/* Analysis Layout */
+.m03-analysis-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2.5fr) minmax(0, 2fr);
+  gap: 24px;
+}
+
+/* Mobile: stack columns */
+@media (max-width: 900px) {
+  .m03-analysis-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Sticky left thread column */
+.m03-thread-column {
+  position: sticky;
+  top: 96px; /* adjust so it sits below the workspace header/nav */
+  align-self: flex-start;
+  max-height: calc(100vh - 120px); /* leave room for header */
+  overflow-y: auto;
+}
+
+/* On mobile, do not use sticky to avoid awkward scrolling */
+@media (max-width: 900px) {
+  .m03-thread-column {
+    position: static;
+    max-height: none;
+    overflow-y: visible;
+  }
+}
+
+.m03-insights-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Run Analysis Button */
+.btn-run-analysis {
+  background: transparent;
+  border: 2px solid var(--header-primary, #010872);
+  color: var(--header-primary, #010872);
+  padding: 10px 18px;
+  font-size: 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+}
+
+.btn-run-analysis:hover:not(:disabled) {
+  background: var(--header-primary, #010872);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(1, 8, 114, 0.35);
+}
+
+.btn-run-analysis:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Module 3 Cards */
+.m03-card {
+  background: var(--container-bg, #FFFEFF);
+  box-shadow: var(--card-shadow, 0 8px 24px rgba(9, 30, 63, 0.06));
+  border-radius: 12px;
+  border: var(--outline, 1px solid rgba(67, 105, 141, 0.08));
+  padding: 16px;
+}
+
+.m03-card-header {
+  margin-bottom: 12px;
+}
+
+.m03-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #0B2540);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Deal Health Card */
+.deal-health-card {
+  margin-bottom: 12px;
+}
+
+.deal-health-main {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.deal-health-score {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-primary, #0B2540);
+}
+
+.deal-health-band {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.deal-health-band--healthy {
+  background-color: rgba(34, 197, 94, 0.15);
+  color: #16a34a;
+}
+
+.deal-health-band--neutral,
+.deal-health-band--monitor,
+.deal-health-band--steady {
+  background-color: rgba(251, 191, 36, 0.15);
+  color: #d97706;
+}
+
+.deal-health-band--at_risk {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+}
+
+.deal-health-signals {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(67, 105, 141, 0.08);
+}
+
+.signals-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted, #6B7B8B);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.signal-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(67, 105, 141, 0.04);
+}
+
+.signal-item:last-child {
+  border-bottom: none;
+}
+
+.signal-label {
+  font-weight: 600;
+  color: var(--text-primary, #0B2540);
+}
+
+.signal-value {
+  color: var(--text-muted, #6B7B8B);
+  text-align: right;
+}
+
+/* Recommended Follow-up Card */
+.follow-up-card {
+  margin-bottom: 12px;
+}
+
+.follow-up-subtitle {
+  font-size: 12px;
+  color: var(--text-muted, #6B7B8B);
+  margin-top: 4px;
+  margin-bottom: 12px;
+}
+
+.follow-up-window {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(67, 105, 141, 0.08);
+}
+
+.follow-up-window-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted, #6B7B8B);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.follow-up-window-value {
+  font-size: 13px;
+  color: var(--text-primary, #0B2540);
+  font-weight: 500;
+}
+
+.follow-up-calendar-link {
+  display: inline-block;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--header-primary, #010872);
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.follow-up-calendar-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+/* AI-suggested follow-up message */
+.follow-up-ai-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(67, 105, 141, 0.08);
+}
+
+.follow-up-ai-header {
+  margin-bottom: 12px;
+}
+
+.follow-up-ai-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #0B2540);
+  margin-bottom: 4px;
+}
+
+.follow-up-ai-subtext {
+  font-size: 11px;
+  color: var(--text-muted, #6B7B8B);
+  font-style: italic;
+}
+
+.follow-up-ai-message-box {
+  background: var(--container-bg, #FFFEFF);
+  border: 1px solid rgba(67, 105, 141, 0.12);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 8px;
+}
+
+.follow-up-ai-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.follow-up-ai-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  background-color: rgba(1, 8, 114, 0.1);
+  color: var(--header-primary, #010872);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.follow-up-ai-confidence {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  background-color: rgba(67, 105, 141, 0.08);
+  color: var(--text-muted, #6B7B8B);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.follow-up-ai-message-text {
+  font-size: 13px;
+  color: var(--text-primary, #0B2540);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.follow-up-ai-message-text div {
+  margin-bottom: 4px;
+}
+
+/* Entity Colors & Dots */
+.entity-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.entity-budget {
+  background-color: #22c55e;
+}
+
+.entity-decision {
+  background-color: #3b82f6;
+}
+
+.entity-timeline {
+  background-color: #8b5cf6;
+}
+
+.entity-competitor {
+  background-color: #f97316;
+}
+
+.entity-section {
+  margin-bottom: 12px;
+}
+
+.entity-heading {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted, #6B7B8B);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+/* Entity Highlighting in Message Text */
+.entity-highlight-budget {
+  background-color: rgba(16, 185, 129, 0.20); /* soft green */
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.entity-highlight-decision {
+  background-color: rgba(59, 130, 246, 0.20); /* soft blue */
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.entity-highlight-timeline {
+  background-color: rgba(168, 85, 247, 0.20); /* soft purple */
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.entity-highlight-competitor {
+  background-color: rgba(249, 115, 22, 0.20); /* soft orange */
+  border-radius: 3px;
+  padding: 0 2px;
+}
+

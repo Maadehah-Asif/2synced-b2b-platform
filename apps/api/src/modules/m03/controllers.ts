@@ -20,6 +20,14 @@ import {
   updateSyncStatus,
 } from "./crmSyncService.js";
 import FollowUpReminder from "./models/FollowUpReminder.js";
+import { buildAnalyticsSummaryForWorkspace } from "./analyticsService.js";
+import { listDealHealth } from "./services/dealHealthListService.js";
+import { importConversationLogFromCsv } from "./services/conversationImportService.js";
+import {
+  listOrganisationsWithActivity,
+  getOrgTimeline,
+} from "./services/orgTimelineService.js";
+import { listCompaniesWithActivity } from "./services/companyListService.js";
 
 // -----------------------------------------------------------------------------
 // Auth request type helpers
@@ -71,16 +79,61 @@ export async function manualLogConversationController(
       dealId,
       channel,
       subject,
-      bodyText,
+      body, // New unified field
+      bodyText, // Legacy field
       direction,
-      sentAt,
-      sender,
+      occurredAt, // New unified field
+      sentAt, // Legacy field
+      sender, // Legacy format
+      // Channel-specific fields
+      contactName,
+      contactEmail,
+      contactPhone,
+      toEmails,
+      participants,
+      endTime,
+      companyName, // New: company name from frontend
     } = req.body || {};
 
-    if (!channel || !subject || !bodyText || !direction || !sentAt || !sender) {
+    // Validate required fields
+    if (!channel || !subject) {
       return res.status(400).json({
-        error: "Missing required fields for manual log.",
+        error: "Channel and subject are required.",
       });
+    }
+
+    // Body can come from either 'body' or 'bodyText'
+    const bodyContent = body || bodyText;
+    if (!bodyContent) {
+      return res.status(400).json({
+        error: "Message body is required.",
+      });
+    }
+
+    // For channels that require direction, validate it
+    if (channel !== "note" && !direction) {
+      return res.status(400).json({
+        error: "Direction is required for this channel.",
+      });
+    }
+
+    // Timestamp can come from either 'occurredAt' or 'sentAt'
+    const timestamp = occurredAt || sentAt;
+    if (!timestamp) {
+      return res.status(400).json({
+        error: "Timestamp (occurredAt or sentAt) is required.",
+      });
+    }
+
+    // Extract prospect email based on channel and direction
+    let prospectEmail: string | null = null;
+    if (channel === "email") {
+      if (direction === "inbound") {
+        prospectEmail = contactEmail || null;
+      } else if (direction === "outbound" && toEmails && Array.isArray(toEmails) && toEmails.length > 0) {
+        // For outbound, use first to email as prospect
+        prospectEmail = toEmails[0] || null;
+      }
     }
 
     const result = await manualLogConversation({
@@ -89,10 +142,20 @@ export async function manualLogConversationController(
       dealId,
       channel,
       subject,
-      bodyText,
-      direction,
-      sentAt,
-      sender,
+      body: bodyContent,
+      bodyText: bodyContent, // For backward compatibility
+      direction: direction || "outbound",
+      occurredAt: timestamp,
+      sentAt: timestamp, // For backward compatibility
+      sender, // Legacy format
+      contactName,
+      contactEmail,
+      contactPhone,
+      toEmails,
+      participants,
+      endTime,
+      companyName, // Pass company name
+      prospectEmail, // Pass prospect email for company resolution
       createdBy: userId,
     });
 
@@ -196,6 +259,66 @@ export async function listConversationImportsController(
 }
 
 // -----------------------------------------------------------------------------
+// Simplified conversation import (single endpoint)
+// -----------------------------------------------------------------------------
+
+export async function runConversationImportController(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const workspaceId = getWorkspaceIdFromRequest(req);
+    const userId = getUserIdFromRequest(req);
+
+    const { uploadFileId } = req.body || {};
+    if (!uploadFileId) {
+      return res.status(400).json({
+        error: "uploadFileId is required.",
+      });
+    }
+
+    // Validate that the upload file belongs to this workspace
+    // Note: Module 1 uses 'workspace' field, not 'workspaceId'
+    const UploadFile = (await import("../m01/models/UploadFile.js")).default;
+    const upload = await UploadFile.findOne({
+      _id: new Types.ObjectId(uploadFileId),
+      workspace: new Types.ObjectId(workspaceId),
+    }).exec();
+
+    if (!upload) {
+      return res.status(404).json({
+        error: "Upload file not found or does not belong to this workspace.",
+      });
+    }
+
+    // Start the import
+    const { conversationImport } = await startConversationImport({
+      workspaceId,
+      uploadFileId,
+      createdBy: userId,
+    });
+
+    // Process the import immediately
+    const result = await processConversationImport({
+      importId: conversationImport._id.toString(),
+      requestedByUserId: userId,
+    });
+
+    return res.status(200).json({
+      status: "ok",
+      threadsCreated: result.createdThreads,
+      messagesCreated: result.createdMessages,
+    });
+  } catch (err: any) {
+    console.error("Error in runConversationImportController", err);
+    return res.status(500).json({
+      error: err?.message || "Failed to run conversation import.",
+    });
+  }
+}
+
+// -----------------------------------------------------------------------------
 // Conversation listing & detail
 // -----------------------------------------------------------------------------
 
@@ -215,6 +338,7 @@ export async function listConversationsController(
       band,
       leadId,
       dealId,
+      companyId, // New: filter by company ID
     } = req.query as Record<string, string | undefined>;
 
     const result = await listConversations({
@@ -226,6 +350,7 @@ export async function listConversationsController(
       band: band as any,
       ...(leadId && { leadId }),
       ...(dealId && { dealId }),
+      ...(companyId && { companyId }), // Pass companyId filter
     });
 
     return res.status(200).json(result);
@@ -282,7 +407,17 @@ export async function runFullAnalysisController(
       userId,
     });
 
-    return res.status(200).json(result);
+    // Include deal health summary in response
+    return res.status(200).json({
+      ...result,
+      dealHealth: result.dealHealth
+        ? {
+            score: result.dealHealth.score,
+            band: result.dealHealth.band,
+            reasons: result.dealHealth.reasons,
+          }
+        : null,
+    });
   } catch (err) {
     next(err);
   }
@@ -307,6 +442,7 @@ export async function listFollowUpsController(
       overdueOnly,
       page,
       pageSize,
+      search,
     } = req.query as Record<string, string | undefined>;
 
     // By default, show only my follow-ups
@@ -319,6 +455,7 @@ export async function listFollowUpsController(
       overdueOnly: overdueOnly === "true",
       page: page ? parseInt(page, 10) || 1 : 1,
       pageSize: pageSize ? parseInt(pageSize, 10) || 20 : 20,
+      ...(search && { search }),
     });
 
     return res.status(200).json(result);
@@ -372,6 +509,92 @@ export async function updateFollowUpController(
   }
 }
 
+export async function markFollowUpDoneController(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const workspaceId = getWorkspaceIdFromRequest(req);
+    const userId = getUserIdFromRequest(req);
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ error: "Follow up id is required." });
+    }
+
+    // Check ownership: only assignee (or admin) can update
+    const followUp = await FollowUpReminder.findOne({
+      _id: new Types.ObjectId(id),
+      workspaceId: new Types.ObjectId(workspaceId),
+    }).exec();
+
+    if (!followUp) {
+      return res.status(404).json({ error: "Follow up not found." });
+    }
+
+    if (followUp.assigneeId.toString() !== userId) {
+      return res.status(403).json({ error: "Not allowed to update this follow up." });
+    }
+
+    const updated = await updateFollowUp({
+      workspaceId,
+      followUpId: id,
+      status: "done",
+    });
+
+    return res.status(200).json({ followUp: updated });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function snoozeFollowUpController(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const workspaceId = getWorkspaceIdFromRequest(req);
+    const userId = getUserIdFromRequest(req);
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ error: "Follow up id is required." });
+    }
+
+    // Check ownership: only assignee (or admin) can update
+    const followUp = await FollowUpReminder.findOne({
+      _id: new Types.ObjectId(id),
+      workspaceId: new Types.ObjectId(workspaceId),
+    }).exec();
+
+    if (!followUp) {
+      return res.status(404).json({ error: "Follow up not found." });
+    }
+
+    if (followUp.assigneeId.toString() !== userId) {
+      return res.status(403).json({ error: "Not allowed to update this follow up." });
+    }
+
+    const { snoozedUntil } = req.body || {};
+    if (!snoozedUntil) {
+      return res.status(400).json({ error: "snoozedUntil is required." });
+    }
+
+    const updated = await updateFollowUp({
+      workspaceId,
+      followUpId: id,
+      status: "snoozed",
+      snoozedUntil: snoozedUntil,
+    });
+
+    return res.status(200).json({ followUp: updated });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Dashboard summary
 // -----------------------------------------------------------------------------
@@ -387,6 +610,139 @@ export async function conversationSummaryController(
     const summary = await getConversationSummary(workspaceId);
     return res.status(200).json(summary);
   } catch (err) {
+    next(err);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Analytics summary
+// -----------------------------------------------------------------------------
+
+export async function getAnalyticsSummaryController(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const workspaceId = getWorkspaceIdFromRequest(req);
+    const channel =
+      typeof req.query.channel === "string" ? req.query.channel : undefined;
+
+    const opts = channel ? { channel } : undefined;
+    const summary = await buildAnalyticsSummaryForWorkspace(workspaceId, opts);
+
+    return res.status(200).json(summary);
+  } catch (err: any) {
+    console.error("Error in getAnalyticsSummaryController", err);
+    return res
+      .status(500)
+      .json({ error: "Failed to compute analytics summary." });
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Upload conversation log (direct CSV upload)
+// -----------------------------------------------------------------------------
+
+export async function uploadConversationLogController(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const workspaceId = getWorkspaceIdFromRequest(req);
+    const userId = getUserIdFromRequest(req);
+
+    // Get file from multer
+    const file = (req as any).file;
+    if (!file) {
+      return res.status(400).json({ error: "CSV file is required." });
+    }
+
+    // Get channel from form data
+    const channel = (req.body?.channel || "").toLowerCase();
+    if (!["email", "whatsapp", "call", "meeting"].includes(channel)) {
+      return res.status(400).json({
+        error: "Channel must be one of: email, whatsapp, call, meeting.",
+      });
+    }
+
+    // Import the CSV
+    const result = await importConversationLogFromCsv({
+      workspaceId: new Types.ObjectId(workspaceId),
+      userId: new Types.ObjectId(userId),
+      channel: channel as "email" | "whatsapp" | "call" | "meeting",
+      csvBuffer: file.buffer,
+    });
+
+    // Check if result is an error
+    if ("error" in result) {
+      return res.status(400).json({
+        error: result.error,
+        details: result.details,
+      });
+    }
+
+    return res.status(200).json({
+      status: "ok",
+      message: `Conversation import started. Created ${result.threadsCreated} threads and ${result.messagesCreated} messages.`,
+      channel,
+      threadsCreated: result.threadsCreated,
+      messagesCreated: result.messagesCreated,
+    });
+  } catch (err: any) {
+    console.error("Error in uploadConversationLogController", err);
+    return res.status(500).json({
+      error: err?.message || "Failed to upload conversation log.",
+    });
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Deal health list
+// -----------------------------------------------------------------------------
+
+export async function getDealHealthListController(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const workspaceId = getWorkspaceIdFromRequest(req);
+
+    const {
+      page,
+      pageSize,
+      band,
+      dealId,
+      sortBy,
+      sortOrder,
+    } = req.query as Record<string, string | undefined>;
+
+    const opts: Parameters<typeof listDealHealth>[1] = {
+      page: page ? parseInt(page, 10) || 1 : 1,
+      pageSize: pageSize ? parseInt(pageSize, 10) || 20 : 20,
+    };
+    if (band) {
+      // Handle backward compatibility: "neutral" and "monitor" map to "steady"
+      const normalizedBand = band === "neutral" || band === "monitor" ? "steady" : band;
+      opts.band = normalizedBand as "healthy" | "steady" | "at_risk";
+    }
+    if (dealId) {
+      opts.dealId = dealId;
+    }
+    if (sortBy) {
+      opts.sortBy = sortBy as "score" | "lastMessageAt" | "lastAnalyzedAt";
+    }
+    if (sortOrder) {
+      opts.sortOrder = sortOrder as "asc" | "desc";
+    }
+
+    const result = await listDealHealth(workspaceId, opts);
+
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error("Error in getDealHealthListController", err);
     next(err);
   }
 }
@@ -491,6 +847,85 @@ export async function updateSyncStatusController(
 
     return res.status(200).json({ syncLog: updated });
   } catch (err) {
+    next(err);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Organisation timeline
+// -----------------------------------------------------------------------------
+
+/**
+ * List all organisations (companies) with conversation activity.
+ * GET /m03/orgs
+ */
+export async function listOrganisationsController(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const workspaceId = getWorkspaceIdFromRequest(req);
+
+    const orgs = await listOrganisationsWithActivity(workspaceId);
+
+    return res.status(200).json({ orgs });
+  } catch (err) {
+    console.error("Error in listOrganisationsController", err);
+    next(err);
+  }
+}
+
+/**
+ * Get timeline events for a specific organisation.
+ * GET /m03/orgs/:orgId/timeline?days=90
+ */
+export async function getOrgTimelineController(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const workspaceId = getWorkspaceIdFromRequest(req);
+    const { orgId } = req.params;
+    const days = req.query.days
+      ? parseInt(req.query.days as string, 10) || 90
+      : 90;
+
+    if (!orgId) {
+      return res.status(400).json({ error: "orgId is required." });
+    }
+
+    const timeline = await getOrgTimeline(workspaceId, orgId, days);
+
+    if (!timeline) {
+      return res.status(404).json({ error: "Organisation not found." });
+    }
+
+    return res.status(200).json(timeline);
+  } catch (err) {
+    console.error("Error in getOrgTimelineController", err);
+    next(err);
+  }
+}
+
+/**
+ * List all companies with conversation activity.
+ * GET /m03/companies
+ */
+export async function listCompaniesController(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const workspaceId = getWorkspaceIdFromRequest(req);
+
+    const companies = await listCompaniesWithActivity(workspaceId);
+
+    return res.status(200).json({ companies });
+  } catch (err) {
+    console.error("Error in listCompaniesController", err);
     next(err);
   }
 }

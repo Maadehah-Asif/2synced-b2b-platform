@@ -7,9 +7,9 @@ import ConversationMessage, {
 } from "./models/ConversationMessage.js";
 import ConversationEntity, {
   type ConversationEntityDocument,
-  type ConversationEntityType,
-  type ConversationEntityCreateInput,
 } from "./models/ConversationEntity.js";
+import { runEntityExtractionForThread } from "./entityExtractionService.js";
+import { runSentimentForThread } from "./sentimentService.js";
 import MessageSentiment, {
   type MessageSentimentDocument,
   type SentimentLabel,
@@ -18,6 +18,8 @@ import DealHealth, {
   type DealHealthBand,
   type DealHealthDocument,
 } from "./models/DealHealth.js";
+import { runDealHealthForThread } from "./services/dealHealthService.js";
+import { upsertFollowUpsForThread } from "./services/followUpService.js";
 import FollowUpReminder, {
   type FollowUpReminderDocument,
 } from "./models/FollowUpReminder.js";
@@ -67,255 +69,22 @@ export interface RunFullAnalysisResult {
   analysisRun: ConversationAnalysisRunDocument;
   dealHealth?: DealHealthDocument | null;
   followUps: FollowUpReminderDocument[];
-}
-
-// -----------------------------------------------------------------------------
-// Sales-specific sentiment rules
-// -----------------------------------------------------------------------------
-
-const STRONG_POSITIVE_PHRASES = [
-  "move forward",
-  "let's move forward",
-  "go ahead",
-  "approve",
-  "approved",
-  "ready to sign",
-  "send the contract",
-  "looks good to me",
-  "looks good",
-  "happy to proceed",
-];
-
-const POSITIVE_PHRASES = [
-  "interested",
-  "keen",
-  "sounds good",
-  "promising",
-  "excited",
-  "like this",
-  "fits our needs",
-  "schedule a call",
-  "set up a call",
-  "book a demo",
-];
-
-const STRONG_NEGATIVE_PHRASES = [
-  "not moving forward",
-  "no longer moving forward",
-  "won't move forward",
-  "cancel the project",
-  "cancel this",
-  "stop this",
-  "not going ahead",
-  "decided against",
-];
-
-const NEGATIVE_PHRASES = [
-  "no budget",
-  "not a priority",
-  "budget freeze",
-  "on hold",
-  "hold off",
-  "push this back",
-  "delay this",
-  "not interested",
-  "doesn't fit",
-  "reject",
-];
-
-const STALL_PHRASES = [
-  "revisit next quarter",
-  "touch base next quarter",
-  "touch base later",
-  "circle back later",
-  "after our budgeting cycle",
-  "after budget cycle",
-];
-
-// Simple lexicon-based sentiment
-function analyzeSentimentForSales(textRaw: string): {
-  label: SentimentLabel;
-  score: number; // -1..1
-} {
-  const text = (textRaw || "").toLowerCase();
-
-  let score = 0;
-
-  for (const phrase of STRONG_POSITIVE_PHRASES) {
-    if (text.includes(phrase)) score += 3;
-  }
-  for (const phrase of POSITIVE_PHRASES) {
-    if (text.includes(phrase)) score += 1;
-  }
-
-  for (const phrase of STRONG_NEGATIVE_PHRASES) {
-    if (text.includes(phrase)) score -= 3;
-  }
-  for (const phrase of NEGATIVE_PHRASES) {
-    if (text.includes(phrase)) score -= 1;
-  }
-  for (const phrase of STALL_PHRASES) {
-    if (text.includes(phrase)) score -= 1;
-  }
-
-  const normalized =
-    score === 0 ? 0 : Math.max(-1, Math.min(1, score / 4)); // basic normalization
-
-  let label: SentimentLabel = "neutral";
-  if (normalized > 0.25) label = "positive";
-  else if (normalized < -0.25) label = "negative";
-
-  return {
-    label,
-    score: normalized,
+  sentimentSummary?: {
+    avgScore: number;
+    totalMessages: number;
+    positiveCount: number;
+    neutralCount: number;
+    negativeCount: number;
   };
 }
 
 // -----------------------------------------------------------------------------
-// Entity extraction rules
+// Sentiment analysis is now handled by sentimentService.ts
 // -----------------------------------------------------------------------------
 
-const BUDGET_REGEXES: RegExp[] = [
-  /(budget|pricing|price|cost).{0,40}\$?\d+(\.\d+)?\s?(k|k|thousand|million|m)?/i,
-  /\$?\d+(\.\d+)?\s?(k|k|thousand|million|m).{0,40}(budget|per month|per year)/i,
-];
-
-const DECISION_MAKER_PHRASES = [
-  "decision maker",
-  "final decision",
-  "final say",
-  "sign off",
-  "approver",
-  "c-level",
-  "cfo",
-  "ceo",
-  "vp",
-  "vice president",
-  "head of",
-  "director",
-];
-
-const TIMELINE_PHRASES = [
-  "q1",
-  "q2",
-  "q3",
-  "q4",
-  "this quarter",
-  "next quarter",
-  "next month",
-  "this month",
-  "next year",
-  "this year",
-  "by end of",
-  "by the end of",
-];
-
-const TIMELINE_REGEXES: RegExp[] = [
-  /\b(20[2-9][0-9])\b/, // years 2020+
-  /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(tember)?|oct(ober)?|nov(ember)?|dec(ember)?)\b/i,
-];
-
-const COMPETITOR_NAMES = [
-  "hubspot",
-  "salesforce",
-  "pipedrive",
-  "zoho",
-  "freshsales",
-];
-
-function extractEntitiesFromMessage(
-  workspaceId: Types.ObjectId,
-  threadId: Types.ObjectId,
-  message: ConversationMessageDocument
-): ConversationEntityCreateInput[] {
-  const text = (message.bodyText || "").toLowerCase();
-  const entities: ConversationEntityCreateInput[] = [];
-
-  // Budget
-  for (const regex of BUDGET_REGEXES) {
-    const match = regex.exec(message.bodyText || "");
-    if (match) {
-      entities.push({
-        workspaceId,
-        threadId,
-        messageId: message._id,
-        type: "budget",
-        value: match[0],
-        confidence: 0.9,
-        sourceSnippet: match[0],
-      });
-      break;
-    }
-  }
-
-  // Decision maker
-  for (const phrase of DECISION_MAKER_PHRASES) {
-    if (text.includes(phrase)) {
-      entities.push({
-        workspaceId,
-        threadId,
-        messageId: message._id,
-        type: "decision_maker",
-        value: phrase,
-        confidence: 0.8,
-        sourceSnippet: phrase,
-      });
-      break;
-    }
-  }
-
-  // Timeline
-  let timelineFound = false;
-  for (const phrase of TIMELINE_PHRASES) {
-    if (text.includes(phrase)) {
-      entities.push({
-        workspaceId,
-        threadId,
-        messageId: message._id,
-        type: "timeline",
-        value: phrase,
-        confidence: 0.8,
-        sourceSnippet: phrase,
-      });
-      timelineFound = true;
-      break;
-    }
-  }
-  if (!timelineFound) {
-    for (const regex of TIMELINE_REGEXES) {
-      const match = regex.exec(message.bodyText || "");
-      if (match) {
-        entities.push({
-          workspaceId,
-          threadId,
-          messageId: message._id,
-          type: "timeline",
-          value: match[0],
-          confidence: 0.7,
-          sourceSnippet: match[0],
-        });
-        break;
-      }
-    }
-  }
-
-  // Competitors
-  for (const competitor of COMPETITOR_NAMES) {
-    if (text.includes(competitor)) {
-      entities.push({
-        workspaceId,
-        threadId,
-        messageId: message._id,
-        type: "competitor",
-        value: competitor,
-        confidence: 0.9,
-        sourceSnippet: competitor,
-      });
-    }
-  }
-
-  return entities;
-}
+// -----------------------------------------------------------------------------
+// Entity extraction is now handled by entityExtractionService.ts
+// -----------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------
 // Core analysis pipeline
@@ -356,27 +125,41 @@ export async function runFullAnalysis(
       .exec();
 
     // 1) Entities
-    const entities = await computeEntitiesForThread(wsId, tId, messages);
+    await runEntityExtractionForThread(tId);
+    const entities = await ConversationEntity.find({
+      workspaceId: wsId,
+      threadId: tId,
+      status: "active",
+    }).exec();
 
     // 2) Sentiment
-    const sentiments = await computeSentimentForThread(wsId, tId, messages);
+    const sentimentSummary = await runSentimentForThread(wsId, tId);
+    const sentiments = await MessageSentiment.find({
+      workspaceId: wsId,
+      threadId: tId,
+    }).exec();
 
-    // 3) Deal health
-    const features = buildDealHealthFeatures(thread, messages, sentiments, entities);
-    const dealHealth = await computeDealHealthForThread(
-      wsId,
-      thread,
-      features
-    );
+    // 3) Deal health (using new rule-based scoring)
+    const dealHealth = await runDealHealthForThread(wsId, tId);
 
-    // 4) Follow-ups
-    const followUps = await updateFollowUpsForThread(
-      wsId,
-      tId,
-      uId,
-      dealHealth,
-      features
-    );
+    // 4) Follow-ups (using dealHealth for scoring)
+    // Extract daysSinceLastMessage from dealHealth signals
+    const daysSinceLastMessage = dealHealth.signals.daysSinceLastMessage || 0;
+    await upsertFollowUpsForThread({
+      workspaceId: wsId,
+      threadId: tId,
+      assigneeId: uId,
+      healthScore: dealHealth.score,
+      daysSinceLastMessage: daysSinceLastMessage,
+    });
+    
+    // Load created follow-ups for return
+    const followUps = await FollowUpReminder.find({
+      workspaceId: wsId,
+      threadId: tId,
+      assigneeId: uId,
+      status: "pending",
+    }).exec();
 
     analysisRun.status = "succeeded";
     analysisRun.finishedAt = new Date();
@@ -386,6 +169,7 @@ export async function runFullAnalysis(
       analysisRun,
       dealHealth,
       followUps,
+      sentimentSummary,
     };
   } catch (err: any) {
     analysisRun.status = "failed";
@@ -405,50 +189,21 @@ async function computeEntitiesForThread(
   threadId: Types.ObjectId,
   messages: ConversationMessageDocument[]
 ): Promise<ConversationEntityDocument[]> {
-  await ConversationEntity.deleteMany({ workspaceId, threadId });
+  // Use the dedicated entity extraction service
+  await runEntityExtractionForThread(threadId);
 
-  const docs: ConversationEntityCreateInput[] = [];
-  for (const message of messages) {
-    const extracted = extractEntitiesFromMessage(workspaceId, threadId, message);
-    docs.push(...extracted);
-  }
+  // Return the newly created active entities
+  const entities = await ConversationEntity.find({
+    workspaceId,
+    threadId,
+    status: "active",
+  }).exec();
 
-  if (docs.length === 0) {
-    return [];
-  }
-
-  const created = await ConversationEntity.insertMany(docs);
-  return created;
+  return entities;
 }
 
 
-async function computeSentimentForThread(
-  workspaceId: Types.ObjectId,
-  threadId: Types.ObjectId,
-  messages: ConversationMessageDocument[]
-): Promise<MessageSentimentDocument[]> {
-  await MessageSentiment.deleteMany({ workspaceId, threadId });
-
-  const docs = [];
-
-  for (const message of messages) {
-    const { label, score } = analyzeSentimentForSales(message.bodyText || "");
-    docs.push({
-      workspaceId,
-      threadId,
-      messageId: message._id,
-      label,
-      score,
-    });
-  }
-
-  if (docs.length === 0) {
-    return [];
-  }
-
-  const created = await MessageSentiment.insertMany(docs);
-  return created;
-}
+// Sentiment computation is now handled by sentimentService.ts
 
 // -----------------------------------------------------------------------------
 // Feature builder for deal health
@@ -628,7 +383,7 @@ function scoreDealHealthWithModel(
   if (score < 0) score = 0;
   if (score > 100) score = 100;
 
-  let band: DealHealthBand = "neutral";
+  let band: DealHealthBand = "steady";
   if (score >= 70) band = "healthy";
   else if (score < 40) band = "at_risk";
 
@@ -727,84 +482,4 @@ function buildDealHealthSummary(
   return parts.join(" ");
 }
 
-// -----------------------------------------------------------------------------
-// Follow-up predictor (placeholder for ML classifier)
-// -----------------------------------------------------------------------------
-
-function predictFollowUpAction(
-  health: DealHealthDocument,
-  features: DealHealthFeatures
-): FollowUpAction {
-  // Placeholder rule-based logic. This is where a small ML classifier
-  // would be plugged in using the same features.
-  const days = features.daysSinceLastMessage;
-
-  if (health.band === "at_risk") {
-    if (days > 7) return "now";
-    if (days > 3) return "later";
-    return "later";
-  }
-
-  if (health.band === "healthy") {
-    if (days > 14) return "now";
-    if (days > 5) return "later";
-    return "later";
-  }
-
-  // neutral
-  if (days > 10) return "now";
-  if (days > 3) return "later";
-  return "later";
-}
-
-async function updateFollowUpsForThread(
-  workspaceId: Types.ObjectId,
-  threadId: Types.ObjectId,
-  assigneeId: Types.ObjectId,
-  health: DealHealthDocument,
-  features: DealHealthFeatures
-): Promise<FollowUpReminderDocument[]> {
-  // Delete any existing pending/snoozed followups for this assignee+thread
-  await FollowUpReminder.deleteMany({
-    workspaceId,
-    threadId,
-    assigneeId,
-    status: { $in: ["pending", "snoozed"] },
-  });
-
-  const action = predictFollowUpAction(health, features);
-  const now = new Date();
-  const followUps: FollowUpReminderDocument[] = [];
-
-  if (action === "stop") {
-      // no follow-up created
-      return followUps;
-  }
-
-  let dueAt: Date;
-  if (action === "now") {
-    // due next day
-    dueAt = new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000);
-  } else {
-    // later: ~1 week
-    dueAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  }
-
-  const reason =
-    action === "now"
-      ? "Health and recency indicate a follow-up should be sent soon."
-      : "Health is moderate; a follow-up is recommended later.";
-
-  const followUp = await FollowUpReminder.create({
-    workspaceId,
-    threadId,
-    assigneeId,
-    dueAt,
-    status: "pending",
-    reason,
-    createdBy: assigneeId,
-  });
-
-  followUps.push(followUp);
-  return followUps;
-}
+// Old follow-up creation logic removed - now handled by services/followUpService.ts

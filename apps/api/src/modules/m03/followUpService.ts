@@ -3,18 +3,31 @@ import FollowUpReminder, {
   type FollowUpReminderDocument,
   type FollowUpStatus,
 } from "./models/FollowUpReminder.js";
+import ConversationThread, {
+  type ConversationThreadDocument,
+} from "./models/ConversationThreads.js";
+import DealHealth, {
+  type DealHealthDocument,
+} from "./models/DealHealth.js";
 
 export interface ListFollowUpsParams {
   workspaceId: string;
   assigneeId?: string;
-  status?: FollowUpStatus;
+  status?: FollowUpStatus | "pending_or_overdue" | "all";
   overdueOnly?: boolean;
   page?: number;
   pageSize?: number;
+  search?: string;
+}
+
+export interface FollowUpListItem {
+  followUp: FollowUpReminderDocument;
+  thread?: ConversationThreadDocument | null;
+  latestHealth?: DealHealthDocument | null;
 }
 
 export interface ListFollowUpsResult {
-  items: FollowUpReminderDocument[];
+  items: FollowUpListItem[];
   page: number;
   pageSize: number;
   total: number;
@@ -33,6 +46,7 @@ export interface UpdateFollowUpParams {
 /**
  * List follow-ups for a workspace, optionally filtered by assignee / status / overdue.
  * Authorization (who can see which assignee) should be enforced in the controller.
+ * Populates thread and health data for each follow-up.
  */
 export async function listFollowUps(
   params: ListFollowUpsParams
@@ -44,9 +58,11 @@ export async function listFollowUps(
     overdueOnly = false,
     page = 1,
     pageSize = 20,
+    search,
   } = params;
 
   const wsId = new Types.ObjectId(workspaceId);
+  const now = new Date();
   const query: any = {
     workspaceId: wsId,
   };
@@ -55,22 +71,96 @@ export async function listFollowUps(
     query.assigneeId = new Types.ObjectId(assigneeId);
   }
 
-  if (status) {
-    query.status = status;
+  // Handle status filter
+  if (status && status !== "all") {
+    if (status === "pending_or_overdue") {
+      query.status = "pending";
+      query.dueAt = { $lte: now };
+    } else if ((status as string) === "overdue") {
+      query.status = "pending";
+      query.dueAt = { $lt: now };
+    } else {
+      // status is a valid FollowUpStatus (pending, done, or snoozed)
+      const validStatus = status as FollowUpStatus;
+      if (validStatus === "pending" || validStatus === "done" || validStatus === "snoozed") {
+        query.status = validStatus;
+      }
+    }
   }
 
   if (overdueOnly) {
     query.status = "pending";
-    query.dueAt = { $lt: new Date() };
+    query.dueAt = { $lt: now };
   }
 
   const total = await FollowUpReminder.countDocuments(query);
 
-  const items = await FollowUpReminder.find(query)
+  const followUps = await FollowUpReminder.find(query)
     .sort({ dueAt: 1 })
     .skip((page - 1) * pageSize)
     .limit(pageSize)
     .exec();
+
+  // Get thread IDs and health data
+  const threadIds = followUps.map((f) => f.threadId);
+  
+  const [threads, healthDocs] = await Promise.all([
+    ConversationThread.find({
+      _id: { $in: threadIds },
+      workspaceId: wsId,
+    }).exec(),
+    DealHealth.find({
+      threadId: { $in: threadIds },
+      workspaceId: wsId,
+    })
+      .sort({ lastComputedAt: -1 })
+      .exec(),
+  ]);
+
+  // Create maps for quick lookup
+  const threadMap = new Map<string, ConversationThreadDocument>();
+  for (const thread of threads) {
+    threadMap.set(thread._id.toString(), thread);
+  }
+
+  // Group by threadId and take the latest health
+  const healthByThread = new Map<string, DealHealthDocument>();
+  for (const health of healthDocs) {
+    const threadIdStr = health.threadId.toString();
+    const existing = healthByThread.get(threadIdStr);
+    if (!existing || health.lastComputedAt > existing.lastComputedAt) {
+      healthByThread.set(threadIdStr, health);
+    }
+  }
+
+  // Build items with thread and health data
+  const items: FollowUpListItem[] = [];
+  for (const followUp of followUps) {
+    const threadIdStr = followUp.threadId.toString();
+    const thread = threadMap.get(threadIdStr) || null;
+    const health = healthByThread.get(threadIdStr) || null;
+
+    // Filter by search if provided
+    if (search && search.trim()) {
+      const searchLower = search.toLowerCase();
+      const matchesThread = thread?.subject?.toLowerCase().includes(searchLower);
+      const matchesReason = followUp.reason?.toLowerCase().includes(searchLower);
+      if (!matchesThread && !matchesReason) {
+        continue; // Skip this item
+      }
+    }
+
+    const item: FollowUpListItem = {
+      followUp,
+    };
+    if (thread !== null) {
+      item.thread = thread;
+    }
+    if (health !== null) {
+      item.latestHealth = health;
+    }
+    items.push(item);
+  }
 
   return {
     items,

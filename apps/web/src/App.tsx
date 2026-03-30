@@ -18,6 +18,16 @@ import Module6Dropdown from './modules/m06/Module6Dropdown'
 import Element1Page from './modules/m06/Element1Page'
 import Module6Home from './modules/m06/Module6Home'
 import Module1Home from './modules/m01/Module1Home'
+import Module3Home from './modules/m03/Module3Home';
+import ConversationManualLog from './modules/m03/ConversationManualLog';
+import ConversationUpload from './modules/m03/ConversationUpload';
+import ConversationExplorer from './modules/m03/ConversationExplorer';
+import ConversationThreadDetail from './modules/m03/ConversationThreadDetail';
+import DealHealthBoard from './modules/m03/DealHealthBoard';
+import FollowUpsPage from './modules/m03/FollowUpsPage';
+import AnalyticsPage from './modules/m03/AnalyticsPage';
+import OrgTimelinePage from './modules/m03/OrgTimelinePage';
+import Module3Companies from './modules/m03/Module3Companies';
 import Element2Page from './modules/m06/Element2Page'
 import RoiDashboard from './modules/m06/RoiDashboard'
 import Element4Page from './modules/m06/Element4Page'
@@ -72,6 +82,42 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m06/allocation')) return <AllocationDashboard />
   if (route.startsWith('#/workspace/') && route.includes('/m06/element4')) return <Element4Page />
   if (route.startsWith('#/workspace/') && route.includes('/m06/')) return <Element1Page />
+
+  // ===================== MODULE 3 ROUTES =====================
+  // Order matters: more specific routes first
+  if (route.startsWith('#/workspace/') && route.includes('/m03/conversations/')) {
+    return <ConversationThreadDetail />;
+  }
+  if (route.startsWith('#/workspace/') && route.includes('/m03/deal-health')) {
+    return <DealHealthBoard />;
+  }
+  if (route.startsWith('#/workspace/') && route.includes('/m03/follow-ups')) {
+    return <FollowUpsPage />;
+  }
+  if (route.startsWith('#/workspace/') && route.includes('/m03/analytics')) {
+    return <AnalyticsPage />;
+  }
+  if (route.startsWith('#/workspace/') && route.includes('/m03/explorer')) {
+    return <ConversationExplorer />;
+  }
+  if (route.startsWith('#/workspace/') && route.includes('/m03/org-timeline')) {
+    return <OrgTimelinePage />;
+  }
+  if (route.startsWith('#/workspace/') && route.includes('/m03/companies')) {
+    return <Module3Companies />;
+  }
+  if (route.startsWith('#/workspace/') && route.includes('/m03/upload')) {
+    return <ConversationUpload />;
+  }
+  if (route.startsWith('#/workspace/') && route.includes('/m03/manual-log')) {
+    return <ConversationManualLog />;
+  }
+  // Module 3 workspace home (must be last, after all /m03/ routes)
+  if (route.startsWith('#/workspace/') && route.includes('/m03') && !route.includes('/m03/')) {
+    return <Module3Home />;
+  }
+  // ===========================================================
+
   // Module 1 workspace routes and home
   if (route.startsWith('#/workspace/') && route.includes('/m01/merge-columns')) return <MergeCSV />
   if (route.startsWith('#/workspace/') && route.includes('/m01/leads/preview')) return <UploadPreview />

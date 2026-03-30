@@ -23,6 +23,7 @@ export interface ConversationParticipant {
 
 export interface ConversationThreadDocument extends Document {
   workspaceId: Types.ObjectId;
+  companyId: Types.ObjectId;
   leadId?: Types.ObjectId;
   dealId?: Types.ObjectId;
   channel: ConversationChannel;
@@ -45,6 +46,12 @@ const ConversationThreadSchema = new Schema<ConversationThreadDocument>(
       type: Schema.Types.ObjectId,
       required: true,
       ref: "Workspace",
+      index: true,
+    },
+    companyId: {
+      type: Schema.Types.ObjectId,
+      required: false, // Temporarily optional for backwards compatibility with existing data
+      ref: "Company",
       index: true,
     },
     leadId: {
@@ -117,6 +124,7 @@ const ConversationThreadSchema = new Schema<ConversationThreadDocument>(
 );
 
 ConversationThreadSchema.index({ workspaceId: 1, lastMessageAt: -1 });
+ConversationThreadSchema.index({ workspaceId: 1, companyId: 1 });
 ConversationThreadSchema.index({ workspaceId: 1, leadId: 1 });
 ConversationThreadSchema.index({ workspaceId: 1, dealId: 1 });
 

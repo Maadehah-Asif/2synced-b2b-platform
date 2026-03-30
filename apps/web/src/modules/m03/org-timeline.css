@@ -1,0 +1,71 @@
+/* Organisation Timeline Styles */
+
+.org-timeline-container {
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
+  padding: 16px;
+  overflow-x: auto;
+  background: var(--container-bg, #FFFEFF);
+}
+
+.timeline-row {
+  display: flex;
+  gap: 24px;
+  min-width: fit-content;
+}
+
+.timeline-day {
+  min-width: 80px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.timeline-day-label {
+  font-size: 11px;
+  color: #6b7280;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.timeline-day-events {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-height: 24px;
+}
+
+.timeline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.timeline-dot:hover {
+  transform: scale(1.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.timeline-dot-email-inbound {
+  background-color: #22c55e; /* green */
+}
+
+.timeline-dot-email-outbound {
+  background-color: #3b82f6; /* blue */
+}
+
+.timeline-dot-meeting {
+  background-color: #a855f7; /* purple */
+}
+
+.timeline-dot-whatsapp {
+  background-color: #f97316; /* orange */
+}
+
+.timeline-dot-other {
+  background-color: #6b7280; /* gray */
+}
+

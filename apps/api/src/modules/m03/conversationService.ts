@@ -19,6 +19,7 @@ import MessageSentiment, {
 import FollowUpReminder, {
   type FollowUpReminderDocument,
 } from "./models/FollowUpReminder.js";
+import { resolveOrCreateCompanyForInput } from "./utils/companyResolver.js";
 
 export interface ManualLogSender {
   name: string;
@@ -33,10 +34,21 @@ export interface ManualLogPayload {
   dealId?: string;
   channel: ConversationChannel;
   subject: string;
-  bodyText: string;
-  direction: "inbound" | "outbound";
-  sentAt: string | Date;
-  sender: ManualLogSender;
+  body?: string; // New unified field name for body/notes/message
+  bodyText?: string; // Legacy field
+  direction?: "inbound" | "outbound"; // Optional for notes
+  occurredAt?: string | Date; // New unified field name
+  sentAt?: string | Date; // Legacy field
+  sender?: ManualLogSender; // Legacy format
+  // Channel-specific fields
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  toEmails?: string;
+  participants?: string[]; // For meetings
+  endTime?: string | Date; // For calls/meetings
+  companyName?: string; // Company name for company resolution
+  prospectEmail?: string | null; // Prospect email for company resolution
   createdBy: string;
 }
 
@@ -49,6 +61,7 @@ export interface ManualLogResult {
 
 async function findOrCreateManualThread(
   workspaceId: Types.ObjectId,
+  companyId: Types.ObjectId,
   leadId: Types.ObjectId | undefined,
   dealId: Types.ObjectId | undefined,
   channel: ConversationChannel,
@@ -57,6 +70,7 @@ async function findOrCreateManualThread(
 ): Promise<ConversationThreadDocument> {
   const query: any = {
     workspaceId,
+    companyId,
     subject,
     source: "manual",
   };
@@ -69,6 +83,7 @@ async function findOrCreateManualThread(
   if (!thread) {
     thread = await ConversationThread.create({
       workspaceId,
+      companyId,
       leadId,
       dealId,
       channel,
@@ -91,13 +106,114 @@ export async function manualLogConversation(
   const leadId = payload.leadId ? new Types.ObjectId(payload.leadId) : undefined;
   const dealId = payload.dealId ? new Types.ObjectId(payload.dealId) : undefined;
 
+  // Resolve or create company
+  const company = await resolveOrCreateCompanyForInput(
+    workspaceId,
+    payload.companyName || null,
+    payload.prospectEmail || null
+  );
+
+  // Normalize timestamp (use occurredAt or fallback to sentAt)
   const sentAt =
-    payload.sentAt instanceof Date
+    payload.occurredAt instanceof Date
+      ? payload.occurredAt
+      : payload.sentAt instanceof Date
       ? payload.sentAt
-      : new Date(payload.sentAt);
+      : new Date(payload.occurredAt || payload.sentAt || new Date());
+
+  // Normalize body text
+  const bodyText = payload.body || payload.bodyText || "";
+
+  // Normalize direction (default to outbound for notes)
+  const direction = payload.direction || "outbound";
+
+  // Build sender object from channel-specific fields
+  let sender: {
+    name: string;
+    email?: string;
+    phone?: string;
+    role: "prospect" | "rep" | "other";
+  };
+
+  if (payload.sender) {
+    // Legacy format
+    sender = {
+      name: payload.sender.name,
+      role: payload.sender.role,
+    };
+    if (payload.sender.email) {
+      sender.email = payload.sender.email;
+    }
+    if (payload.sender.phone) {
+      sender.phone = payload.sender.phone;
+    }
+  } else {
+    // New channel-specific format
+    const contactName = payload.contactName || "Unknown";
+    sender = {
+      name: contactName,
+      role: direction === "inbound" ? "prospect" : "rep",
+    };
+    if (payload.contactEmail) {
+      sender.email = payload.contactEmail;
+    }
+    if (payload.contactPhone) {
+      sender.phone = payload.contactPhone;
+    }
+  }
+
+  // Build participants array for thread
+  const participants: Array<{
+    role: "prospect" | "rep" | "other";
+    name: string;
+    email?: string;
+    phone?: string;
+  }> = [];
+
+  if (payload.participants && payload.participants.length > 0) {
+    // Meeting participants
+    for (const participant of payload.participants) {
+      const trimmed = participant.trim();
+      if (trimmed) {
+        // Try to parse as email or name
+        const isEmail = trimmed.includes("@");
+        const participantObj: {
+          role: "prospect" | "rep" | "other";
+          name: string;
+          email?: string;
+        } = {
+          role: "prospect", // Default, could be enhanced
+          name: isEmail ? (trimmed.split("@")[0] || trimmed) : trimmed,
+        };
+        if (isEmail) {
+          participantObj.email = trimmed;
+        }
+        participants.push(participantObj);
+      }
+    }
+  } else if (sender.name && sender.name.trim()) {
+    // Single participant from sender
+    const participantObj: {
+      role: "prospect" | "rep" | "other";
+      name: string;
+      email?: string;
+      phone?: string;
+    } = {
+      role: sender.role,
+      name: sender.name.trim(),
+    };
+    if (sender.email) {
+      participantObj.email = sender.email;
+    }
+    if (sender.phone) {
+      participantObj.phone = sender.phone;
+    }
+    participants.push(participantObj);
+  }
 
   const thread = await findOrCreateManualThread(
     workspaceId,
+    company._id,
     leadId,
     dealId,
     payload.channel,
@@ -105,16 +221,27 @@ export async function manualLogConversation(
     createdBy
   );
 
+  // Update thread participants if needed
+  if (participants.length > 0 && thread.participants.length === 0) {
+    thread.participants = participants;
+  }
+
   const message = await ConversationMessage.create({
     workspaceId,
     threadId: thread._id,
-    direction: payload.direction,
-    sender: payload.sender,
+    direction,
+    sender,
     sentAt,
     subject: payload.subject,
-    bodyText: payload.bodyText,
+    bodyText,
     channel: payload.channel,
-    meta: {},
+    meta: {
+      endTime: payload.endTime
+        ? payload.endTime instanceof Date
+          ? payload.endTime
+          : new Date(payload.endTime)
+        : undefined,
+    },
   });
 
   if (!thread.firstMessageAt || sentAt < thread.firstMessageAt) {
@@ -141,6 +268,7 @@ export interface ListConversationsParams {
   band?: DealHealthBand;
   leadId?: string;
   dealId?: string;
+  companyId?: string; // New: filter by company ID
 }
 
 export interface ConversationListItem {
@@ -167,6 +295,7 @@ export async function listConversations(
     band,
     leadId,
     dealId,
+    companyId, // New: filter by company ID
   } = params;
 
   const wsId = new Types.ObjectId(workspaceId);
@@ -182,6 +311,9 @@ export async function listConversations(
   }
   if (dealId) {
     query.dealId = new Types.ObjectId(dealId);
+  }
+  if (companyId) {
+    query.companyId = new Types.ObjectId(companyId);
   }
   if (search && search.trim().length > 0) {
     query.subject = { $regex: search.trim(), $options: "i" };
@@ -255,9 +387,20 @@ export interface ConversationDetail {
   thread: ConversationThreadDocument;
   messages: ConversationMessageDocument[];
   entities: ConversationEntityDocument[];
-  sentiments: MessageSentimentDocument[];
+  sentiments: Array<{
+    _id: Types.ObjectId;
+    messageId: Types.ObjectId;
+    score: number;
+    label: string;
+    direction?: "inbound" | "outbound";
+  }>;
   latestHealth?: DealHealthDocument | null;
   followUps: FollowUpReminderDocument[];
+  followUpIntent?: {
+    label: string;
+    confidence: number;
+    suggestedMessage: string;
+  } | null;
 }
 
 export async function getConversationDetail(
@@ -287,6 +430,7 @@ export async function getConversationDetail(
       ConversationEntity.find({
         workspaceId: wsId,
         threadId: tId,
+        status: { $ne: "obsolete" }, // Only load active entities
       }).exec(),
       MessageSentiment.find({
         workspaceId: wsId,
@@ -307,13 +451,64 @@ export async function getConversationDetail(
         .exec(),
     ]);
 
+  // Format sentiments to only include necessary fields for frontend
+  const formattedSentiments: ConversationDetail["sentiments"] = sentiments.map((s) => {
+    const sentiment: ConversationDetail["sentiments"][0] = {
+      _id: s._id,
+      messageId: s.messageId,
+      score: s.score,
+      label: s.label,
+    };
+    if (s.direction) {
+      sentiment.direction = s.direction;
+    }
+    return sentiment;
+  });
+
+  // Compute follow-up intent if deal health is available
+  let followUpIntent: ConversationDetail["followUpIntent"] = null;
+  if (latestHealth) {
+    try {
+      const { computeFollowUpIntentFromDeal } = await import(
+        "./services/followUpIntentService.js"
+      );
+      
+      // Extract contact name from thread participants or messages
+      const primaryContact = thread.participants.find((p) => p.role === "prospect") || 
+                            thread.participants[0];
+      const context: {
+        contactName?: string;
+        companyName?: string;
+      } = {
+        companyName: thread.subject, // Use subject as fallback for company name
+      };
+      if (primaryContact?.name) {
+        context.contactName = primaryContact.name;
+      }
+
+      const intentResult = computeFollowUpIntentFromDeal(latestHealth, context);
+
+      if (intentResult) {
+        followUpIntent = {
+          label: intentResult.intent,
+          confidence: intentResult.confidence,
+          suggestedMessage: intentResult.suggestedMessage,
+        };
+      }
+    } catch (err: any) {
+      console.error("Error computing follow-up intent:", err);
+      // Continue without follow-up intent if computation fails
+    }
+  }
+
   return {
     thread,
     messages,
     entities,
-    sentiments,
+    sentiments: formattedSentiments,
     latestHealth: latestHealth || null,
     followUps,
+    followUpIntent,
   };
 }
 

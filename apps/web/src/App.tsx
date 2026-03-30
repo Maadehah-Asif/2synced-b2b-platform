@@ -20,25 +20,20 @@ import Module6Home from './modules/m06/Module6Home'
 import Module1Home from './modules/m01/Module1Home'
 import Module2Home from './modules/m02/Module2Home'
 import Module3Home from './modules/m03/Module3Home'
+import Module5Home from './modules/m05/Module5Home'
 import Module7Home from './modules/m07/Module7Home'
+import Module9Home from './modules/m09/Module9Home'
 import FunnelOverview from './modules/m07/FunnelOverview'
-import LeadAddUpload from './modules/m07/LeadAddUpload'
-import LeadList from './modules/m07/LeadList'
-import LeadDetail from './modules/m07/LeadDetail'
-import StageAddUpload from './modules/m07/StageAddUpload'
-import StageList from './modules/m07/StageList'
+import Module7StageWorkspace from './modules/m07/Module7StageWorkspace'
 import StageDetail from './modules/m07/StageDetail'
-import InteractionAddUpload from './modules/m07/InteractionAddUpload'
-import InteractionList from './modules/m07/InteractionList'
+import Module7InteractionWorkspace from './modules/m07/Module7InteractionWorkspace'
 import InteractionDetail from './modules/m07/InteractionDetail'
 import RoiDashboard from './modules/m06/RoiDashboard'
-import CampaignManager from './modules/m06/CampaignManager'
-import ViewCampaigns from './modules/m06/ViewCampaigns'
+import Module6Campaigns from './modules/m06/Module6Campaigns'
 import CampaignTouchInput from './modules/m06/CampaignTouchInput'
-import CampaignTouchViewer from './modules/m06/CampaignTouchViewer'
+import Module6TouchWorkspace from './modules/m06/Module6TouchWorkspace'
 import Module6Leads from './modules/m06/Module6Leads'
-import DealInput from './modules/m06/DealInput'
-import DealViewer from './modules/m06/DealViewer'
+import Module6DealsWorkspace from './modules/m06/Module6DealsWorkspace'
 import JourneyPreview from './modules/m06/JourneyPreview'
 import RunAttributionScreen from './modules/m06/RunAttributionScreen'
 import AllocationDashboard from './modules/m06/AllocationDashboard'
@@ -83,13 +78,14 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m06/forecast')) return <ForecastPage />
   // Module 6 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m06') && !route.includes('/m06/')) return <Module6Home />
-  if (route.startsWith('#/workspace/') && route.includes('/m06/campaigns/manage')) return <CampaignManager />
-  if (route.startsWith('#/workspace/') && route.includes('/m06/campaigns')) return <ViewCampaigns />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/campaigns/manage')) return <Module6Campaigns />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/campaigns')) return <Module6Campaigns />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/touch-workspace')) return <Module6TouchWorkspace />
   if (route.startsWith('#/workspace/') && route.includes('/m06/touches/input')) return <CampaignTouchInput />
-  if (route.startsWith('#/workspace/') && route.includes('/m06/touches')) return <CampaignTouchViewer />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/touches')) return <CampaignTouchInput />
   if (route.startsWith('#/workspace/') && route.includes('/m06/leads')) return <Module6Leads />
-  if (route.startsWith('#/workspace/') && route.includes('/m06/deals/input')) return <DealInput />
-  if (route.startsWith('#/workspace/') && route.includes('/m06/deals')) return <DealViewer />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/deals/input')) return <Module6DealsWorkspace />
+  if (route.startsWith('#/workspace/') && route.includes('/m06/deals')) return <Module6DealsWorkspace />
   if (route.startsWith('#/workspace/') && route.includes('/m06/journeys')) return <JourneyPreview />
   if (route.startsWith('#/workspace/') && route.includes('/m06/run-attribution')) return <RunAttributionScreen />
   if (route.startsWith('#/workspace/') && route.includes('/m06/allocation')) return <AllocationDashboard />
@@ -118,27 +114,34 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m02') && !route.includes('/m02/')) return <Module2Home />
   // Module 3 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m03') && !route.includes('/m03/')) return <Module3Home />
+  // Module 5 workspace home (no trailing slash)
+  if (route.startsWith('#/workspace/') && route.includes('/m05') && !route.includes('/m05/')) return <Module5Home />
   // Module 7 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m07') && !route.includes('/m07/')) return <Module7Home />
+  // Module 9 workspace home (no trailing slash)
+  if (route.startsWith('#/workspace/') && route.includes('/m09') && !route.includes('/m09/')) return <Module9Home />
   if (route.startsWith('#/workspace/') && route.includes('/m07/overview')) return <FunnelOverview />
   // More specific m07 routes first so upload/list resolve before detail
-  if (route.startsWith('#/workspace/') && route.includes('/m07/leads/upload')) return <LeadAddUpload />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/leads') && !route.includes('/m07/leads/')) return <LeadList />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/leads/')) return <LeadDetail />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/leads/upload')) return <Module6Leads />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/leads') && !route.includes('/m07/leads/')) return <Module6Leads />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/leads/')) return <Module6Leads />
   // m07 stage history routes
-  if (route.startsWith('#/workspace/') && route.includes('/m07/stages/upload')) return <StageAddUpload />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/stages') && !route.includes('/m07/stages/')) return <StageList />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/stages/upload')) return <Module7StageWorkspace />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/stages') && !route.includes('/m07/stages/')) return <Module7StageWorkspace />
   if (route.startsWith('#/workspace/') && route.includes('/m07/stages/')) return <StageDetail />
   // m07 interaction routes
-  if (route.startsWith('#/workspace/') && route.includes('/m07/interactions/upload')) return <InteractionAddUpload />
-  if (route.startsWith('#/workspace/') && route.includes('/m07/interactions') && !route.includes('/m07/interactions/')) return <InteractionList />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/interactions/upload')) return <Module7InteractionWorkspace />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/interactions') && !route.includes('/m07/interactions/')) return <Module7InteractionWorkspace />
   if (route.startsWith('#/workspace/') && route.includes('/m07/interactions/')) return <InteractionDetail />
-  if (route.startsWith('#/m07/leads/')) return <LeadDetail />
-  if (route.startsWith('#/m07/leads')) return <LeadList />
-  if (route.startsWith('#/m07/leads/upload')) return <LeadAddUpload />
-  if (route.startsWith('#/m07/stages/upload')) return <StageAddUpload />
+  if (route.startsWith('#/m07/leads/')) return <Module6Leads />
+  if (route.startsWith('#/m07/leads')) return <Module6Leads />
+  if (route.startsWith('#/m07/leads/upload')) return <Module6Leads />
+  if (route.startsWith('#/m07/stages/upload')) return <Module7StageWorkspace />
   if (route.startsWith('#/m07/stages/') ) return <StageDetail />
-  if (route.startsWith('#/m07/stages')) return <StageList />
+  if (route.startsWith('#/m07/stages')) return <Module7StageWorkspace />
+  if (route.startsWith('#/m07/interactions/upload')) return <Module7InteractionWorkspace />
+  if (route.startsWith('#/m07/interactions/')) return <InteractionDetail />
+  if (route.startsWith('#/m07/interactions')) return <Module7InteractionWorkspace />
   // Module 1 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m01') && !route.includes('/m01/')) return <Module1Home />
   if (route.startsWith('#/workspace/')) return <WorkspaceDetail />

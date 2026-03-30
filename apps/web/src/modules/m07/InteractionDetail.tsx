@@ -42,7 +42,7 @@ export default function InteractionDetail(){
   if(!doc) return (
     <Layout>
       <div className="p-20">
-        <ModuleBackButton toSuffix="/m07" />
+        <ModuleBackButton toSuffix="/m07/interactions" />
         <div style={{ marginTop: 12 }}>Loading...</div>
       </div>
     </Layout>
@@ -52,7 +52,7 @@ export default function InteractionDetail(){
     <Layout>
       <div className="p-20">
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <ModuleBackButton toSuffix="/m07" />
+          <ModuleBackButton toSuffix="/m07/interactions" />
           <h2 style={{ margin: 0 }}>Interaction Detail</h2>
         </div>
 

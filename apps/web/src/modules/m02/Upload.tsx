@@ -3,6 +3,7 @@ import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import MERGED_COLUMNS from '../m01/mergedColumns';
 import { getWorkspaceIdFromHash } from '../../utils/workspace';
+import './module2.css';
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
@@ -375,152 +376,109 @@ export default function UploadM02(){
   }
 return (
   <Layout>
-    <div className="p-20">
-      <div className="mb-12" style={{ display: 'flex', alignItems: 'center' }}>
-        <ModuleBackButton toSuffix="" />
-        <h2 style={{ margin: 0 }}>Module 02 - Upload CSV</h2>
+    <div className="p-20 m02-upload-page">
+      <div className="m02-upload-header">
+        <div className="m02-upload-header-row">
+          <div className="m02-upload-header-copy">
+            <div className="m02-upload-kicker">Intent Input</div>
+            <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <ModuleBackButton toSuffix="" />
+            </div>
+            <h2 style={{ margin: 0 }}>Module 02 Uploads</h2>
+            <p className="m02-upload-subtitle">
+              Add source intent and behavior CSV files, review active batches, and prepare shared records
+              for preview, archive, or merge workflows used by the M02 prioritization flow.
+            </p>
+          </div>
+        </div>
+        <div className="m02-upload-header-stats">
+          <div className="m02-upload-stat">
+            <span className="m02-upload-stat-label">Current View</span>
+            <strong>{statusView === 'active' ? 'Active uploads' : 'Archived uploads'}</strong>
+          </div>
+          <div className="m02-upload-stat">
+            <span className="m02-upload-stat-label">Visible Files</span>
+            <strong>{uploads.length}</strong>
+          </div>
+        </div>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          marginBottom: "20px",
-          flexWrap: "nowrap"
-        }}
-      >
-        <label
-          style={{
-            background: "#0f4258",
-            color: "white",
-            padding: "10px 16px",
-            borderRadius: "6px",
-            cursor: "pointer",
-            fontSize: "14px",
-            minWidth: "100px",
-            textAlign: "center"
-          }}
-        >
-          Choose File
+      <form onSubmit={handleSubmit} className="m02-upload-toolbar">
+        <div className="m02-upload-file-field">
+          <span className="m02-upload-field-label">CSV Source File</span>
           <input
             type="file"
             accept=".csv,text/csv"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            style={{ display: "none" }}
           />
-        </label>
+        </div>
+        <button type="submit" className="btn-primary">Upload</button>
+      </form>
 
+      {message && <div className="mt-8 m02-upload-message">{message}</div>}
+
+      <div className="mt-12 mb-8 m02-upload-filters">
         <button
           type="button"
-          onClick={handleSubmit}
-          style={{
-            background: "#0f4258",
-            color: "white",
-            padding: "10px 16px",
-            borderRadius: "6px",
-            border: "none",
-            fontSize: "14px",
-            cursor: "pointer",
-            height: "40px",
-            minWidth: "100px"
-          }}
-        >
-          Upload
-        </button>
-
-        <button
-          type="button"
+          className={`btn-ghost ${statusView==='active'?'font-700':''}`}
           onClick={() => setStatusView("active")}
-          style={{
-            background: "#0f4258",
-            color: "white",
-            padding: "10px 16px",
-            borderRadius: "6px",
-            border: "none",
-            fontSize: "14px",
-            cursor: "pointer",
-            height: "40px",
-            minWidth: "100px"
-          }}
         >
           All Uploads
         </button>
-
         <button
           type="button"
+          className={`btn-ghost ${statusView==='archived'?'font-700':''}`}
           onClick={() => setStatusView("archived")}
-          style={{
-            background: "#0f4258",
-            color: "white",
-            padding: "10px 16px",
-            borderRadius: "6px",
-            border: "none",
-            fontSize: "14px",
-            cursor: "pointer",
-            height: "40px",
-            minWidth: "100px"
-          }}
         >
           Archive
         </button>
-
         <button
           type="button"
+          className="btn-primary"
           onClick={openMergeModal}
           disabled={Object.keys(selectedForMerge).filter(k => selectedForMerge[k]).length < 2}
-          style={{
-            background: "#0f4258",
-            color: "white",
-            padding: "10px 16px",
-            borderRadius: "6px",
-            border: "none",
-            fontSize: "14px",
-            cursor: "pointer",
-            height: "40px",
-            minWidth: "100px",
-             opacity: 1 
-          }}
         >
           Merge Selected
         </button>
       </div>
 
-      {message && <div className="mt-8">{message}</div>}
-
-      <h3>Uploads ({statusView})</h3>
-      <ul>
+      <div className="m02-upload-list-shell">
+        <div className="m02-upload-list-head">
+          <h3>Uploads ({statusView})</h3>
+          <div className="m02-upload-list-caption">
+            {statusView === "active"
+              ? "Review uploaded intent-source files, preview their records, open details, archive old batches, or select at least two uploads to merge."
+              : "Restore archived uploads or permanently remove outdated records when they are no longer needed."}
+          </div>
+        </div>
+        <ul className="m02-upload-list">
         {uploads.map((u: any) => (
-          <li key={u._id} className="list-item">
-            <div className="meta">
-              {u.filename} - {u.contentType} - {new Date(u.createdAt).toLocaleString()}
-            </div>
-
-            <div>
+          <li key={u._id} className="list-item m02-upload-item">
+            <div className="m02-upload-select">
               {statusView === "active" && (
                 <input
                   type="checkbox"
                   checked={!!selectedForMerge[u._id]}
                   onChange={() => toggleSelectForMerge(u._id)}
+                  title="Select for merge"
                 />
               )}
+            </div>
+            <div className="meta m02-upload-meta">
+              <div className="m02-upload-filename">{u.filename}</div>
+              <div className="m02-upload-meta-row">{u.contentType || "text/csv"}</div>
+              <div className="m02-upload-meta-row">{new Date(u.createdAt).toLocaleString()}</div>
+            </div>
+            <div className="m02-upload-actions">
 
               <button
                 type="button"
-                className="ml-6"
+                className="btn-primary"
                 onClick={() => {
                   setPreviewReturn();
                   if (workspace)
                     window.location.hash = `#/workspace/${workspace}/m02/upload/preview/${u._id}`;
                   else window.location.hash = `#/m02/upload/preview/${u._id}`;
-                }}
-                style={{
-                  background: "#0f4258",
-                  color: "white",
-                  borderRadius: "6px",
-                  padding: "8px 14px",
-                  border: "none",
-                  cursor: "pointer"
                 }}
               >
                 Preview
@@ -528,7 +486,7 @@ return (
 
               <button
                 type="button"
-                className="ml-6"
+                className="btn-ghost"
                 onClick={async () => {
                   const res = await fetch(
                     `${API_URL}/m01/uploads/${u._id}?workspace=${workspace}`,
@@ -538,14 +496,6 @@ return (
                   if (j?.ok) setDetailsItem(j.item);
                   else setMessage("failed to load details");
                 }}
-                style={{
-                  background: "#0f4258",
-                  color: "white",
-                  borderRadius: "6px",
-                  padding: "8px 14px",
-                  border: "none",
-                  cursor: "pointer"
-                }}
               >
                 Details
               </button>
@@ -553,16 +503,8 @@ return (
               {statusView === "active" ? (
                 <button
                   type="button"
-                  className="ml-6"
+                  className="btn-ghost"
                   onClick={() => archiveUpload(u._id)}
-                  style={{
-                    background: "#0f4258",
-                    color: "white",
-                    borderRadius: "6px",
-                    padding: "8px 14px",
-                    border: "none",
-                    cursor: "pointer"
-                  }}
                 >
                   Archive
                 </button>
@@ -570,32 +512,16 @@ return (
                 <>
                   <button
                     type="button"
-                    className="ml-6"
+                    className="btn-ghost"
                     onClick={() => restoreUpload(u._id)}
-                    style={{
-                      background: "#0f4258",
-                      color: "white",
-                      borderRadius: "6px",
-                      padding: "8px 14px",
-                      border: "none",
-                      cursor: "pointer"
-                    }}
                   >
                     Restore
                   </button>
 
                   <button
                     type="button"
-                    className="ml-6"
+                    className="btn-ghost m02-upload-danger"
                     onClick={() => permanentDelete(u._id)}
-                    style={{
-                      background: "red",
-                      color: "white",
-                      borderRadius: "6px",
-                      padding: "8px 14px",
-                      border: "none",
-                      cursor: "pointer"
-                    }}
                   >
                     Permanently Delete
                   </button>
@@ -604,11 +530,12 @@ return (
             </div>
           </li>
         ))}
-      </ul>
+        </ul>
+      </div>
 
       {confirmAction && (
         <div className="modal-overlay" onClick={() => setConfirmAction(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content m02-upload-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Confirm</h3>
             <div className="mt-8">
               {confirmAction.type === "archive" && <div>Move this upload to archive?</div>}
@@ -635,7 +562,7 @@ return (
 
       {detailsItem && (
         <div className="modal-overlay" onClick={() => setDetailsItem(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content m02-upload-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Upload details</h3>
             <div><strong>Filename:</strong> {detailsItem.filename}</div>
             <div><strong>Original name:</strong> {detailsItem.originalName}</div>
@@ -652,7 +579,7 @@ return (
 
       {mergeOpen && (
         <div className="modal-overlay" onClick={() => setMergeOpen(false)}>
-          <div className="modal-content max-width-900" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content max-width-900 m02-upload-modal m02-upload-merge-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Merge uploads</h3>
             <div className="mb-8 muted">
               Follow the two-step merge: 1) choose matching key per file; 2) map source columns to target schema.

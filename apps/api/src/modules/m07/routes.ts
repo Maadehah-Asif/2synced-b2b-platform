@@ -1,16 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
 import {
-  createLead,
-  previewUpload,
-  commitUpload,
-  listLeads,
-  getLead,
-  updateLead,
-  archiveLead,
-  deleteLeadPermanent,
-} from './controllers.js';
-import {
   createInteraction,
   previewInteractionUpload,
   commitInteractionUpload,
@@ -35,15 +25,6 @@ const router = Router();
 const upload = multer();
 
 router.get('/', (_req, res) => res.json({ ok: true, module: 'm07' }));
-router.post('/leads', createLead);
-router.post('/leads/upload/preview', upload.single('file'), previewUpload);
-router.post('/leads/upload/commit', commitUpload);
-
-router.get('/leads', listLeads);
-router.get('/leads/:id', getLead);
-router.put('/leads/:id', updateLead);
-router.post('/leads/:id/archive', archiveLead);
-router.delete('/leads/:id/permanent', deleteLeadPermanent);
 
 // Stage history routes
 router.post('/stages', createStage);

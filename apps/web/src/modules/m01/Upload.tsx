@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import MERGED_COLUMNS from './mergedColumns';
+import './module1.css';
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
@@ -429,19 +430,43 @@ export default function Upload(){
 
   return (
     <Layout>
-      <div className="p-20">
-        <div className="mb-12" style={{ display: 'flex', alignItems: 'center' }}>
-          <ModuleBackButton toSuffix="" />
-          <h2 style={{ margin: 0 }}>Module 01 — Upload CSV</h2>
+      <div className="p-20 m01-upload-page">
+        <div className="m01-upload-header">
+          <div className="m01-upload-header-row">
+            <div className="m01-upload-header-copy">
+              <div className="m01-upload-kicker">Lead Input</div>
+              <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <ModuleBackButton toSuffix="" />
+              </div>
+              <h2 style={{ margin: 0 }}>Module 01 Uploads</h2>
+              <p className="m01-upload-subtitle">
+                Add source CSV files, review active upload batches, and prepare lead data for preview,
+                archive, or merge workflows inside module 1.
+              </p>
+            </div>
+          </div>
+          <div className="m01-upload-header-stats">
+            <div className="m01-upload-stat">
+              <span className="m01-upload-stat-label">Current View</span>
+              <strong>{statusView === 'active' ? 'Active uploads' : 'Archived uploads'}</strong>
+            </div>
+            <div className="m01-upload-stat">
+              <span className="m01-upload-stat-label">Visible Files</span>
+              <strong>{uploads.length}</strong>
+            </div>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <input type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-          <button type="submit">Upload</button>
+        <form onSubmit={handleSubmit} className="m01-upload-toolbar">
+          <div className="m01-upload-file-field">
+            <span className="m01-upload-field-label">CSV Source File</span>
+            <input type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          </div>
+          <button type="submit" className="btn-primary">Upload</button>
         </form>
-  {message && <div className="mt-8">{message}</div>}
+        {message && <div className="mt-8 m01-upload-message">{message}</div>}
 
-          <div className="mt-12 mb-8">
+        <div className="mt-12 mb-8 m01-upload-filters">
           <button type="button" className={`btn-ghost ${statusView==='active'?'font-700':''}`} onClick={() => setStatusView('active')}>All Uploads</button>
           <button type="button" className={`btn-ghost ml-8 ${statusView==='archived'?'font-700':''}`} onClick={() => setStatusView('archived')}>Archive</button>
           <button
@@ -455,51 +480,66 @@ export default function Upload(){
           </button>
         </div>
 
-        <h3>Uploads ({statusView})</h3>
-        <ul>
-          {uploads.map((u:any) => (
-            <li key={u._id} className="list-item">
-              <div className="meta">{u.filename} — {u.contentType} — {new Date(u.createdAt).toLocaleString()}</div>
-              <div>
-                {statusView === 'active' && <input type="checkbox" checked={!!selectedForMerge[u._id]} onChange={() => toggleSelectForMerge(u._id)} title="Select for merge" />}
+        <div className="m01-upload-list-shell">
+          <div className="m01-upload-list-head">
+            <h3>Uploads ({statusView})</h3>
+            <div className="m01-upload-list-caption">
+            {statusView === 'active'
+              ? 'Preview files, inspect details, archive old uploads, or select at least two rows to merge.'
+              : 'Restore archived files or permanently remove records you no longer need.'}
+            </div>
+          </div>
+          <ul className="m01-upload-list">
+            {uploads.map((u:any) => (
+              <li key={u._id} className="list-item m01-upload-item">
+                <div className="m01-upload-select">
+                  {statusView === 'active' && <input type="checkbox" checked={!!selectedForMerge[u._id]} onChange={() => toggleSelectForMerge(u._id)} title="Select for merge" />}
+                </div>
+                <div className="meta m01-upload-meta">
+                  <div className="m01-upload-filename">{u.filename}</div>
+                  <div className="m01-upload-meta-row">{u.contentType || 'text/csv'}</div>
+                  <div className="m01-upload-meta-row">{new Date(u.createdAt).toLocaleString()}</div>
+                </div>
+                <div className="m01-upload-actions">
                 <button
                   type="button"
-                  className="ml-6"
+                  className="btn-primary"
                   onClick={() => {
                     setPreviewReturn();
                     if (workspace) window.location.hash = `#/workspace/${workspace}/m01/upload/preview/${u._id}`; else window.location.hash = `#/m01/upload/preview/${u._id}`;
                   }}
                 >Preview</button>
-                <button type="button" className="ml-6" onClick={async () => {
+                <button type="button" className="btn-ghost" onClick={async () => {
                   // open details
                   const res = await fetch(`${API_URL}/m01/uploads/${u._id}?workspace=${workspace}`, { headers: getAuthHeaders() });
                   const j = await res.json();
                   if (j?.ok) setDetailsItem(j.item); else setMessage('failed to load details');
-                }}>⋯</button>
+                }}>Details</button>
                 {statusView === 'active' ? (
-                  <button type="button" className="ml-6" onClick={() => archiveUpload(u._id)}>Archive</button>
+                  <button type="button" className="btn-ghost" onClick={() => archiveUpload(u._id)}>Archive</button>
                 ) : (
                   <>
-                    <button type="button" className="ml-6" onClick={() => restoreUpload(u._id)}>Restore</button>
-                    <button type="button" className="ml-6" onClick={() => permanentDelete(u._id)}>Permanently Delete</button>
+                    <button type="button" className="btn-ghost" onClick={() => restoreUpload(u._id)}>Restore</button>
+                    <button type="button" className="btn-ghost m01-upload-danger" onClick={() => permanentDelete(u._id)}>Delete</button>
                   </>
                 )}
-              </div>
-            </li>
-          ))}
-        </ul>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
 
         {/* Preview moved to dedicated screen (UploadPreview). Inline preview removed. */}
 
         {/* Confirmation modal (in-app) */}
         {confirmAction && (
           <div className="modal-overlay" onClick={() => setConfirmAction(null)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content m01-upload-modal" onClick={(e) => e.stopPropagation()}>
               <h3>Confirm</h3>
               <div className="mt-8">
                 {confirmAction.type === 'archive' && <div>Move this upload to archive?</div>}
                 {confirmAction.type === 'restore' && <div>Restore this upload to active?</div>}
-                {confirmAction.type === 'permanent' && <div>Permanently delete this upload? This cannot be undone.</div>}
+                {confirmAction.type === 'permanent' && <div>Delete this upload? This cannot be undone.</div>}
               </div>
               <div className="mt-12 flex justify-between">
                 <div>
@@ -515,7 +555,7 @@ export default function Upload(){
 
         {detailsItem && (
           <div className="modal-overlay" onClick={() => setDetailsItem(null)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content m01-upload-modal" onClick={(e) => e.stopPropagation()}>
               <h3>Upload details</h3>
               <div><strong>Filename:</strong> {detailsItem.filename}</div>
               <div><strong>Original name:</strong> {detailsItem.originalName}</div>
@@ -530,7 +570,7 @@ export default function Upload(){
 
         {mergeOpen && (
           <div className="modal-overlay" onClick={() => setMergeOpen(false)}>
-            <div className="modal-content max-width-900" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content max-width-900 m01-upload-modal m01-upload-merge-modal" onClick={(e) => e.stopPropagation()}>
               <h3>Merge uploads</h3>
               <div className="mb-8 muted">Follow the two-step merge: 1) choose matching key per file; 2) map source columns to target schema (source-first).</div>
               <div style={{ maxHeight: '60vh', overflow: 'auto' }}>
@@ -602,7 +642,7 @@ export default function Upload(){
                       ))}
                     </div>
                     <div style={{ marginTop: 10 }}>
-                      <button disabled={!matchingKeysCompatible()} onClick={() => setStep(2)}>Next →</button>
+                      <button disabled={!matchingKeysCompatible()} onClick={() => setStep(2)}>Next→</button>
                     </div>
                   </div>
                 )}
@@ -683,3 +723,5 @@ export default function Upload(){
     </Layout>
   );
 }
+
+

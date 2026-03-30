@@ -11,6 +11,7 @@ import { WorkspaceMember } from '../core/auth/models/WorkspaceMember.js';
 import Lead from '../m01/models/Lead.js';
 import { CHANNEL_SET } from './constants.js';
 import { Module6Lead } from './models/Module6Lead.js';
+import FunnelLead from '../m07/models/FunnelLead.js';
 import { runForecast } from './forecasting.js';
 import { invokePythonAgent, invokePythonAgentByChannel, type ForecastResult as AgentForecastResult } from './pythonAgentInvoker.js';
 
@@ -35,6 +36,142 @@ function parseDateInput(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return undefined;
   return date;
+}
+
+function sanitizeStringValue(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text ? text : null;
+}
+
+function sanitizeNumberValue(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function deriveFullName(parts: { full_name?: unknown; name?: unknown; first_name?: unknown; last_name?: unknown }) {
+  const full = sanitizeStringValue(parts.full_name) || sanitizeStringValue(parts.name);
+  if (full) return full;
+  const first = sanitizeStringValue(parts.first_name);
+  const last = sanitizeStringValue(parts.last_name);
+  const combined = [first, last].filter(Boolean).join(' ').trim();
+  return combined || null;
+}
+
+function buildModule6LeadPayload(input: Record<string, any>) {
+  const fullName = deriveFullName(input);
+  const firstName = sanitizeStringValue(input.first_name);
+  const lastName = sanitizeStringValue(input.last_name);
+  return {
+    name: fullName,
+    full_name: fullName,
+    first_name: firstName,
+    last_name: lastName,
+    company: sanitizeStringValue(input.company),
+    source: sanitizeStringValue(input.source),
+    owner: sanitizeStringValue(input.owner),
+    industry: sanitizeStringValue(input.industry),
+    region: sanitizeStringValue(input.region),
+    lead_score: sanitizeNumberValue(input.lead_score),
+    intent_score: sanitizeNumberValue(input.intent_score),
+    email: sanitizeStringValue(input.email),
+    job_title: sanitizeStringValue(input.job_title),
+    segment: sanitizeStringValue(input.segment),
+    is_archived: input.is_archived === undefined ? undefined : Boolean(input.is_archived),
+    raw: input.raw && typeof input.raw === 'object' ? input.raw : null,
+  };
+}
+
+function serializeModule6Lead(lead: any) {
+  return {
+    _id: String(lead._id),
+    lead_id: lead.lead_id,
+    name: lead.name || lead.full_name || null,
+    full_name: lead.full_name || lead.name || null,
+    first_name: lead.first_name || null,
+    last_name: lead.last_name || null,
+    company: lead.company || null,
+    source: lead.source || null,
+    owner: lead.owner || null,
+    industry: lead.industry || null,
+    region: lead.region || null,
+    lead_score: lead.lead_score ?? null,
+    intent_score: lead.intent_score ?? null,
+    email: lead.email || null,
+    job_title: lead.job_title || null,
+    segment: lead.segment || null,
+    is_archived: !!lead.is_archived,
+    raw: lead.raw || null,
+    createdAt: lead.createdAt,
+    updatedAt: lead.updatedAt,
+  };
+}
+
+async function syncModule6LeadToFunnelLead(projectId: string, lead: any) {
+  const payload = {
+    full_name: lead.full_name || lead.name || null,
+    first_name: lead.first_name || null,
+    last_name: lead.last_name || null,
+    company: lead.company || null,
+    source: lead.source || null,
+    owner: lead.owner || null,
+    industry: lead.industry || null,
+    region: lead.region || null,
+    lead_score: lead.lead_score ?? null,
+    intent_score: lead.intent_score ?? null,
+    email: lead.email || null,
+    job_title: lead.job_title || null,
+    segment: lead.segment || null,
+    is_archived: !!lead.is_archived,
+    raw: lead.raw || null,
+  };
+
+  await FunnelLead.updateOne(
+    { workspace_id: projectId, lead_id: lead.lead_id },
+    {
+      $set: payload,
+      $setOnInsert: {
+        workspace_id: projectId,
+        lead_id: lead.lead_id,
+      },
+      $currentDate: { updated_at: true },
+    },
+    { upsert: true }
+  );
+}
+
+async function loadLeadSummariesByObjectIds(ids: string[]) {
+  const summaries: Record<string, { name: string | null; email: string | null; company: string | null; lead_id: string | null }> = {};
+  if (!ids.length) return summaries;
+
+  const objectIds = ids.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(id));
+  if (!objectIds.length) return summaries;
+
+  const [legacyDocs, module6Docs] = await Promise.all([
+    Lead.find({ _id: { $in: objectIds } }).select('First_Name Last_Name Email Company lead_id').lean(),
+    Module6Lead.find({ _id: { $in: objectIds } }).select('lead_id name full_name first_name last_name email company').lean(),
+  ]);
+
+  for (const doc of legacyDocs) {
+    summaries[String(doc._id)] = {
+      name: `${doc.First_Name || ''} ${doc.Last_Name || ''}`.trim() || null,
+      email: (doc as any).Email || null,
+      company: (doc as any).Company || null,
+      lead_id: doc.lead_id != null ? String(doc.lead_id) : null,
+    };
+  }
+
+  for (const doc of module6Docs) {
+    summaries[String(doc._id)] = {
+      name: doc.full_name || doc.name || `${doc.first_name || ''} ${doc.last_name || ''}`.trim() || null,
+      email: doc.email || null,
+      company: doc.company || null,
+      lead_id: doc.lead_id || null,
+    };
+  }
+
+  return summaries;
 }
 
 async function resolveLeadObjectId(
@@ -626,13 +763,16 @@ export async function createCampaignTouch(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    const projectOid = new mongoose.Types.ObjectId(projectId);
     const { leadId, campaignId, channel, type, touched_at, metadata } = req.body || {};
-    if (!leadId || !mongoose.isValidObjectId(leadId)) return res.status(400).json({ error: 'leadId_required' });
+    if (!leadId) return res.status(400).json({ error: 'leadId_required' });
     if (!campaignId || !mongoose.isValidObjectId(campaignId)) return res.status(400).json({ error: 'campaignId_required' });
     if (!touched_at) return res.status(400).json({ error: 'touched_at_required' });
     if (!type) return res.status(400).json({ error: 'type_required' });
     const dt = new Date(touched_at);
     if (isNaN(dt.getTime())) return res.status(400).json({ error: 'invalid_datetime' });
+    const resolvedLeadId = await resolveLeadObjectId(projectOid, String(leadId), {});
+    if (!resolvedLeadId) return res.status(400).json({ error: 'lead_not_found' });
 
     // Resolve campaign for optional channel fallback
     let finalChannel = channel;
@@ -642,8 +782,8 @@ export async function createCampaignTouch(req: Request, res: Response) {
     }
 
     const touch = await CampaignTouch.create({
-      project_id: new mongoose.Types.ObjectId(projectId),
-      lead_id: new mongoose.Types.ObjectId(leadId),
+      project_id: projectOid,
+      lead_id: new mongoose.Types.ObjectId(resolvedLeadId),
       campaign_id: new mongoose.Types.ObjectId(campaignId),
       channel: finalChannel,
       type,
@@ -912,7 +1052,7 @@ export async function updateCampaign(req: Request, res: Response) {
   try {
     const id = req.params.id;
     if (!mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'invalid id' });
-    const { name, channel, startDate, endDate, description, tags, status } = req.body || {};
+    const { name, channel, startDate, endDate, description, tags, status, spend } = req.body || {};
     const camp = await Campaign.findById(id).exec();
     if (!camp) return res.status(404).json({ error: 'not_found' });
     if (name) camp.name = name;
@@ -921,6 +1061,7 @@ export async function updateCampaign(req: Request, res: Response) {
     if (tags !== undefined) camp.tags = Array.isArray(tags) ? (tags as string[]) : null;
     if (startDate !== undefined) camp.start_date = startDate ? new Date(startDate) : null;
     if (endDate !== undefined) camp.end_date = endDate ? new Date(endDate) : null;
+    if (spend !== undefined) camp.spend = Number(spend) || 0;
     if (status) camp.status = status;
     await camp.save();
     return res.json({ ok: true });
@@ -1126,30 +1267,101 @@ export async function listModule6Leads(req: Request, res: Response) {
     if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
     const projectOid = new mongoose.Types.ObjectId(projectId);
     const search = (req.query.search as string | undefined)?.trim();
+    const includeArchived = req.query.includeArchived === 'true';
     const limit = Math.min(200, Math.max(1, Number(req.query.limit || 100)));
     const match: Record<string, any> = { project_id: projectOid };
+    if (!includeArchived) match.is_archived = { $ne: true };
     if (search) {
       const regex = new RegExp(sanitizeRegex(search), 'i');
       match.$or = [
         { lead_id: regex },
         { name: regex },
+        { full_name: regex },
+        { first_name: regex },
+        { last_name: regex },
+        { company: regex },
         { email: regex },
+        { source: regex },
+        { owner: regex },
+        { industry: regex },
+        { region: regex },
+        { job_title: regex },
+        { segment: regex },
       ];
     }
     const leads = await Module6Lead.find(match).sort({ createdAt: -1 }).limit(limit).lean();
-    return res.json({
-      ok: true,
-      leads: leads.map(l => ({
-        _id: String(l._id),
-        lead_id: l.lead_id,
-        name: l.name || null,
-        email: l.email || null,
-        createdAt: l.createdAt,
-        updatedAt: l.updatedAt,
-      })),
-    });
+    return res.json({ ok: true, leads: leads.map(serializeModule6Lead) });
   } catch (e) {
     console.error('[m06/listModule6Leads]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+export async function createModule6Lead(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const leadId = sanitizeStringValue(req.body?.lead_id ?? req.body?.leadId);
+    if (!leadId) return res.status(400).json({ error: 'lead_id_required' });
+
+    const exists = await Module6Lead.findOne({ project_id: projectOid, lead_id: leadId }).select('_id').lean();
+    if (exists) return res.status(409).json({ error: 'duplicate_lead_id' });
+
+    const payload = buildModule6LeadPayload(req.body || {});
+    const doc = await Module6Lead.create({ project_id: projectOid, lead_id: leadId, ...payload });
+    await syncModule6LeadToFunnelLead(projectId, doc);
+    return res.status(201).json({ ok: true, lead: serializeModule6Lead(doc) });
+  } catch (e) {
+    console.error('[m06/createModule6Lead]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+export async function updateModule6Lead(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    const id = req.params.id;
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!id || !mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'invalid_id' });
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+
+    const doc = await Module6Lead.findOne({ _id: id, project_id: projectOid }).exec();
+    if (!doc) return res.status(404).json({ error: 'not_found' });
+
+    const nextLeadId = sanitizeStringValue(req.body?.lead_id ?? req.body?.leadId);
+    if (nextLeadId && nextLeadId !== doc.lead_id) {
+      const dup = await Module6Lead.findOne({ project_id: projectOid, lead_id: nextLeadId, _id: { $ne: doc._id } }).select('_id').lean();
+      if (dup) return res.status(409).json({ error: 'duplicate_lead_id' });
+      doc.lead_id = nextLeadId;
+    }
+
+    const payload = buildModule6LeadPayload(req.body || {});
+    Object.assign(doc, payload);
+    await doc.save();
+    await syncModule6LeadToFunnelLead(projectId, doc);
+    return res.json({ ok: true, lead: serializeModule6Lead(doc) });
+  } catch (e) {
+    console.error('[m06/updateModule6Lead]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+export async function archiveModule6Lead(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    const id = req.params.id;
+    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!id || !mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'invalid_id' });
+    const projectOid = new mongoose.Types.ObjectId(projectId);
+    const doc = await Module6Lead.findOne({ _id: id, project_id: projectOid }).exec();
+    if (!doc) return res.status(404).json({ error: 'not_found' });
+    doc.is_archived = true;
+    await doc.save();
+    await syncModule6LeadToFunnelLead(projectId, doc);
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('[m06/archiveModule6Lead]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -1169,7 +1381,19 @@ export async function importModule6LeadsCSV(req: Request, res: Response) {
     const mapping = map && typeof map === 'object' ? map : {
       lead_id: 'lead_id',
       name: 'name',
+      full_name: 'full_name',
+      first_name: 'first_name',
+      last_name: 'last_name',
+      company: 'company',
+      source: 'source',
+      owner: 'owner',
+      industry: 'industry',
+      region: 'region',
+      lead_score: 'lead_score',
+      intent_score: 'intent_score',
       email: 'email',
+      job_title: 'job_title',
+      segment: 'segment',
     };
 
     const indexOf = (value: string | null | undefined): number | null => {
@@ -1185,7 +1409,19 @@ export async function importModule6LeadsCSV(req: Request, res: Response) {
     const rowIdx: number | null = null;
     const leadIdIdx = indexOf(mapping.lead_id ?? mapping.lead);
     const nameIdx = indexOf(mapping.name);
+    const fullNameIdx = indexOf(mapping.full_name);
+    const firstNameIdx = indexOf(mapping.first_name);
+    const lastNameIdx = indexOf(mapping.last_name);
+    const companyIdx = indexOf(mapping.company);
+    const sourceIdx = indexOf(mapping.source);
+    const ownerIdx = indexOf(mapping.owner);
+    const industryIdx = indexOf(mapping.industry);
+    const regionIdx = indexOf(mapping.region);
+    const leadScoreIdx = indexOf(mapping.lead_score);
+    const intentScoreIdx = indexOf(mapping.intent_score);
     const emailIdx = indexOf(mapping.email);
+    const jobTitleIdx = indexOf(mapping.job_title);
+    const segmentIdx = indexOf(mapping.segment);
 
     if (leadIdIdx === null) {
       return res.status(400).json({ error: 'required_mapping_missing', required: ['lead_id'], header });
@@ -1197,6 +1433,7 @@ export async function importModule6LeadsCSV(req: Request, res: Response) {
 
     let processed = 0;
     let inserted = 0;
+    let updated = 0;
     let failed = 0;
     let duplicates = 0;
     const failedRows: Array<{ row: number; error: string }> = [];
@@ -1213,22 +1450,40 @@ export async function importModule6LeadsCSV(req: Request, res: Response) {
 
       // Row number value removed
 
-      const nameValue = nameIdx !== null ? (columns[nameIdx] || '').trim() : '';
-      const emailValue = emailIdx !== null ? (columns[emailIdx] || '').trim() : '';
+      const payload = buildModule6LeadPayload({
+        name: nameIdx !== null ? columns[nameIdx] : null,
+        full_name: fullNameIdx !== null ? columns[fullNameIdx] : null,
+        first_name: firstNameIdx !== null ? columns[firstNameIdx] : null,
+        last_name: lastNameIdx !== null ? columns[lastNameIdx] : null,
+        company: companyIdx !== null ? columns[companyIdx] : null,
+        source: sourceIdx !== null ? columns[sourceIdx] : null,
+        owner: ownerIdx !== null ? columns[ownerIdx] : null,
+        industry: industryIdx !== null ? columns[industryIdx] : null,
+        region: regionIdx !== null ? columns[regionIdx] : null,
+        lead_score: leadScoreIdx !== null ? columns[leadScoreIdx] : null,
+        intent_score: intentScoreIdx !== null ? columns[intentScoreIdx] : null,
+        email: emailIdx !== null ? columns[emailIdx] : null,
+        job_title: jobTitleIdx !== null ? columns[jobTitleIdx] : null,
+        segment: segmentIdx !== null ? columns[segmentIdx] : null,
+        raw: Object.fromEntries(header.map((key, idx) => [key, columns[idx] ?? ''])),
+      });
 
       try {
-        const existing = await Module6Lead.findOne({ project_id: projectOid, lead_id: leadIdentifier }).select('_id').lean();
+        const existing = await Module6Lead.findOne({ project_id: projectOid, lead_id: leadIdentifier }).exec();
         if (existing) {
+          Object.assign(existing, payload);
+          await existing.save();
+          await syncModule6LeadToFunnelLead(projectId, existing);
+          updated++;
           duplicates++;
           continue;
         }
-        await Module6Lead.create({
+        const doc = await Module6Lead.create({
           project_id: projectOid,
           lead_id: leadIdentifier,
-          // row_number removed
-          name: nameValue || undefined,
-          email: emailValue || undefined,
+          ...payload,
         });
+        await syncModule6LeadToFunnelLead(projectId, doc);
         inserted++;
       } catch (err: any) {
         failed++;
@@ -1236,7 +1491,7 @@ export async function importModule6LeadsCSV(req: Request, res: Response) {
       }
     }
 
-    return res.json({ ok: true, processed, inserted, failed, duplicates, failedRows, selected: (lastDataRow - firstDataRow + 1) });
+    return res.json({ ok: true, processed, inserted, updated, failed, duplicates, failedRows, selected: (lastDataRow - firstDataRow + 1) });
   } catch (e) {
     console.error('[m06/importModule6LeadsCSV]', e);
     return res.status(500).json({ error: 'internal' });
@@ -1251,6 +1506,7 @@ export async function searchModule6Leads(req: Request, res: Response) {
     const query = (req.query.q as string | undefined)?.trim();
     const limit = Math.min(50, Math.max(1, Number(req.query.limit || 15)));
     const match: Record<string, any> = { project_id: projectOid };
+    match.is_archived = { $ne: true };
     if (query) {
       if (/^\d+$/.test(query)) {
         match.lead_id = query;
@@ -1259,6 +1515,10 @@ export async function searchModule6Leads(req: Request, res: Response) {
         match.$or = [
           { lead_id: regex },
           { name: regex },
+          { full_name: regex },
+          { first_name: regex },
+          { last_name: regex },
+          { company: regex },
           { email: regex },
         ];
       }
@@ -1268,7 +1528,9 @@ export async function searchModule6Leads(req: Request, res: Response) {
       return res.json({ leads: leads.map(l => ({
         _id: String(l._id),
         lead_id: l.lead_id,
-        name: l.name || null,
+        name: l.full_name || l.name || `${l.first_name || ''} ${l.last_name || ''}`.trim() || null,
+        full_name: l.full_name || l.name || null,
+        company: l.company || null,
         email: l.email || null,
       })) });
     }
@@ -1416,8 +1678,11 @@ export async function createDeal(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    const projectOid = new mongoose.Types.ObjectId(projectId);
     const { deal_id, lead_id, amount, currency, closed_won, closed_at, stage, notes } = req.body || {};
-    if (!lead_id || !mongoose.isValidObjectId(lead_id)) return res.status(400).json({ error: 'lead_id_required' });
+    if (!lead_id) return res.status(400).json({ error: 'lead_id_required' });
+    const resolvedLeadId = await resolveLeadObjectId(projectOid, String(lead_id), {});
+    if (!resolvedLeadId) return res.status(400).json({ error: 'lead_not_found' });
     const revenueNum = Number(amount);
     if (isNaN(revenueNum) || revenueNum < 0) return res.status(400).json({ error: 'amount_invalid' });
     // currency enforcement: only USD supported
@@ -1442,11 +1707,14 @@ export async function createDeal(req: Request, res: Response) {
 
     const doc = await Deal.create({
       deal_id: deal_id || `deal-${Date.now()}`,
-      lead_id: new mongoose.Types.ObjectId(lead_id),
-      project_id: new mongoose.Types.ObjectId(projectId),
+      lead_id: new mongoose.Types.ObjectId(resolvedLeadId),
+      project_id: projectOid,
       revenue: mongoose.Types.Decimal128.fromString(String(revenueNum)),
       closed_won: cw,
       closed_at: closedAt,
+      ...(currency ? { currency } : {}),
+      ...(stage ? { stage } : {}),
+      ...(notes ? { notes } : {}),
     });
     return res.status(201).json({ ok: true, deal: { id: String(doc._id) } });
   } catch (e) {
@@ -2238,13 +2506,18 @@ export async function previewDeals(req: Request, res: Response) {
     let leadIdsFilter: string[] | null = null;
     if (leadQuery) {
       if (/^\d+$/.test(leadQuery)) {
+        const module6Lead = await Module6Lead.findOne({ project_id: projectOid, lead_id: leadQuery }).select('_id').lean();
         const lead = await (await import('../m01/models/Lead.js')).default.findOne({ lead_id: Number(leadQuery) }).select('_id').lean();
-        leadIdsFilter = lead ? [String(lead._id)] : [];
+        leadIdsFilter = [module6Lead, lead].filter(Boolean).map((row: any) => String(row._id));
       } else {
-        const regex = new RegExp(leadQuery.replace(/[-/\\^$*+?.()|[\]{}]/g, ''), 'i');
+        const regex = new RegExp(sanitizeRegex(leadQuery), 'i');
+        const module6Leads = await Module6Lead.find({
+          project_id: projectOid,
+          $or: [{ lead_id: regex }, { name: regex }, { email: regex }],
+        }).limit(200).select('_id').lean();
         const LeadModel = (await import('../m01/models/Lead.js')).default as any;
         const leads = await LeadModel.find({ $or: [{ First_Name: regex }, { Last_Name: regex }, { Company: regex }, { Email: regex }] }).limit(200).select('_id').lean();
-        leadIdsFilter = leads.map((l: any) => String(l._id));
+        leadIdsFilter = [...module6Leads, ...leads].map((l: any) => String(l._id));
       }
       if (leadIdsFilter) match.lead_id = { $in: leadIdsFilter.map(id => new mongoose.Types.ObjectId(id)) };
     }
@@ -2325,29 +2598,17 @@ export async function previewDeals(req: Request, res: Response) {
     const pageItems = eligibleDeals.slice(start, end);
 
     const leadSummaryIds = Array.from(new Set(pageItems.map(item => String(item.deal.lead_id))));
-    const leadSummaries: Record<string, { name: string | null; email: string | null }> = {};
-    if (leadSummaryIds.length) {
-      try {
-        const LeadModel = (await import('../m01/models/Lead.js')).default as any;
-        const leadDocs = await LeadModel.find({ _id: { $in: leadSummaryIds } }).select('First_Name Last_Name Email').lean();
-        for (const doc of leadDocs) {
-          const name = `${doc.First_Name || ''} ${doc.Last_Name || ''}`.trim() || null;
-          leadSummaries[String(doc._id)] = { name, email: doc.Email || null };
-        }
-      } catch (err) {
-        console.error('[m06/previewDeals] lead enrichment failed', err);
-      }
-    }
+    const leadSummaries = await loadLeadSummariesByObjectIds(leadSummaryIds);
 
     const rows = pageItems.map(({ deal, touches: list }) => {
       const touchCount = list.length;
       const firstTouchAt = touchCount ? list[0].touched_at : null;
       const lastTouchAt = touchCount ? list[touchCount - 1].touched_at : null;
-      const leadInfo = leadSummaries[String(deal.lead_id)] || { name: null, email: null };
+      const leadInfo = leadSummaries[String(deal.lead_id)] || { name: null, email: null, company: null, lead_id: null };
       return {
         deal_id: String(deal._id),
         deal_external_id: (deal as any).deal_id || null,
-        lead_id: String(deal.lead_id),
+        lead_id: leadInfo.lead_id || String(deal.lead_id),
         lead_name: leadInfo.name,
         lead_email: leadInfo.email,
         amount: deal.revenue,
@@ -2409,9 +2670,17 @@ export async function journeyDetail(req: Request, res: Response) {
     // lead summary (optional)
     let lead: any = null;
     try {
-      const LeadModel = (await import('../m01/models/Lead.js')).default as any;
-      const l = await LeadModel.findById(d.lead_id).select('First_Name Last_Name Email Company lead_id').lean();
-      if (l) lead = { id: String(l._id), lead_id: l.lead_id, name: `${l.First_Name || ''} ${l.Last_Name || ''}`.trim(), email: l.Email || null, company: l.Company || null };
+      const summaries = await loadLeadSummariesByObjectIds([String(d.lead_id)]);
+      const summary = summaries[String(d.lead_id)];
+      if (summary) {
+        lead = {
+          id: String(d.lead_id),
+          lead_id: summary.lead_id,
+          name: summary.name,
+          email: summary.email,
+          company: summary.company,
+        };
+      }
     } catch {}
 
     return res.json({ ok: true, deal: { id: String(d._id), external_id: (d as any).deal_id || null, amount: d.revenue, closed_at: d.closed_at, status: d.closed_won ? 'closed_won' : 'other' }, lead, journey });

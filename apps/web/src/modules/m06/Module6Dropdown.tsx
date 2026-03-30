@@ -42,10 +42,8 @@ export default function Module6Dropdown() {
           <Page1Stats compact />
         </div>
         <div style={{ marginTop: 12, display:'grid', gap:6 }}>
-          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/campaigns/manage')}>Campaign Manager</button>
-          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/campaigns')}>View Campaigns</button>
-          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/touches/input')}>Add Touches</button>
-          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/touches')}>Campaign Touches</button>
+          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/campaigns')}>Campaign Workspace</button>
+          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/touch-workspace')}>Touch Workspace</button>
           <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/journeys')}>Journey Preview</button>
           <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/run-attribution')}>Run Attribution</button>
         </div>

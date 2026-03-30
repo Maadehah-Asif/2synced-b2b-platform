@@ -38,6 +38,9 @@ import {
 	stats,
 	journeyDetail,
 	listModule6Leads,
+	createModule6Lead,
+	updateModule6Lead,
+	archiveModule6Lead,
 	importModule6LeadsCSV,
 	searchModule6Leads,
 	listTouchesDebug,
@@ -108,6 +111,9 @@ router.post('/campaign-touches/import/csv', importCampaignTouches);
 router.get('/debug/touches', listTouchesDebug);
 
 router.get('/leads', listModule6Leads);
+router.post('/leads', createModule6Lead);
+router.put('/leads/:id', updateModule6Lead);
+router.post('/leads/:id/archive', archiveModule6Lead);
 router.post('/leads/import/csv', importModule6LeadsCSV);
 router.get('/leads/search', searchModule6Leads);
 

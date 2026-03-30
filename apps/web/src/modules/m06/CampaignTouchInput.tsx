@@ -1,13 +1,37 @@
-import Layout from '../../components/Layout';
-import ModuleBackButton from '../../components/ModuleBackButton';
 import { useEffect, useMemo, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import { createTouch, importTouchesCSV, searchCampaigns, searchLeads } from './services/touches';
+import Layout from '../../components/Layout';
+import ModuleBackButton from '../../components/ModuleBackButton';
 import Autocomplete from '../../components/Autocomplete';
 import { useWorkspaceId } from '../../utils/workspace';
+import {
+  archiveTouch,
+  createTouch,
+  deleteTouchPermanent,
+  importTouchesCSV,
+  listTouchesByCampaign,
+  listTouchesByLead,
+  searchCampaigns,
+  searchLeads,
+  updateTouch,
+} from './services/touches';
+import './module6.css';
 
 const MAX_PREVIEW_ROWS = 200;
 const PREVIEW_PAGE_SIZE = 12;
+
+type TouchTab = 'list' | 'form' | 'csv';
+type TouchRow = {
+  _id: string;
+  lead_id?: number;
+  campaign_id?: number;
+  campaign_name?: string;
+  type: string;
+  channel?: string;
+  touched_at: string;
+  status?: string;
+  metadata?: any;
+};
 
 function Toast({ message, type, onClose }:{ message:string, type:'success'|'error', onClose:()=>void }){
   return (
@@ -18,16 +42,20 @@ function Toast({ message, type, onClose }:{ message:string, type:'success'|'erro
   );
 }
 
+function formatLeadOption(lead: any) {
+  const name = String(lead?.name || '').trim();
+  const email = String(lead?.email || '').trim();
+  const leadId = String(lead?.lead_id || '').trim();
+  return [name || (leadId ? `#${leadId}` : ''), email].filter(Boolean).join(' • ') || 'Unknown lead';
+}
+
 export default function CampaignTouchInput(){
   const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
-  const [activeTab, setActiveTab] = useState<'form'|'csv'>('form');
+  const [activeTab, setActiveTab] = useState<TouchTab>('list');
   const [toast, setToast] = useState<{msg:string,type:'success'|'error'}|null>(null);
 
-  // Form state
   const [leadQuery, setLeadQuery] = useState('');
   const [campaignQuery, setCampaignQuery] = useState('');
-  const [leadOptions, setLeadOptions] = useState<any[]>([]);
-  const [campaignOptions, setCampaignOptions] = useState<any[]>([]);
   const [selectedLead, setSelectedLead] = useState<string>('');
   const [selectedCampaign, setSelectedCampaign] = useState<string>('');
   const [channel, setChannel] = useState('email');
@@ -36,7 +64,21 @@ export default function CampaignTouchInput(){
   const [metadata, setMetadata] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string,string>>({});
 
-  // CSV wizard state
+  const [mode, setMode] = useState<'campaign' | 'lead'>('campaign');
+  const [selectedEntityId, setSelectedEntityId] = useState<string>('');
+  const [campaignOptions, setCampaignOptions] = useState<any[]>([]);
+  const [leadOptions, setLeadOptions] = useState<any[]>([]);
+  const [rows, setRows] = useState<TouchRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editChannel, setEditChannel] = useState('');
+  const [editType, setEditType] = useState('');
+  const [editTouchedAt, setEditTouchedAt] = useState('');
+  const [editMetadata, setEditMetadata] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
+  const [filterType, setFilterType] = useState('');
+  const [filterChannel, setFilterChannel] = useState('');
+
   const [csvText, setCsvText] = useState('');
   const [headersPreview, setHeadersPreview] = useState<string[]>([]);
   const [rowsPreview, setRowsPreview] = useState<string[][]>([]);
@@ -59,27 +101,33 @@ export default function CampaignTouchInput(){
   const [forceImport, setForceImport] = useState(false);
   const [campaignIdentifier, setCampaignIdentifier] = useState<'name'|'campaign_id'>('name');
 
-  useEffect(()=>{
+  useEffect(() => {
     let ignore = false;
-    async function run(){
-      if(!campaignQuery) { setCampaignOptions([]); return; }
-      const r = await searchCampaigns(campaignQuery);
+    async function run() {
+      if(!workspaceId || mode !== 'campaign'){
+        if(!ignore) setCampaignOptions([]);
+        return;
+      }
+      const r = await searchCampaigns('');
       if(!ignore) setCampaignOptions(r.campaigns || []);
     }
     run();
-    return ()=>{ ignore=true };
-  },[campaignQuery]);
+    return () => { ignore = true; };
+  }, [workspaceId, mode]);
 
-  useEffect(()=>{
-    let ignore=false;
-    async function run(){
-      if(!leadQuery){ setLeadOptions([]); return; }
-      const r = await searchLeads(leadQuery);
-      if(!ignore) setLeadOptions(r.leads||[]);
+  useEffect(() => {
+    let ignore = false;
+    async function run() {
+      if(!workspaceId || mode !== 'lead'){
+        if(!ignore) setLeadOptions([]);
+        return;
+      }
+      const r = await searchLeads('');
+      if(!ignore) setLeadOptions(r.leads || []);
     }
     run();
-    return ()=>{ ignore=true };
-  },[leadQuery]);
+    return () => { ignore = true; };
+  }, [workspaceId, mode]);
 
   function validateForm(){
     const errs: Record<string,string> = {};
@@ -97,7 +145,7 @@ export default function CampaignTouchInput(){
     if(metadata.trim()) {
       try {
         metadataObj = JSON.parse(metadata);
-      } catch(e){
+      } catch {
         setToast({ msg:'Metadata must be valid JSON', type:'error'});
         return;
       }
@@ -114,6 +162,102 @@ export default function CampaignTouchInput(){
       setTouchedAt('');
       setMetadata('');
       setFormErrors({});
+      setActiveTab('list');
+      load();
+    }
+  }
+
+  async function load() {
+    if (!workspaceId || !selectedEntityId) {
+      setRows([]);
+      return;
+    }
+    setLoading(true);
+    const common = {
+      includeArchived: showArchived,
+      type: filterType || undefined,
+      channel: filterChannel || undefined,
+      workspaceId
+    };
+    const data = mode === 'campaign'
+      ? await listTouchesByCampaign({ campaignId: selectedEntityId, ...common } as any)
+      : await listTouchesByLead({ leadId: selectedEntityId, ...common } as any);
+
+    let raw: any[] = [];
+    if (Array.isArray(data)) raw = data;
+    else if ((data as any)?.touches) raw = (data as any).touches;
+
+    const formatted: TouchRow[] = raw
+      .map((t: any) => ({
+        _id: String(t._id || t.id || ''),
+        lead_id: t.lead_id,
+        campaign_id: t.campaign_id,
+        campaign_name: t.campaign_name || t.campaignName,
+        type: t.type,
+        channel: t.channel,
+        touched_at: t.touched_at || t.touchedAt,
+        status: t.status,
+        metadata: t.metadata
+      }))
+      .filter(t => t._id);
+
+    setRows(formatted);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, [selectedEntityId, showArchived, filterType, filterChannel, mode, workspaceId]);
+
+  function beginEdit(r: TouchRow) {
+    setEditingRowId(r._id);
+    setEditChannel(r.channel || '');
+    setEditType(r.type);
+    setEditTouchedAt(r.touched_at.slice(0, 16));
+    setEditMetadata(r.metadata ? JSON.stringify(r.metadata) : '');
+  }
+
+  async function saveEdit() {
+    if (!editingRowId) return;
+    let metadataObj: any = undefined;
+    if (editMetadata.trim()) {
+      try {
+        metadataObj = JSON.parse(editMetadata);
+      } catch {
+        setToast({ msg: 'Metadata invalid JSON', type: 'error' });
+        return;
+      }
+    }
+    const res = await updateTouch(editingRowId, {
+      channel: editChannel,
+      type: editType,
+      touched_at: editTouchedAt,
+      metadata: metadataObj
+    });
+    if ((res as any).error) setToast({ msg: 'Update failed', type: 'error' });
+    else {
+      setToast({ msg: 'Updated', type: 'success' });
+      setEditingRowId(null);
+      load();
+    }
+  }
+
+  async function doArchive(id: string) {
+    const r = await archiveTouch(id);
+    if ((r as any).error) setToast({ msg: 'Archive failed', type: 'error' });
+    else {
+      setToast({ msg: 'Archived', type: 'success' });
+      load();
+    }
+  }
+
+  async function doDelete(id: string) {
+    if (!confirm('Permanent delete this touch?')) return;
+    const r = await deleteTouchPermanent(id);
+    if ((r as any).error) setToast({ msg: 'Delete failed', type: 'error' });
+    else {
+      setToast({ msg: 'Deleted', type: 'success' });
+      load();
     }
   }
 
@@ -199,11 +343,8 @@ export default function CampaignTouchInput(){
       setUploadSummary(null);
       setMappingConfirmed(false);
       setForceImport(false);
-      if(cols.length < 2){
-        setHeaderError('Could not detect valid headers. Ensure first row has column names.');
-      } else {
-        setHeaderError(null);
-      }
+      if(cols.length < 2) setHeaderError('Could not detect valid headers. Ensure first row has column names.');
+      else setHeaderError(null);
     };
     reader.onerror = () => {
       resetCsvState();
@@ -215,13 +356,13 @@ export default function CampaignTouchInput(){
 
   const headerOptions = useMemo(() => headersPreview.map(value => ({ value, label: value })), [headersPreview]);
 
-  useEffect(()=>{
+  useEffect(() => {
     setPreviewPage(prev => {
       if(!rowsPreview.length) return 0;
       const maxIndex = Math.max(0, Math.ceil(rowsPreview.length / PREVIEW_PAGE_SIZE) - 1);
       return Math.min(prev, maxIndex);
     });
-  },[rowsPreview]);
+  }, [rowsPreview]);
 
   const previewPageCount = rowsPreview.length ? Math.ceil(rowsPreview.length / PREVIEW_PAGE_SIZE) : 1;
   const currentPreviewPage = rowsPreview.length ? Math.min(previewPage, previewPageCount - 1) : 0;
@@ -277,9 +418,7 @@ export default function CampaignTouchInput(){
     setUploadSummary(null);
     try {
       let leadHint: 'id'|'email' = 'id';
-      if (resolvedMap.lead && resolvedMap.lead.toLowerCase().includes('email')) {
-        leadHint = 'email';
-      }
+      if (resolvedMap.lead && resolvedMap.lead.toLowerCase().includes('email')) leadHint = 'email';
       const summary = await importTouchesCSV({
         csv: csvText,
         map: resolvedMap,
@@ -290,14 +429,12 @@ export default function CampaignTouchInput(){
         duplicatePolicy
       });
       setUploadSummary(summary);
-      if(summary && summary.inserted){
-        setToast({ msg:`Imported ${summary.inserted} touches`, type:'success'});
-      } else if(summary && summary.failed){
-        setToast({ msg:`Import finished with ${summary.failed} failures`, type:'error'});
-      } else {
-        setToast({ msg:'Import completed', type:'success'});
-      }
-    } catch (e){
+      if(summary && summary.inserted) setToast({ msg:`Imported ${summary.inserted} touches`, type:'success'});
+      else if(summary && summary.failed) setToast({ msg:`Import finished with ${summary.failed} failures`, type:'error'});
+      else setToast({ msg:'Import completed', type:'success'});
+      setActiveTab('list');
+      load();
+    } catch {
       setToast({ msg:'Failed to import CSV', type:'error'});
     }
     setImporting(false);
@@ -316,46 +453,93 @@ export default function CampaignTouchInput(){
 
   return (
     <Layout>
-      <main className="page-root">
-        <ModuleBackButton toSuffix="" />
-        <h2 style={{ marginTop:16 }}>Campaign Touch Import</h2>
-        <div style={{ fontSize:12, color:'#555' }}>Connect leads to campaigns via interaction events.</div>
-        <div style={{ marginTop:16, display:'flex', gap:12 }}>
-          <button className={activeTab==='form'?'btn-primary':'btn-ghost'} onClick={()=>setActiveTab('form')}>Single Touch Form</button>
-          <button className={activeTab==='csv'?'btn-primary':'btn-ghost'} onClick={()=>setActiveTab('csv')}>Bulk CSV Import</button>
-        </div>
-        {activeTab==='form' && (
-          <div style={{ marginTop:16, padding:16, background:'#fff', borderRadius:10, boxShadow:'0 4px 20px rgba(17,24,39,0.08)' }}>
-            <h4 style={{ margin:'0 0 6px 0' }}>Add Single Touch</h4>
-            <div style={{ fontSize:12, color:'#4b5563', marginBottom:10 }}>Required: Lead, Campaign, Type, and Touched at. Keep metadata JSON valid if used.</div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:12 }}>
-              <div>
-                <label style={{ fontSize:12, fontWeight:600 }}>Lead *</label>
-                <Autocomplete
-                  value={leadQuery}
-                  placeholder="Lead id / name / company"
-                  fetchItems={async (q)=>{ const r = await searchLeads(q); return r.leads || []; }}
-                  formatItem={(l:any)=>`#${l.lead_id} ${l.First_Name||''} ${l.Last_Name||''}`.trim()}
-                  getValue={(l:any)=>String(l.lead_id)}
-                  onChange={(val, item)=>{ setLeadQuery(val); if(item) setSelectedLead(String(item.lead_id)); }}
-                />
-                {formErrors.lead && <div style={{ color:'#c33', fontSize:11 }}>{formErrors.lead}</div>}
+      <main className="page-root m06-page">
+        <div className="m06-leads-shell">
+          <div className="m06-leads-toprow">
+            <ModuleBackButton toSuffix="" />
+          </div>
+
+          <section className="m06-hero">
+            <div className="m06-hero-inner m06-leads-hero-grid">
+              <div className="m06-leads-hero-copy">
+                <div className="m06-pill">M06 Touch Workspace</div>
+                <h1 style={{ fontSize: 38 }}>Campaign Touch Operations</h1>
+                <div className="m06-hero-copy">
+                  Review interaction events by campaign or lead, add a single touch manually, or import touch records
+                  in bulk from CSV. This combines the M06 touch workflow into one operational page.
+                </div>
               </div>
-              <div>
-                <label style={{ fontSize:12, fontWeight:600 }}>Campaign *</label>
-                <Autocomplete
-                  value={campaignQuery}
-                  placeholder="Campaign name"
-                  fetchItems={async (q)=>{ const r = await searchCampaigns(q); return r.campaigns || []; }}
-                  formatItem={(c:any)=>c.name}
-                  getValue={(c:any)=>String(c.id)}
-                  onChange={(val,item)=>{ setCampaignQuery(val); if(item) setSelectedCampaign(String(item.id)); }}
-                />
-                {formErrors.campaign && <div style={{ color:'#c33', fontSize:11 }}>{formErrors.campaign}</div>}
+              <div className="m06-leads-stat-grid">
+                <div className="m06-kpi-card">
+                  <div className="label">Visible touches</div>
+                  <div className="value">{rows.length}</div>
+                </div>
+                <div className="m06-kpi-card">
+                  <div className="label">Context</div>
+                  <div className="value" style={{ fontSize: 22 }}>{mode === 'campaign' ? 'Campaign' : 'Lead'}</div>
+                </div>
+                <div className="m06-kpi-card">
+                  <div className="label">Current mode</div>
+                  <div className="value" style={{ fontSize: 22 }}>{activeTab === 'list' ? 'View' : activeTab === 'form' ? 'Add' : 'CSV import'}</div>
+                </div>
               </div>
-              <div>
-                <label style={{ fontSize:12, fontWeight:600 }}>Type *</label>
-                <select value={type} onChange={e=>setType(e.target.value)}>
+            </div>
+          </section>
+
+          <section className="m06-panel soft">
+            <div className="m06-section-label">Touch Actions</div>
+            <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Manage touch records from one screen</h3>
+            <div className="m06-helper" style={{ marginBottom: 14 }}>
+              Switch between reviewing touch history, creating a single interaction event, and importing batches from CSV.
+            </div>
+            <div className="m06-tab-row">
+              <button className={`m06-tab-btn ${activeTab === 'list' ? 'active' : ''}`} onClick={() => setActiveTab('list')}>
+                <span className="step">1</span>
+                <span className="meta">
+                  <strong>View touches</strong>
+                  <span>Search, filter, edit, archive, and delete touch events</span>
+                </span>
+              </button>
+              <button className={`m06-tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>
+                <span className="step">2</span>
+                <span className="meta">
+                  <strong>Add touch</strong>
+                  <span>Create one lead-to-campaign interaction record</span>
+                </span>
+              </button>
+              <button className={`m06-tab-btn ${activeTab === 'csv' ? 'active' : ''}`} onClick={() => setActiveTab('csv')}>
+                <span className="step">3</span>
+                <span className="meta">
+                  <strong>CSV import</strong>
+                  <span>Preview rows and map touch headers before import</span>
+                </span>
+              </button>
+            </div>
+          </section>
+
+          {activeTab === 'list' && (
+            <section className="m06-panel">
+              <div className="m06-section-label">View</div>
+              <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Touch Table</h3>
+              <div className="m06-helper">
+                Choose whether you want to inspect touches by campaign or by lead, then narrow the result set by type,
+                channel, and archive state before editing rows.
+              </div>
+              <div className="m06-leads-toolbar-grid" style={{ marginTop: 16, gridTemplateColumns: 'auto auto minmax(240px,1fr) auto auto auto' }}>
+                <button className={mode === 'campaign' ? 'btn-primary' : 'btn-ghost'} onClick={() => { setMode('campaign'); setSelectedEntityId(''); }}>
+                  By Campaign
+                </button>
+                <button className={mode === 'lead' ? 'btn-primary' : 'btn-ghost'} onClick={() => { setMode('lead'); setSelectedEntityId(''); }}>
+                  By Lead
+                </button>
+                <select value={selectedEntityId} onChange={e => setSelectedEntityId(e.target.value)}>
+                  <option value="">{mode === 'campaign' ? 'Choose a campaign' : 'Choose a lead'}</option>
+                  {mode === 'campaign'
+                    ? campaignOptions.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)
+                    : leadOptions.map(l => <option key={l._id} value={String(l._id)}>#{l.lead_id} {l.name || ''}</option>)}
+                </select>
+                <select value={filterType} onChange={e => setFilterType(e.target.value)}>
+                  <option value="">All types</option>
                   <option value="email_open">Email Open</option>
                   <option value="email_click">Email Click</option>
                   <option value="ad_click">Ad Click</option>
@@ -363,180 +547,295 @@ export default function CampaignTouchInput(){
                   <option value="form_submit">Form Submit</option>
                   <option value="other">Other</option>
                 </select>
-                <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>Pick the event that happened.</div>
-              </div>
-              <div>
-                <label style={{ fontSize:12, fontWeight:600 }}>Channel</label>
-                <select value={channel} onChange={e=>setChannel(e.target.value)}>
+                <select value={filterChannel} onChange={e => setFilterChannel(e.target.value)}>
+                  <option value="">All channels</option>
                   <option value="email">Email</option>
                   <option value="ads">Ads</option>
                   <option value="linkedin">LinkedIn</option>
                   <option value="webinar">Webinar</option>
                   <option value="other">Other</option>
                 </select>
+                <label className="toggle">
+                  <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} />
+                  Show archived
+                </label>
               </div>
-              <div>
-                <label style={{ fontSize:12, fontWeight:600 }}>Touched at *</label>
-                <input type="datetime-local" value={touchedAt} onChange={e=>setTouchedAt(e.target.value)} />
-                <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>Use your timezone; ISO format preferred.</div>
-                {formErrors.touched_at && <div style={{ color:'#c33', fontSize:11 }}>{formErrors.touched_at}</div>}
-              </div>
-              <div style={{ gridColumn:'1 / -1' }}>
-                <label style={{ fontSize:12, fontWeight:600 }}>Metadata (JSON)</label>
-                <textarea rows={3} value={metadata} onChange={e=>setMetadata(e.target.value)} style={{ width:'100%' }} />
-                <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>Optional: add UTM, message id, or notes. Must be valid JSON.</div>
-              </div>
-            </div>
-            <div style={{ marginTop:12, display:'flex', gap:8 }}>
-              <button className="btn-primary" onClick={submitForm}>Create Touch</button>
-            </div>
-          </div>
-        )}
-        {activeTab==='csv' && (
-          <div style={{ marginTop:16, padding:12, background:'#fff', borderRadius:8 }}>
-            <h4>Bulk Import via CSV</h4>
-            <div style={{ fontSize:12, color:'#555', marginBottom:12 }}>Upload a CSV file with touch activity. Required headers: lead, campaign, type, touched_at.</div>
-            <div>
-              <input type="file" accept=".csv" onChange={onFileChange} />
-            </div>
-            {headerError && (
-              <div style={{ marginTop:8, fontSize:12, color:'#c33' }}>{headerError}</div>
-            )}
-            {!headerError && headersPreview.length > 0 && (
-              <div style={{ marginTop:8, fontSize:12 }}>Detected headers: {headersPreview.join(', ')}</div>
-            )}
-            {rowsPreview.length > 0 && (
-              <div style={{ marginTop:16 }}>
-                <div style={{ fontSize:12, marginBottom:6 }}>
-                  Previewing rows {previewStartIndex}-{previewEndIndex} of {rowsPreview.length}
-                  {previewLimited ? ` (showing first ${rowsPreview.length} of ${totalPreviewRows})` : totalPreviewRows ? ` (total rows: ${totalPreviewRows})` : ''}
-                  {blankRowCount > 0 ? ` • Blank lines skipped: ${blankRowCount}` : ''}
-                </div>
-                <div style={{ overflowX:'auto', border:'1px solid #e5e7eb', borderRadius:6 }}>
-                  <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                    <thead>
-                      <tr style={{ background:'#f8f9fb' }}>
-                        {headersPreview.map((header, idx)=>(
-                          <th key={idx} style={{ padding:8, borderBottom:'1px solid #e2e8f0', textAlign:'left', fontSize:12 }}>{header}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {previewPageRows.map((row, rIdx)=>(
-                        <tr key={rIdx} style={{ background: rIdx % 2 === 0 ? '#fff' : '#fafbff' }}>
-                          {headersPreview.map((_, cIdx)=>(
-                            <td key={cIdx} style={{ padding:8, borderBottom:'1px solid #edf2f7', fontSize:12 }}>{row[cIdx] ?? ''}</td>
-                          ))}
+
+              <div className="m06-leads-table-wrap">
+                {loading && <div className="m06-inline-note">Loading touches...</div>}
+                {!loading && rows.length === 0 && (
+                  <div className="m06-leads-empty">
+                    {selectedEntityId ? 'No touches found for this selection.' : 'Choose a campaign or lead above to see touches.'}
+                  </div>
+                )}
+                {!loading && rows.length > 0 && (
+                  <div className="m06-table-shell" style={{ overflowX: 'auto' }}>
+                    <table style={{ fontSize: 12 }}>
+                      <thead>
+                        <tr>
+                          <th>Lead</th>
+                          <th>Campaign</th>
+                          <th>Type</th>
+                          <th>Channel</th>
+                          <th>Touched at</th>
+                          <th>Status</th>
+                          <th>Metadata</th>
+                          <th>Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {rows.map(r => {
+                          const editing = editingRowId === r._id;
+                          return (
+                            <tr key={r._id}>
+                              <td>#{r.lead_id}</td>
+                              <td>{r.campaign_name || '-'}</td>
+                              <td>
+                                {editing ? (
+                                  <select value={editType} onChange={e => setEditType(e.target.value)}>
+                                    <option value="email_open">Email Open</option>
+                                    <option value="email_click">Email Click</option>
+                                    <option value="ad_click">Ad Click</option>
+                                    <option value="webinar">Webinar</option>
+                                    <option value="form_submit">Form Submit</option>
+                                    <option value="other">Other</option>
+                                  </select>
+                                ) : r.type}
+                              </td>
+                              <td>
+                                {editing ? (
+                                  <select value={editChannel} onChange={e => setEditChannel(e.target.value)}>
+                                    <option value="email">Email</option>
+                                    <option value="ads">Ads</option>
+                                    <option value="linkedin">LinkedIn</option>
+                                    <option value="webinar">Webinar</option>
+                                    <option value="other">Other</option>
+                                  </select>
+                                ) : (r.channel || '-')}
+                              </td>
+                              <td>
+                                {editing ? (
+                                  <input type="datetime-local" value={editTouchedAt} onChange={e => setEditTouchedAt(e.target.value)} />
+                                ) : new Date(r.touched_at).toLocaleString()}
+                              </td>
+                              <td>{r.status || 'active'}</td>
+                              <td style={{ maxWidth: 220 }}>
+                                {editing ? (
+                                  <textarea rows={2} value={editMetadata} onChange={e => setEditMetadata(e.target.value)} style={{ width: '100%' }} />
+                                ) : (r.metadata ? JSON.stringify(r.metadata) : '-')}
+                              </td>
+                              <td style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                {!editing ? (
+                                  <>
+                                    <button className="btn-ghost" onClick={() => beginEdit(r)}>Edit</button>
+                                    <button className="btn-ghost" onClick={() => doArchive(r._id)}>Archive</button>
+                                    <button className="btn-danger" onClick={() => doDelete(r._id)}>Delete</button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button className="btn-primary" onClick={saveEdit}>Save</button>
+                                    <button className="btn-ghost" onClick={() => setEditingRowId(null)}>Cancel</button>
+                                  </>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'form' && (
+            <section className="m06-panel">
+              <div className="m06-section-label">Add Touch</div>
+              <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Single Touch Form</h3>
+              <div className="m06-helper" style={{ marginBottom: 12 }}>
+                Create one interaction event by linking a lead, a campaign, and the touch details that feed attribution and journey analysis.
+              </div>
+              <div className="m06-form-grid">
+                <div>
+                  <label>Lead *</label>
+                  <Autocomplete
+                    value={leadQuery}
+                    placeholder="Lead id / name / company"
+                    fetchItems={async (q)=>{ const r = await searchLeads(q); return r.leads || []; }}
+                    formatItem={formatLeadOption}
+                    getValue={formatLeadOption}
+                    onChange={(val, item)=>{ setLeadQuery(val); setSelectedLead(item ? String(item._id) : ''); }}
+                  />
+                  {formErrors.lead && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.lead}</div>}
                 </div>
-                {rowsPreview.length > PREVIEW_PAGE_SIZE && (
-                  <div style={{ marginTop:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                    <div style={{ fontSize:11, color:'#555' }}>Page {currentPreviewPage + 1} of {previewPageCount}</div>
-                    <div style={{ display:'flex', gap:8 }}>
-                      <button className="btn-ghost" disabled={currentPreviewPage === 0} onClick={()=>setPreviewPage(p=>Math.max(0, p-1))}>Prev</button>
-                      <button className="btn-ghost" disabled={currentPreviewPage >= previewPageCount - 1} onClick={()=>setPreviewPage(p=>Math.min(previewPageCount - 1, p+1))}>Next</button>
+                <div>
+                  <label>Campaign *</label>
+                  <Autocomplete
+                    value={campaignQuery}
+                    placeholder="Campaign name"
+                    fetchItems={async (q)=>{ const r = await searchCampaigns(q); return r.campaigns || []; }}
+                    formatItem={(c:any)=>c.name}
+                    getValue={(c:any)=>String(c.name || '')}
+                    onChange={(val,item)=>{ setCampaignQuery(val); setSelectedCampaign(item ? String(item.id) : ''); }}
+                  />
+                  {formErrors.campaign && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.campaign}</div>}
+                </div>
+                <div>
+                  <label>Type *</label>
+                  <select value={type} onChange={e=>setType(e.target.value)}>
+                    <option value="email_open">Email Open</option>
+                    <option value="email_click">Email Click</option>
+                    <option value="ad_click">Ad Click</option>
+                    <option value="webinar">Webinar</option>
+                    <option value="form_submit">Form Submit</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Channel</label>
+                  <select value={channel} onChange={e=>setChannel(e.target.value)}>
+                    <option value="email">Email</option>
+                    <option value="ads">Ads</option>
+                    <option value="linkedin">LinkedIn</option>
+                    <option value="webinar">Webinar</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Touched at *</label>
+                  <input type="datetime-local" value={touchedAt} onChange={e=>setTouchedAt(e.target.value)} />
+                  {formErrors.touched_at && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.touched_at}</div>}
+                </div>
+                <div style={{ gridColumn:'1 / -1' }}>
+                  <label>Metadata (JSON)</label>
+                  <textarea rows={3} value={metadata} onChange={e=>setMetadata(e.target.value)} style={{ width:'100%' }} />
+                </div>
+              </div>
+              <div style={{ marginTop:12, display:'flex', gap:8 }}>
+                <button className="btn-primary" onClick={submitForm}>Create Touch</button>
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'csv' && (
+            <section className="m06-panel">
+              <div className="m06-section-label">CSV Import</div>
+              <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Import Touch CSV</h3>
+              <div className="m06-helper" style={{ marginBottom: 12 }}>
+                Upload a CSV file with touch activity, verify the preview, then map the lead, campaign, type, and timestamp columns.
+              </div>
+              <div className="m06-file-drop">
+                <div className="m06-inline-note" style={{ marginBottom: 10 }}>
+                  Select a touch CSV file. Required columns are lead, campaign, type, and touched_at.
+                </div>
+                <input type="file" accept=".csv" onChange={onFileChange} />
+              </div>
+              {headerError && <div style={{ marginTop:8, fontSize:12, color:'#c33' }}>{headerError}</div>}
+              {!headerError && headersPreview.length > 0 && <div className="m06-inline-note" style={{ marginTop:8 }}>Detected headers: {headersPreview.join(', ')}</div>}
+              {rowsPreview.length > 0 && (
+                <div style={{ marginTop:16 }}>
+                  <div className="m06-preview-head">
+                    Previewing rows {previewStartIndex}-{previewEndIndex} of {rowsPreview.length}
+                    {previewLimited ? ` (showing first ${rowsPreview.length} of ${totalPreviewRows})` : totalPreviewRows ? ` (total rows: ${totalPreviewRows})` : ''}
+                    {blankRowCount > 0 ? ` | Blank lines skipped: ${blankRowCount}` : ''}
+                  </div>
+                  <div className="m06-preview-shell">
+                    <div className="m06-preview-table-wrap">
+                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                        <thead>
+                          <tr>
+                            {headersPreview.map((header, idx)=><th key={idx}>{header}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {previewPageRows.map((row, rIdx)=>(
+                            <tr key={rIdx}>
+                              {headersPreview.map((_, cIdx)=><td key={cIdx}>{row[cIdx] ?? ''}</td>)}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
-                )}
-                {previewLimited && (
-                  <div style={{ marginTop:4, fontSize:11, color:'#777' }}>Showing a sample of the first {MAX_PREVIEW_ROWS} rows for validation.</div>
-                )}
-              </div>
-            )}
-            {rowsPreview.length === 0 && headersPreview.length > 0 && totalPreviewRows === 0 && (
-              <div style={{ marginTop:12, fontSize:12, color:'#555' }}>No data rows detected after the header.</div>
-            )}
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:12, marginTop:16 }}>
-              <div>
-                <div style={{ fontSize:12 }}>Lead column *</div>
-                <input list="touch-upload-headers" value={mapLead} onChange={e=>setMapLead(e.target.value)} placeholder="Column name" style={{ width:'100%' }} />
-              </div>
-              <div>
-                <div style={{ fontSize:12 }}>Campaign column *</div>
-                    <input
-                      list="touch-upload-headers"
-                      value={mapCampaign}
-                      onChange={e=>{
-                        const value = e.target.value;
-                        setMapCampaign(value);
-                        if(value && value.toLowerCase().includes('id')) setCampaignIdentifier('campaign_id');
-                      }}
-                      placeholder="Column name"
-                      style={{ width:'100%' }}
-                    />
-              </div>
-              <div>
-                <div style={{ fontSize:12 }}>Channel column</div>
-                <input list="touch-upload-headers" value={mapChannel} onChange={e=>setMapChannel(e.target.value)} placeholder="Optional" style={{ width:'100%' }} />
-              </div>
-              <div>
-                <div style={{ fontSize:12 }}>Type column *</div>
-                <input list="touch-upload-headers" value={mapType} onChange={e=>setMapType(e.target.value)} placeholder="Column name" style={{ width:'100%' }} />
-              </div>
-              <div>
-                <div style={{ fontSize:12 }}>Touched at column *</div>
-                <input list="touch-upload-headers" value={mapTouchedAt} onChange={e=>setMapTouchedAt(e.target.value)} placeholder="Column name" style={{ width:'100%' }} />
-              </div>
-                  <div>
-                    <div style={{ fontSize:12 }}>Campaign identifier</div>
-                    <select value={campaignIdentifier} onChange={e=>setCampaignIdentifier(e.target.value as 'name'|'campaign_id')} style={{ width:'100%' }}>
-                      <option value="name">Campaign name</option>
-                      <option value="campaign_id">Campaign ID</option>
-                    </select>
-                    <div style={{ fontSize:11, color:'#555', marginTop:4 }}>Choose how the campaign column should match existing campaigns.</div>
-                  </div>
-              <div>
-                <div style={{ fontSize:12 }}>Start row</div>
-                <input type="number" min={1} value={String(startRow)} onChange={e=>setStartRow(Number(e.target.value||1))} style={{ width:'100%' }} />
-              </div>
-              <div>
-                <div style={{ fontSize:12 }}>End row (optional)</div>
-                <input type="number" min={1} value={endRow!==undefined?String(endRow):''} placeholder="auto" onChange={e=>setEndRow(e.target.value?Number(e.target.value):undefined)} style={{ width:'100%' }} />
-              </div>
-              <div>
-                <div style={{ fontSize:12 }}>Duplicate policy</div>
-                <select value={duplicatePolicy} onChange={e=>setDuplicatePolicy(e.target.value as any)}>
-                  <option value="skip">Skip duplicates</option>
-                  <option value="allow">Allow duplicates</option>
-                </select>
-              </div>
-            </div>
-            <datalist id="touch-upload-headers">
-              {headerOptions.map(opt => (
-                <option key={opt.value} value={opt.value} />
-              ))}
-            </datalist>
-            <label style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:12 }}>
-              <input type="checkbox" checked={mappingConfirmed} onChange={e=>setMappingConfirmed(e.target.checked)} />
-              <span style={{ fontSize:12 }}>I have reviewed my mappings and understand they will create touch records.</span>
-            </label>
-            <label style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:4 }}>
-              <input type="checkbox" checked={forceImport} onChange={e=>setForceImport(e.target.checked)} />
-              <span style={{ fontSize:12 }}>Force import without confirmation (advanced)</span>
-            </label>
-            <div style={{ marginTop:12 }}>
-              <button className="btn-primary" disabled={importing} onClick={submitCsv}>{importing?'Importing...':'Import CSV'}</button>
-              {uploadSummary && (
-                <span style={{ marginLeft:12, fontSize:12 }}>Processed {uploadSummary.processed}, Inserted {uploadSummary.inserted}, Failed {uploadSummary.failed}, Duplicates {uploadSummary.duplicates}</span>
+                  {rowsPreview.length > PREVIEW_PAGE_SIZE && (
+                    <div style={{ marginTop:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <div className="m06-inline-note">Page {currentPreviewPage + 1} of {previewPageCount}</div>
+                      <div style={{ display:'flex', gap:8 }}>
+                        <button className="btn-ghost" disabled={currentPreviewPage === 0} onClick={()=>setPreviewPage(p=>Math.max(0, p-1))}>Prev</button>
+                        <button className="btn-ghost" disabled={currentPreviewPage >= previewPageCount - 1} onClick={()=>setPreviewPage(p=>Math.min(previewPageCount - 1, p+1))}>Next</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
-              {uploadSummary && uploadSummary.failedRows && uploadSummary.failedRows.length>0 && (
-                <button className="btn-ghost" style={{ marginLeft:12, fontSize:12 }} onClick={downloadErrors}>Download Error CSV</button>
-              )}
-            </div>
-            {uploadSummary && uploadSummary.failedRows && uploadSummary.failedRows.length > 0 && (
-              <details style={{ marginTop:8 }}>
-                <summary style={{ cursor:'pointer', fontSize:12 }}>View failed rows</summary>
-                <ul style={{ fontSize:12, marginTop:4 }}>
-                  {uploadSummary.failedRows.slice(0,50).map((fr:any,i:number)=>(<li key={i}>Row {fr.row}: {fr.error}</li>))}
-                </ul>
-              </details>
-            )}
-          </div>
-        )}
-        {toast && <Toast message={toast.msg} type={toast.type} onClose={()=>setToast(null)} />}
+              <div className="m06-mapping-grid">
+                <div>
+                  <label>Lead column *</label>
+                  <input list="touch-upload-headers" value={mapLead} onChange={e=>setMapLead(e.target.value)} placeholder="Column name" />
+                </div>
+                <div>
+                  <label>Campaign column *</label>
+                  <input list="touch-upload-headers" value={mapCampaign} onChange={e=>{ const value = e.target.value; setMapCampaign(value); if(value && value.toLowerCase().includes('id')) setCampaignIdentifier('campaign_id'); }} placeholder="Column name" />
+                </div>
+                <div>
+                  <label>Channel column</label>
+                  <input list="touch-upload-headers" value={mapChannel} onChange={e=>setMapChannel(e.target.value)} placeholder="Optional" />
+                </div>
+                <div>
+                  <label>Type column *</label>
+                  <input list="touch-upload-headers" value={mapType} onChange={e=>setMapType(e.target.value)} placeholder="Column name" />
+                </div>
+                <div>
+                  <label>Touched at column *</label>
+                  <input list="touch-upload-headers" value={mapTouchedAt} onChange={e=>setMapTouchedAt(e.target.value)} placeholder="Column name" />
+                </div>
+                <div>
+                  <label>Campaign identifier</label>
+                  <select value={campaignIdentifier} onChange={e=>setCampaignIdentifier(e.target.value as 'name'|'campaign_id')}>
+                    <option value="name">Campaign name</option>
+                    <option value="campaign_id">Campaign ID</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Start row</label>
+                  <input type="number" min={1} value={String(startRow)} onChange={e=>setStartRow(Number(e.target.value||1))} />
+                </div>
+                <div>
+                  <label>End row</label>
+                  <input type="number" min={1} value={endRow!==undefined?String(endRow):''} placeholder="auto" onChange={e=>setEndRow(e.target.value?Number(e.target.value):undefined)} />
+                </div>
+                <div>
+                  <label>Duplicate policy</label>
+                  <select value={duplicatePolicy} onChange={e=>setDuplicatePolicy(e.target.value as any)}>
+                    <option value="skip">Skip duplicates</option>
+                    <option value="allow">Allow duplicates</option>
+                  </select>
+                </div>
+              </div>
+              <datalist id="touch-upload-headers">
+                {headerOptions.map(opt => <option key={opt.value} value={opt.value} />)}
+              </datalist>
+              <label style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:12 }}>
+                <input type="checkbox" checked={mappingConfirmed} onChange={e=>setMappingConfirmed(e.target.checked)} />
+                <span className="m06-inline-note">I have reviewed my mappings and understand they will create touch records.</span>
+              </label>
+              <label style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:4 }}>
+                <input type="checkbox" checked={forceImport} onChange={e=>setForceImport(e.target.checked)} />
+                <span className="m06-inline-note">Force import without confirmation (advanced)</span>
+              </label>
+              <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}>
+                <button className="btn-primary" disabled={importing} onClick={submitCsv}>{importing?'Importing...':'Import CSV'}</button>
+                {uploadSummary && <span className="m06-inline-note">Processed {uploadSummary.processed}, Inserted {uploadSummary.inserted}, Failed {uploadSummary.failed}, Duplicates {uploadSummary.duplicates}</span>}
+                {uploadSummary && uploadSummary.failedRows && uploadSummary.failedRows.length>0 && (
+                  <button className="btn-ghost" onClick={downloadErrors}>Download Error CSV</button>
+                )}
+              </div>
+            </section>
+          )}
+
+          {toast && <Toast message={toast.msg} type={toast.type} onClose={()=>setToast(null)} />}
+        </div>
       </main>
     </Layout>
   );

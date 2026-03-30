@@ -7,6 +7,13 @@ import { searchCampaigns } from './services/campaigns';
 import { searchLeads } from './services/deals';
 import { useWorkspaceId } from '../../utils/workspace';
 
+function formatLeadOption(lead: any) {
+  const name = String(lead?.name || '').trim();
+  const email = String(lead?.email || '').trim();
+  const leadId = String(lead?.lead_id || '').trim();
+  return [name || (leadId ? `#${leadId}` : ''), email].filter(Boolean).join(' • ') || 'Unknown lead';
+}
+
 export default function JourneyPreview() {
   const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
 
@@ -70,7 +77,7 @@ export default function JourneyPreview() {
     return true;
   }
 
-  async function load() {
+  async function load(nextPage = page) {
     if (!workspaceId) {
       setRows([]);
       setTotal(0);
@@ -91,7 +98,7 @@ export default function JourneyPreview() {
         lead: leadFilter,
         channel,
         campaignId,
-        page,
+        page: nextPage,
         limit,
       });
       setRows(data.rows || []);
@@ -104,7 +111,7 @@ export default function JourneyPreview() {
 
   useEffect(() => {
     if (from && to) load();
-  }, [from, to, status, minAmount, maxAmount, leadFilter, channel, page, limit, workspaceId]);
+  }, [from, to, status, minAmount, maxAmount, leadFilter, channel, campaignId, page, limit, workspaceId]);
 
   function onPickDeal(row: any) {
     setSelectedDealId(row.deal_id);
@@ -243,7 +250,7 @@ export default function JourneyPreview() {
               placeholder="Search campaigns"
               fetchItems={async (q) => await searchCampaigns(q)}
               formatItem={(c: any) => `${c.name} (${c.channel || 'other'})`}
-              getValue={(c: any) => String(c.id)}
+              getValue={(c: any) => String(c.name || '')}
               onChange={(val, item) => {
                 setCampaignQuery(val);
                 setCampaignId(item ? String(item.id) : '');
@@ -281,10 +288,8 @@ export default function JourneyPreview() {
                 const r = await searchLeads(q);
                 return r.leads || [];
               }}
-              formatItem={(l: any) =>
-                `#${l.lead_id} ${l.First_Name || ''} ${l.Last_Name || ''}`.trim()
-              }
-              getValue={(l: any) => String(l.lead_id)}
+              formatItem={formatLeadOption}
+              getValue={formatLeadOption}
               onChange={(val, item) => {
                 setLeadQuery(val);
                 setLeadFilter(item ? String(item.lead_id) : '');
@@ -318,7 +323,7 @@ export default function JourneyPreview() {
               style={primaryBtnStyle}
               onClick={() => {
                 setPage(1);
-                load();
+                load(1);
               }}
             >
               Apply
@@ -326,6 +331,9 @@ export default function JourneyPreview() {
             <button
               style={primaryBtnStyle}
               onClick={() => {
+                const now = new Date();
+                const past = new Date();
+                past.setDate(past.getDate() - 90);
                 setStatus('closed_won');
                 setChannel('');
                 setCampaignQuery('');
@@ -334,8 +342,9 @@ export default function JourneyPreview() {
                 setLeadFilter('');
                 setMinAmount('');
                 setMaxAmount('');
+                setFrom(past.toISOString().slice(0, 10));
+                setTo(now.toISOString().slice(0, 10));
                 setPage(1);
-                load();
               }}
             >
               Reset

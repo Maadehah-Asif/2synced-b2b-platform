@@ -2,14 +2,9 @@ import { useEffect, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import './module6.css';
+import { useWorkspaceId } from '../../utils/workspace';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-
-function useWorkspaceIdFromHash() {
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
-}
 
 type AttributionRun = {
   id: string;
@@ -41,7 +36,7 @@ type RoiByRunResponse = {
 };
 
 export default function RoiCalculation() {
-  const wid = useWorkspaceIdFromHash();
+  const wid = useWorkspaceId({ redirectToWorkspaces: true });
   const workspaceId = wid || '';
   const [runs, setRuns] = useState<AttributionRun[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(false);
@@ -76,7 +71,7 @@ export default function RoiCalculation() {
           }));
           setRuns(list);
         }
-      } catch (e) {
+      } catch {
         setError('Network error while loading runs');
         setRuns([]);
       } finally {
@@ -84,7 +79,7 @@ export default function RoiCalculation() {
       }
     }
     fetchRuns();
-  }, [workspaceId]);
+  }, [workspaceId, wid]);
 
   async function onCalculate() {
     if (!wid || !selectedRunId) return;
@@ -105,7 +100,7 @@ export default function RoiCalculation() {
       } else {
         setResult(j as RoiByRunResponse);
       }
-    } catch (e) {
+    } catch {
       setError('Network error while calculating ROI');
     } finally {
       setCalculating(false);
@@ -135,130 +130,152 @@ export default function RoiCalculation() {
 
   return (
     <Layout>
-      <main className="page-root">
+      <main className="page-root m06-page">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix="/m06" />
-          <h2 style={{ marginTop: 16, marginBottom: 0 }}>Module 6 — ROI Calculation</h2>
+          <h2 style={{ marginTop: 16, marginBottom: 0 }}>Module 6</h2>
         </div>
 
-        <div className="m7-card" style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 700 }}>Step 1 — Choose an attribution run</div>
+        <section className="m06-hero">
+          <div className="m06-hero-inner">
+            <div className="m06-pill">ROI Calculation</div>
+            <h1>Run-Based ROI Review</h1>
+            <div className="m06-hero-copy">
+              Select a completed attribution run, compare revenue against campaign spend, and confirm whether the run is strong enough to justify deeper campaign-level investigation.
+            </div>
+          </div>
+        </section>
+
+        <section className="m06-panel">
+          <div className="m06-toolbar">
+            <div>
+              <div className="m06-section-label">Step 1</div>
+              <h3 className="m06-panel-title" style={{ marginTop: 12 }}>Choose an attribution run</h3>
+              <div className="m06-helper">
+                Use a successful run here. If there are no runs yet, go to `Run Attribution` first and generate one.
+              </div>
+            </div>
+          </div>
+
           {loadingRuns ? (
-            <div style={{ marginTop: 8, fontSize: 13 }}>Loading runs…</div>
+            <div style={{ marginTop: 12, fontSize: 13 }}>Loading runs…</div>
           ) : runs.length === 0 ? (
-            <div style={{ marginTop: 8, fontSize: 13 }}>
-              No successful attribution runs found. Run attribution first from the Allocation / Run screen.
+            <div style={{ marginTop: 12, fontSize: 13 }}>
+              No successful attribution runs found. Run attribution first from the allocation area.
             </div>
           ) : (
-            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <select
-                value={selectedRunId}
-                onChange={e => setSelectedRunId(e.target.value)}
-                style={{ minWidth: 260 }}
-              >
-                <option value="">Select a run…</option>
-                {runs.map(r => (
-                  <option key={r.id || r.run_id} value={r.id || r.run_id}>
-                    {r.run_id} — {r.model_type} — {new Date(r.timestamp).toLocaleString()} ({r.status})
-                  </option>
-                ))}
-              </select>
-              <button
-                className="btn-primary"
-                disabled={!selectedRunId || calculating}
-                onClick={onCalculate}
-              >
-                {calculating ? 'Calculating…' : 'Calculate ROI for this run'}
-              </button>
+            <div className="m06-filter-grid" style={{ marginTop: 16 }}>
+              <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span>Attribution run</span>
+                <select value={selectedRunId} onChange={e => setSelectedRunId(e.target.value)}>
+                  <option value="">Select a run…</option>
+                  {runs.map(r => (
+                    <option key={r.id || r.run_id} value={r.id || r.run_id}>
+                      {r.run_id} - {r.model_type} - {new Date(r.timestamp).toLocaleString()} ({r.status})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                <button className="btn-primary" disabled={!selectedRunId || calculating} onClick={onCalculate}>
+                  {calculating ? 'Calculating…' : 'Calculate ROI'}
+                </button>
+              </div>
             </div>
           )}
+
           {error && (
-            <div style={{ marginTop: 8, fontSize: 12, color: 'crimson' }}>
+            <div style={{ marginTop: 10, fontSize: 12, color: 'crimson' }}>
               {error}
             </div>
           )}
-        </div>
+        </section>
 
         {result && (
           <>
-            <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
-              <div className="m7-card" style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, color: '#666' }}>Attributed Revenue (this run)</div>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>{tr(result.totalAttributed)}</div>
+            <section className="m06-kpi-grid">
+              <div className="m06-kpi-card">
+                <div className="label">Attributed Revenue</div>
+                <div className="value">{tr(result.totalAttributed)}</div>
               </div>
-              <div className="m7-card" style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, color: '#666' }}>Campaign Spend (project)</div>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>{tr(result.totalSpend)}</div>
+              <div className="m06-kpi-card">
+                <div className="label">Campaign Spend</div>
+                <div className="value">{tr(result.totalSpend)}</div>
               </div>
-              <div className="m7-card" style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, color: '#666' }}>Net Profit</div>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>{tr(result.netProfit)}</div>
+              <div className="m06-kpi-card">
+                <div className="label">Net Profit</div>
+                <div className="value">{tr(result.netProfit)}</div>
               </div>
-              <div className="m7-card" style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, color: '#666' }}>ROI for this run</div>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>{pct(result.overallROI)}</div>
+              <div className="m06-kpi-card">
+                <div className="label">ROI</div>
+                <div className="value">{pct(result.overallROI)}</div>
               </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
-              <div className="m7-card" style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, color: '#666' }}>Campaigns with credit</div>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>{result.campaigns.length}</div>
+              <div className="m06-kpi-card">
+                <div className="label">Campaigns Credited</div>
+                <div className="value">{result.campaigns.length}</div>
               </div>
               {result.totalDeals !== undefined && (
-                <div className="m7-card" style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, color: '#666' }}>Total deals in run</div>
-                  <div style={{ fontSize: 18, fontWeight: 700 }}>{result.totalDeals}</div>
+                <div className="m06-kpi-card">
+                  <div className="label">Deals in Run</div>
+                  <div className="value">{result.totalDeals}</div>
                 </div>
               )}
-            </div>
+            </section>
 
-            <div className="m7-card" style={{ marginTop: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>Campaign ROI preview (this run)</div>
+            <section className="m06-panel">
+              <div className="m06-toolbar">
+                <div>
+                  <div className="m06-section-label">Preview</div>
+                  <h3 className="m06-panel-title" style={{ marginTop: 12 }}>Campaign ROI snapshot</h3>
+                  <div className="m06-helper">
+                    This is the quick comparison view for the currently selected run. Open the full ROI dashboard for broader filtering and ranking.
+                  </div>
+                </div>
                 <button className="btn-secondary" onClick={goToDashboard}>
-                  Open full ROI Dashboard
+                  Open Full ROI Dashboard
                 </button>
               </div>
-              <div style={{ marginTop: 8 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+
+              <div className="m06-table-shell" style={{ marginTop: 14 }}>
+                <table>
                   <thead>
-                    <tr style={{ textAlign: 'left', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-                      <th style={{ padding: 8 }}>Campaign</th>
-                      <th style={{ padding: 8 }}>Channel</th>
-                      <th style={{ padding: 8 }}>Spend</th>
-                      <th style={{ padding: 8 }}>Attributed</th>
-                      <th style={{ padding: 8 }}>ROI %</th>
-                      <th style={{ padding: 8 }}>Profit</th>
+                    <tr>
+                      <th>Campaign</th>
+                      <th>Channel</th>
+                      <th>Spend</th>
+                      <th>Attributed</th>
+                      <th>ROI %</th>
+                      <th>Profit</th>
                     </tr>
                   </thead>
                   <tbody>
                     {result.campaigns.map(c => (
                       <tr key={c.campaign_id}>
-                        <td style={{ padding: 8 }}>{c.name || c.campaign_id}</td>
-                        <td style={{ padding: 8 }}>{c.channel}</td>
-                        <td style={{ padding: 8 }}>{tr(c.spend)}</td>
-                        <td style={{ padding: 8 }}>{tr(c.attributed)}</td>
-                        <td style={{ padding: 8 }}>{pct(c.roi)}</td>
-                        <td style={{ padding: 8 }}>{tr(c.profit)}</td>
+                        <td>{c.name || c.campaign_id}</td>
+                        <td>{c.channel || '—'}</td>
+                        <td>{tr(c.spend)}</td>
+                        <td>{tr(c.attributed)}</td>
+                        <td>{pct(c.roi)}</td>
+                        <td>{tr(c.profit)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </div>
+            </section>
 
-            <div className="m7-card" style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>Warnings & notes</div>
-              <ul style={{ marginTop: 6, paddingLeft: 18, fontSize: 12, color: '#555' }}>
+            <section className="m06-panel soft">
+              <div className="m06-section-label">Notes</div>
+              <h3 className="m06-panel-title" style={{ marginTop: 12 }}>Warnings and interpretation</h3>
+              <ul style={{ marginTop: 8, paddingLeft: 18, fontSize: 13, color: '#415274' }}>
                 {(result.warnings && result.warnings.length > 0
                   ? result.warnings
-                  : ['ROI looks stable; no obvious issues detected.']
+                  : ['ROI looks stable for this run. No obvious issues were reported by the calculation output.']
                 ).map((w, idx) => (
                   <li key={idx}>{w}</li>
                 ))}
               </ul>
-            </div>
+            </section>
           </>
         )}
       </main>

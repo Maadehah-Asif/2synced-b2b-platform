@@ -9,8 +9,13 @@ function getUserIdFromReq(req: Request) {
   const auth = req.header("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : undefined;
   if (!token) return null;
-  const payload = verifyToken(token);
-  return payload.sub;
+  try {
+    const payload = verifyToken(token);
+    return payload.sub;
+  } catch (e) {
+    // invalid or malformed token; treat as unauthenticated
+    return null;
+  }
 }
 
 const ADMIN_ROLES = ["head_manager", "sales_manager", "marketing_manager"] as const;

@@ -1,8 +1,37 @@
+import { useEffect, useMemo, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
-import { useEffect, useState } from 'react';
-import { createTouch, importTouchesCSV, searchCampaigns, searchLeads } from './services/touches';
 import Autocomplete from '../../components/Autocomplete';
+import { useWorkspaceId } from '../../utils/workspace';
+import {
+  archiveTouch,
+  createTouch,
+  deleteTouchPermanent,
+  importTouchesCSV,
+  listTouchesByCampaign,
+  listTouchesByLead,
+  searchCampaigns,
+  searchLeads,
+  updateTouch,
+} from './services/touches';
+import './module6.css';
+
+const MAX_PREVIEW_ROWS = 200;
+const PREVIEW_PAGE_SIZE = 12;
+
+type TouchTab = 'list' | 'form' | 'csv';
+type TouchRow = {
+  _id: string;
+  lead_id?: number;
+  campaign_id?: number;
+  campaign_name?: string;
+  type: string;
+  channel?: string;
+  touched_at: string;
+  status?: string;
+  metadata?: any;
+};
 
 function Toast({ message, type, onClose }:{ message:string, type:'success'|'error', onClose:()=>void }){
   return (
@@ -13,22 +42,20 @@ function Toast({ message, type, onClose }:{ message:string, type:'success'|'erro
   );
 }
 
-function useWorkspaceIdFromHash(){
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-  return m ? m[1] : null;
+function formatLeadOption(lead: any) {
+  const name = String(lead?.name || '').trim();
+  const email = String(lead?.email || '').trim();
+  const leadId = String(lead?.lead_id || '').trim();
+  return [name || (leadId ? `#${leadId}` : ''), email].filter(Boolean).join(' • ') || 'Unknown lead';
 }
 
 export default function CampaignTouchInput(){
-  const workspaceId = useWorkspaceIdFromHash();
-  const [activeTab, setActiveTab] = useState<'form'|'csv'>('form');
+  const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
+  const [activeTab, setActiveTab] = useState<TouchTab>('list');
   const [toast, setToast] = useState<{msg:string,type:'success'|'error'}|null>(null);
 
-  // Form state
   const [leadQuery, setLeadQuery] = useState('');
   const [campaignQuery, setCampaignQuery] = useState('');
-  const [leadOptions, setLeadOptions] = useState<any[]>([]); // placeholder
-  const [campaignOptions, setCampaignOptions] = useState<any[]>([]);
   const [selectedLead, setSelectedLead] = useState<string>('');
   const [selectedCampaign, setSelectedCampaign] = useState<string>('');
   const [channel, setChannel] = useState('email');
@@ -37,9 +64,29 @@ export default function CampaignTouchInput(){
   const [metadata, setMetadata] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string,string>>({});
 
-  // CSV wizard state
+  const [mode, setMode] = useState<'campaign' | 'lead'>('campaign');
+  const [selectedEntityId, setSelectedEntityId] = useState<string>('');
+  const [campaignOptions, setCampaignOptions] = useState<any[]>([]);
+  const [leadOptions, setLeadOptions] = useState<any[]>([]);
+  const [rows, setRows] = useState<TouchRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editChannel, setEditChannel] = useState('');
+  const [editType, setEditType] = useState('');
+  const [editTouchedAt, setEditTouchedAt] = useState('');
+  const [editMetadata, setEditMetadata] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
+  const [filterType, setFilterType] = useState('');
+  const [filterChannel, setFilterChannel] = useState('');
+
   const [csvText, setCsvText] = useState('');
-  const [headers, setHeaders] = useState<string[]>([]);
+  const [headersPreview, setHeadersPreview] = useState<string[]>([]);
+  const [rowsPreview, setRowsPreview] = useState<string[][]>([]);
+  const [totalPreviewRows, setTotalPreviewRows] = useState(0);
+  const [previewLimited, setPreviewLimited] = useState(false);
+  const [blankRowCount, setBlankRowCount] = useState(0);
+  const [previewPage, setPreviewPage] = useState(0);
+  const [headerError, setHeaderError] = useState<string | null>(null);
   const [mapLead, setMapLead] = useState('');
   const [mapCampaign, setMapCampaign] = useState('');
   const [mapChannel, setMapChannel] = useState('');
@@ -51,30 +98,36 @@ export default function CampaignTouchInput(){
   const [mappingConfirmed, setMappingConfirmed] = useState(false);
   const [duplicatePolicy, setDuplicatePolicy] = useState<'skip'|'allow'>('skip');
   const [importing, setImporting] = useState(false);
-  const [diagnostics, setDiagnostics] = useState<{rows:number;blank:number;}|null>(null);
   const [forceImport, setForceImport] = useState(false);
+  const [campaignIdentifier, setCampaignIdentifier] = useState<'name'|'campaign_id'>('name');
 
-  useEffect(()=>{
+  useEffect(() => {
     let ignore = false;
-    async function run(){
-      if(!campaignQuery) { setCampaignOptions([]); return; }
-      const r = await searchCampaigns(campaignQuery);
+    async function run() {
+      if(!workspaceId || mode !== 'campaign'){
+        if(!ignore) setCampaignOptions([]);
+        return;
+      }
+      const r = await searchCampaigns('');
       if(!ignore) setCampaignOptions(r.campaigns || []);
     }
     run();
-    return ()=>{ ignore=true };
-  },[campaignQuery]);
+    return () => { ignore = true; };
+  }, [workspaceId, mode]);
 
-  useEffect(()=>{
-    let ignore=false;
-    async function run(){
-      if(!leadQuery){ setLeadOptions([]); return; }
-      const r = await searchLeads(leadQuery);
-      if(!ignore) setLeadOptions(r.leads||[]);
+  useEffect(() => {
+    let ignore = false;
+    async function run() {
+      if(!workspaceId || mode !== 'lead'){
+        if(!ignore) setLeadOptions([]);
+        return;
+      }
+      const r = await searchLeads('');
+      if(!ignore) setLeadOptions(r.leads || []);
     }
     run();
-    return ()=>{ ignore=true };
-  },[leadQuery]);
+    return () => { ignore = true; };
+  }, [workspaceId, mode]);
 
   function validateForm(){
     const errs: Record<string,string> = {};
@@ -90,58 +143,301 @@ export default function CampaignTouchInput(){
     if(!validateForm()) return;
     let metadataObj: any = undefined;
     if(metadata.trim()) {
-      try { metadataObj = JSON.parse(metadata); } catch(e){ setToast({ msg:'Metadata must be valid JSON', type:'error'}); return; }
+      try {
+        metadataObj = JSON.parse(metadata);
+      } catch {
+        setToast({ msg:'Metadata must be valid JSON', type:'error'});
+        return;
+      }
     }
     const res = await createTouch({ leadId: selectedLead, campaignId: selectedCampaign, type, channel, touched_at: touchedAt, metadata: metadataObj });
-    if((res as any).error) { setToast({ msg:'Error creating touch', type:'error'}); }
-    else { setToast({ msg:'Touch created', type:'success'}); setSelectedLead(''); setSelectedCampaign(''); setTouchedAt(''); setMetadata(''); }
+    if((res as any).error) {
+      setToast({ msg:'Error creating touch', type:'error'});
+    } else {
+      setToast({ msg:'Touch created', type:'success'});
+      setSelectedLead('');
+      setSelectedCampaign('');
+      setLeadQuery('');
+      setCampaignQuery('');
+      setTouchedAt('');
+      setMetadata('');
+      setFormErrors({});
+      setActiveTab('list');
+      load();
+    }
   }
 
-  useEffect(()=>{
-    if(!csvText.trim()) { setHeaders([]); setDiagnostics(null); return; }
-    const lines = csvText.replace(/\r\n?/g,'\n').split('\n');
-    if(lines.length){
-      const hdrLine = lines[0];
-      // Simple CSV split (no quoted commas); can enhance later
-      const hdrs = hdrLine.split(',').map(h=>h.trim()).filter(Boolean);
-      setHeaders(hdrs);
-      const dataLines = lines.slice(1).filter(l=>l.trim().length>0);
-      setDiagnostics({ rows: dataLines.length, blank: lines.slice(1).length - dataLines.length });
-      // Auto-suggest mappings if blank
-      function suggest(target:string){
-        const lower = hdrs.map(h=>h.toLowerCase());
-        const idx = lower.indexOf(target);
-        return idx>=0?hdrs[idx]:'';
-      }
-      if(!mapLead) setMapLead(suggest('lead_id') || suggest('lead') || '');
-      if(!mapCampaign) setMapCampaign(suggest('campaign') || suggest('campaign_id') || '');
-      if(!mapChannel) setMapChannel(suggest('channel') || '');
-      if(!mapType) setMapType(suggest('type') || '');
-      if(!mapTouchedAt) setMapTouchedAt(suggest('touched_at') || suggest('timestamp') || suggest('date') || '');
+  async function load() {
+    if (!workspaceId || !selectedEntityId) {
+      setRows([]);
+      return;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[csvText]);
+    setLoading(true);
+    const common = {
+      includeArchived: showArchived,
+      type: filterType || undefined,
+      channel: filterChannel || undefined,
+      workspaceId
+    };
+    const data = mode === 'campaign'
+      ? await listTouchesByCampaign({ campaignId: selectedEntityId, ...common } as any)
+      : await listTouchesByLead({ leadId: selectedEntityId, ...common } as any);
+
+    let raw: any[] = [];
+    if (Array.isArray(data)) raw = data;
+    else if ((data as any)?.touches) raw = (data as any).touches;
+
+    const formatted: TouchRow[] = raw
+      .map((t: any) => ({
+        _id: String(t._id || t.id || ''),
+        lead_id: t.lead_id,
+        campaign_id: t.campaign_id,
+        campaign_name: t.campaign_name || t.campaignName,
+        type: t.type,
+        channel: t.channel,
+        touched_at: t.touched_at || t.touchedAt,
+        status: t.status,
+        metadata: t.metadata
+      }))
+      .filter(t => t._id);
+
+    setRows(formatted);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, [selectedEntityId, showArchived, filterType, filterChannel, mode, workspaceId]);
+
+  function beginEdit(r: TouchRow) {
+    setEditingRowId(r._id);
+    setEditChannel(r.channel || '');
+    setEditType(r.type);
+    setEditTouchedAt(r.touched_at.slice(0, 16));
+    setEditMetadata(r.metadata ? JSON.stringify(r.metadata) : '');
+  }
+
+  async function saveEdit() {
+    if (!editingRowId) return;
+    let metadataObj: any = undefined;
+    if (editMetadata.trim()) {
+      try {
+        metadataObj = JSON.parse(editMetadata);
+      } catch {
+        setToast({ msg: 'Metadata invalid JSON', type: 'error' });
+        return;
+      }
+    }
+    const res = await updateTouch(editingRowId, {
+      channel: editChannel,
+      type: editType,
+      touched_at: editTouchedAt,
+      metadata: metadataObj
+    });
+    if ((res as any).error) setToast({ msg: 'Update failed', type: 'error' });
+    else {
+      setToast({ msg: 'Updated', type: 'success' });
+      setEditingRowId(null);
+      load();
+    }
+  }
+
+  async function doArchive(id: string) {
+    const r = await archiveTouch(id);
+    if ((r as any).error) setToast({ msg: 'Archive failed', type: 'error' });
+    else {
+      setToast({ msg: 'Archived', type: 'success' });
+      load();
+    }
+  }
+
+  async function doDelete(id: string) {
+    if (!confirm('Permanent delete this touch?')) return;
+    const r = await deleteTouchPermanent(id);
+    if ((r as any).error) setToast({ msg: 'Delete failed', type: 'error' });
+    else {
+      setToast({ msg: 'Deleted', type: 'success' });
+      load();
+    }
+  }
+
+  function resetCsvState(){
+    setCsvText('');
+    setHeadersPreview([]);
+    setRowsPreview([]);
+    setTotalPreviewRows(0);
+    setPreviewLimited(false);
+    setBlankRowCount(0);
+    setPreviewPage(0);
+    setHeaderError(null);
+    setMapLead('');
+    setMapCampaign('');
+    setMapChannel('');
+    setMapType('');
+    setMapTouchedAt('');
+    setStartRow(1);
+    setEndRow(undefined);
+    setUploadSummary(null);
+    setMappingConfirmed(false);
+    setForceImport(false);
+    setImporting(false);
+    setCampaignIdentifier('name');
+  }
+
+  function onFileChange(e: ChangeEvent<HTMLInputElement>){
+    const input = e.target;
+    const f = input.files && input.files[0];
+    resetCsvState();
+    if(!f){
+      input.value = '';
+      return;
+    }
+    if(!f.name.toLowerCase().endsWith('.csv')){
+      setToast({ msg: 'Please select a .csv file', type: 'error' });
+      input.value = '';
+      return;
+    }
+    if(f.size > 5 * 1024 * 1024){
+      setToast({ msg: 'File too large (max 5MB)', type: 'error' });
+      input.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || '');
+      setCsvText(text);
+      const normalized = text.replace(/\r\n?/g, '\n');
+      const lines = normalized.split('\n');
+      const headerLine = lines[0] || '';
+      const cols = headerLine.split(',').map(s=>s.trim());
+      setHeadersPreview(cols);
+      const dataLines = lines.slice(1);
+      const nonBlankLines = dataLines.filter(line => line.trim().length > 0);
+      const limitedRows = nonBlankLines.slice(0, MAX_PREVIEW_ROWS).map(line => line.split(',').map(s=>s.trim()));
+      setRowsPreview(limitedRows);
+      setTotalPreviewRows(nonBlankLines.length);
+      setPreviewLimited(nonBlankLines.length > MAX_PREVIEW_ROWS);
+      setBlankRowCount(dataLines.length - nonBlankLines.length);
+      setPreviewPage(0);
+      const lowerCols = cols.map(c => c.toLowerCase());
+      const pickHeader = (current: string, candidates: string[], fallbackIndex?: number) => {
+        if(current && cols.includes(current)) return current;
+        for(const candidate of candidates){
+          const idx = lowerCols.indexOf(candidate);
+          if(idx !== -1) return cols[idx];
+        }
+        if(fallbackIndex !== undefined && cols[fallbackIndex]) return cols[fallbackIndex];
+        return '';
+      };
+      const nextLead = pickHeader(mapLead, ['lead_id','lead','lead id'], 0);
+      const nextCampaign = pickHeader(mapCampaign, ['campaign','campaign_id','campaign id','campaign name']);
+      const nextChannel = pickHeader(mapChannel, ['channel','touch_channel']);
+      const nextType = pickHeader(mapType, ['type','touch_type','interaction_type']);
+      const nextTouched = pickHeader(mapTouchedAt, ['touched_at','timestamp','date','datetime','touch_time'], 1);
+      setMapLead(nextLead);
+      setMapCampaign(nextCampaign);
+      setMapChannel(nextChannel);
+      setMapType(nextType);
+      setMapTouchedAt(nextTouched);
+      if(nextCampaign && nextCampaign.toLowerCase().includes('id')) setCampaignIdentifier('campaign_id');
+      setUploadSummary(null);
+      setMappingConfirmed(false);
+      setForceImport(false);
+      if(cols.length < 2) setHeaderError('Could not detect valid headers. Ensure first row has column names.');
+      else setHeaderError(null);
+    };
+    reader.onerror = () => {
+      resetCsvState();
+      setToast({ msg: 'Failed to read file', type: 'error' });
+    };
+    reader.readAsText(f);
+    input.value = '';
+  }
+
+  const headerOptions = useMemo(() => headersPreview.map(value => ({ value, label: value })), [headersPreview]);
+
+  useEffect(() => {
+    setPreviewPage(prev => {
+      if(!rowsPreview.length) return 0;
+      const maxIndex = Math.max(0, Math.ceil(rowsPreview.length / PREVIEW_PAGE_SIZE) - 1);
+      return Math.min(prev, maxIndex);
+    });
+  }, [rowsPreview]);
+
+  const previewPageCount = rowsPreview.length ? Math.ceil(rowsPreview.length / PREVIEW_PAGE_SIZE) : 1;
+  const currentPreviewPage = rowsPreview.length ? Math.min(previewPage, previewPageCount - 1) : 0;
+  const previewPageRows = rowsPreview.slice(currentPreviewPage * PREVIEW_PAGE_SIZE, (currentPreviewPage * PREVIEW_PAGE_SIZE) + PREVIEW_PAGE_SIZE);
+  const previewStartIndex = rowsPreview.length ? (currentPreviewPage * PREVIEW_PAGE_SIZE) + 1 : 0;
+  const previewEndIndex = rowsPreview.length ? Math.min(rowsPreview.length, previewStartIndex + PREVIEW_PAGE_SIZE - 1) : 0;
+
+  const resolveHeader = (value: string | null | undefined) => {
+    if(!value) return null;
+    const exact = headersPreview.find(h => h === value);
+    if(exact) return exact;
+    const lower = value.toLowerCase();
+    const match = headersPreview.find(h => h.toLowerCase() === lower);
+    return match || null;
+  };
 
   function verifyRequiredMappings(){
-    const missing:string[] = [];
+    const missing: string[] = [];
     if(!mapLead) missing.push('lead');
     if(!mapCampaign) missing.push('campaign');
     if(!mapType) missing.push('type');
     if(!mapTouchedAt) missing.push('touched_at');
-    if(missing.length){ setToast({ msg:`Missing required mappings: ${missing.join(', ')}`, type:'error'}); return false; }
-    return true;
+    if(missing.length){
+      setToast({ msg: `Missing required mappings: ${missing.join(', ')}`, type: 'error' });
+      return null;
+    }
+    const resolved = {
+      lead: resolveHeader(mapLead),
+      campaign: resolveHeader(mapCampaign),
+      channel: resolveHeader(mapChannel),
+      type: resolveHeader(mapType),
+      touched_at: resolveHeader(mapTouchedAt),
+    } as const;
+    const mismatched: string[] = [];
+    if(!resolved.lead) mismatched.push(`lead column "${mapLead}"`);
+    if(!resolved.campaign) mismatched.push(`campaign column "${mapCampaign}"`);
+    if(!resolved.type) mismatched.push(`type column "${mapType}"`);
+    if(!resolved.touched_at) mismatched.push(`touched_at column "${mapTouchedAt}"`);
+    if(mismatched.length){
+      setToast({ msg: `Mapped headers not found: ${mismatched.join(', ')}`, type: 'error' });
+      return null;
+    }
+    return resolved;
   }
 
   async function submitCsv(){
-    if(!csvText.trim()) { setToast({ msg:'Paste CSV text first', type:'error'}); return; }
-    if(!verifyRequiredMappings()) return;
+    if(!workspaceId){ setToast({ msg:'Open a workspace first', type:'error'}); return; }
+    if(!csvText.trim()) { setToast({ msg:'Upload a CSV file first', type:'error'}); return; }
+    const resolvedMap = verifyRequiredMappings();
+    if(!resolvedMap) return;
     if(!mappingConfirmed && !forceImport){ setToast({ msg:'Confirm mappings or use Force Import', type:'error'}); return; }
-    setImporting(true); setUploadSummary(null);
-    const map = { lead: mapLead, campaign: mapCampaign, channel: mapChannel, type: mapType, touched_at: mapTouchedAt };
-    const summary = await importTouchesCSV({ csv: csvText, map, startRow, endRow, campaignIdentifier:'name', duplicatePolicy });
-    setImporting(false); setUploadSummary(summary);
-    if(summary && summary.inserted){ setToast({ msg:`Imported ${summary.inserted} touches`, type:'success'}); }
-    else if(summary && summary.failed){ setToast({ msg:`Import finished with ${summary.failed} failures`, type:'error'}); }
+    setImporting(true);
+    setUploadSummary(null);
+    try {
+      let leadHint: 'id'|'email' = 'id';
+      if (resolvedMap.lead && resolvedMap.lead.toLowerCase().includes('email')) leadHint = 'email';
+      const summary = await importTouchesCSV({
+        csv: csvText,
+        map: resolvedMap,
+        startRow: Number(startRow || 1),
+        endRow,
+        campaignIdentifier,
+        leadIdentifier: leadHint,
+        duplicatePolicy
+      });
+      setUploadSummary(summary);
+      if(summary && summary.inserted) setToast({ msg:`Imported ${summary.inserted} touches`, type:'success'});
+      else if(summary && summary.failed) setToast({ msg:`Import finished with ${summary.failed} failures`, type:'error'});
+      else setToast({ msg:'Import completed', type:'success'});
+      setActiveTab('list');
+      load();
+    } catch {
+      setToast({ msg:'Failed to import CSV', type:'error'});
+    }
+    setImporting(false);
   }
 
   function downloadErrors(){
@@ -157,55 +453,93 @@ export default function CampaignTouchInput(){
 
   return (
     <Layout>
-      <main className="page-root">
-        <ModuleBackButton toSuffix="/m06" />
-        <h2 style={{ marginTop:16 }}>Campaign Touch Import</h2>
-        <div style={{ fontSize:12, color:'#555' }}>Connect leads to campaigns via interaction events.</div>
-        <div style={{ marginTop:16, display:'flex', gap:12 }}>
-          <button className={activeTab==='form'?'btn-primary':'btn-ghost'} onClick={()=>setActiveTab('form')}>Single Touch Form</button>
-          <button className={activeTab==='csv'?'btn-primary':'btn-ghost'} onClick={()=>setActiveTab('csv')}>Bulk CSV Import</button>
-        </div>
-        {activeTab==='form' && (
-          <div style={{ marginTop:16, padding:12, background:'#fff', borderRadius:8 }}>
-            <h4>Add Single Touch</h4>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-              <div>
-                <div style={{ fontSize:12 }}>Lead search</div>
-                <Autocomplete
-                  value={leadQuery}
-                  placeholder="Lead id / name / company"
-                  fetchItems={async (q)=>{ const r = await searchLeads(q); return r.leads || []; }}
-                  formatItem={(l:any)=>`#${l.lead_id} ${l.First_Name||''} ${l.Last_Name||''}`.trim()}
-                  getValue={(l:any)=>String(l.lead_id)}
-                  onChange={(val, item)=>{ setLeadQuery(val); if(item) setSelectedLead(String(item.lead_id)); }}
-                />
-                {formErrors.lead && <div style={{ color:'#c33', fontSize:11 }}>{formErrors.lead}</div>}
+      <main className="page-root m06-page">
+        <div className="m06-leads-shell">
+          <div className="m06-leads-toprow">
+            <ModuleBackButton toSuffix="" />
+          </div>
+
+          <section className="m06-hero">
+            <div className="m06-hero-inner m06-leads-hero-grid">
+              <div className="m06-leads-hero-copy">
+                <div className="m06-pill">M06 Touch Workspace</div>
+                <h1 style={{ fontSize: 38 }}>Campaign Touch Operations</h1>
+                <div className="m06-hero-copy">
+                  Review interaction events by campaign or lead, add a single touch manually, or import touch records
+                  in bulk from CSV. This combines the M06 touch workflow into one operational page.
+                </div>
               </div>
-              <div>
-                <div style={{ fontSize:12 }}>Campaign search</div>
-                <Autocomplete
-                  value={campaignQuery}
-                  placeholder="Campaign name"
-                  fetchItems={async (q)=>{ const r = await searchCampaigns(q); return r.campaigns || []; }}
-                  formatItem={(c:any)=>c.name}
-                  getValue={(c:any)=>String(c.id)}
-                  onChange={(val,item)=>{ setCampaignQuery(val); if(item) setSelectedCampaign(String(item.id)); }}
-                />
-                {formErrors.campaign && <div style={{ color:'#c33', fontSize:11 }}>{formErrors.campaign}</div>}
+              <div className="m06-leads-stat-grid">
+                <div className="m06-kpi-card">
+                  <div className="label">Visible touches</div>
+                  <div className="value">{rows.length}</div>
+                </div>
+                <div className="m06-kpi-card">
+                  <div className="label">Context</div>
+                  <div className="value" style={{ fontSize: 22 }}>{mode === 'campaign' ? 'Campaign' : 'Lead'}</div>
+                </div>
+                <div className="m06-kpi-card">
+                  <div className="label">Current mode</div>
+                  <div className="value" style={{ fontSize: 22 }}>{activeTab === 'list' ? 'View' : activeTab === 'form' ? 'Add' : 'CSV import'}</div>
+                </div>
               </div>
-              <div>
-                <div style={{ fontSize:12 }}>Channel</div>
-                <select value={channel} onChange={e=>setChannel(e.target.value)}>
-                  <option value="email">Email</option>
-                  <option value="ads">Ads</option>
-                  <option value="linkedin">LinkedIn</option>
-                  <option value="webinar">Webinar</option>
-                  <option value="other">Other</option>
+            </div>
+          </section>
+
+          <section className="m06-panel soft">
+            <div className="m06-section-label">Touch Actions</div>
+            <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Manage touch records from one screen</h3>
+            <div className="m06-helper" style={{ marginBottom: 14 }}>
+              Switch between reviewing touch history, creating a single interaction event, and importing batches from CSV.
+            </div>
+            <div className="m06-tab-row">
+              <button className={`m06-tab-btn ${activeTab === 'list' ? 'active' : ''}`} onClick={() => setActiveTab('list')}>
+                <span className="step">1</span>
+                <span className="meta">
+                  <strong>View touches</strong>
+                  <span>Search, filter, edit, archive, and delete touch events</span>
+                </span>
+              </button>
+              <button className={`m06-tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>
+                <span className="step">2</span>
+                <span className="meta">
+                  <strong>Add touch</strong>
+                  <span>Create one lead-to-campaign interaction record</span>
+                </span>
+              </button>
+              <button className={`m06-tab-btn ${activeTab === 'csv' ? 'active' : ''}`} onClick={() => setActiveTab('csv')}>
+                <span className="step">3</span>
+                <span className="meta">
+                  <strong>CSV import</strong>
+                  <span>Preview rows and map touch headers before import</span>
+                </span>
+              </button>
+            </div>
+          </section>
+
+          {activeTab === 'list' && (
+            <section className="m06-panel">
+              <div className="m06-section-label">View</div>
+              <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Touch Table</h3>
+              <div className="m06-helper">
+                Choose whether you want to inspect touches by campaign or by lead, then narrow the result set by type,
+                channel, and archive state before editing rows.
+              </div>
+              <div className="m06-leads-toolbar-grid" style={{ marginTop: 16, gridTemplateColumns: 'auto auto minmax(240px,1fr) auto auto auto' }}>
+                <button className={mode === 'campaign' ? 'btn-primary' : 'btn-ghost'} onClick={() => { setMode('campaign'); setSelectedEntityId(''); }}>
+                  By Campaign
+                </button>
+                <button className={mode === 'lead' ? 'btn-primary' : 'btn-ghost'} onClick={() => { setMode('lead'); setSelectedEntityId(''); }}>
+                  By Lead
+                </button>
+                <select value={selectedEntityId} onChange={e => setSelectedEntityId(e.target.value)}>
+                  <option value="">{mode === 'campaign' ? 'Choose a campaign' : 'Choose a lead'}</option>
+                  {mode === 'campaign'
+                    ? campaignOptions.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)
+                    : leadOptions.map(l => <option key={l._id} value={String(l._id)}>#{l.lead_id} {l.name || ''}</option>)}
                 </select>
-              </div>
-              <div>
-                <div style={{ fontSize:12 }}>Type</div>
-                <select value={type} onChange={e=>setType(e.target.value)}>
+                <select value={filterType} onChange={e => setFilterType(e.target.value)}>
+                  <option value="">All types</option>
                   <option value="email_open">Email Open</option>
                   <option value="email_click">Email Click</option>
                   <option value="ad_click">Ad Click</option>
@@ -213,110 +547,295 @@ export default function CampaignTouchInput(){
                   <option value="form_submit">Form Submit</option>
                   <option value="other">Other</option>
                 </select>
-              </div>
-              <div>
-                <div style={{ fontSize:12 }}>Touched at (datetime)</div>
-                <input type="datetime-local" value={touchedAt} onChange={e=>setTouchedAt(e.target.value)} />
-                {formErrors.touched_at && <div style={{ color:'#c33', fontSize:11 }}>{formErrors.touched_at}</div>}
-              </div>
-              <div>
-                <div style={{ fontSize:12 }}>Metadata (JSON)</div>
-                <textarea rows={3} value={metadata} onChange={e=>setMetadata(e.target.value)} />
-              </div>
-            </div>
-            <div style={{ marginTop:12 }}>
-              <button className="btn-primary" onClick={submitForm}>Create Touch</button>
-            </div>
-          </div>
-        )}
-        {activeTab==='csv' && (
-          <div style={{ marginTop:16, padding:12, background:'#fff', borderRadius:8 }}>
-            <h4>Bulk Import via CSV</h4>
-            <div style={{ fontSize:12, color:'#555', marginBottom:8 }}>Map columns then import. Required: lead, campaign, type, touched_at.</div>
-            <textarea rows={10} style={{ width:'100%', fontFamily:'monospace' }} placeholder="Paste CSV here (first row headers)" value={csvText} onChange={e=>setCsvText(e.target.value)} />
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:12, marginTop:12 }}>
-              <div>
-                <div style={{ fontSize:12 }}>Lead column *</div>
-                <select value={mapLead} onChange={e=>setMapLead(e.target.value)}>
-                  <option value="">-- select --</option>
-                  {headers.map(h=> <option key={h} value={h}>{h}</option> )}
+                <select value={filterChannel} onChange={e => setFilterChannel(e.target.value)}>
+                  <option value="">All channels</option>
+                  <option value="email">Email</option>
+                  <option value="ads">Ads</option>
+                  <option value="linkedin">LinkedIn</option>
+                  <option value="webinar">Webinar</option>
+                  <option value="other">Other</option>
                 </select>
+                <label className="toggle">
+                  <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} />
+                  Show archived
+                </label>
               </div>
-              <div>
-                <div style={{ fontSize:12 }}>Campaign column *</div>
-                <select value={mapCampaign} onChange={e=>setMapCampaign(e.target.value)}>
-                  <option value="">-- select --</option>
-                  {headers.map(h=> <option key={h} value={h}>{h}</option> )}
-                </select>
+
+              <div className="m06-leads-table-wrap">
+                {loading && <div className="m06-inline-note">Loading touches...</div>}
+                {!loading && rows.length === 0 && (
+                  <div className="m06-leads-empty">
+                    {selectedEntityId ? 'No touches found for this selection.' : 'Choose a campaign or lead above to see touches.'}
+                  </div>
+                )}
+                {!loading && rows.length > 0 && (
+                  <div className="m06-table-shell" style={{ overflowX: 'auto' }}>
+                    <table style={{ fontSize: 12 }}>
+                      <thead>
+                        <tr>
+                          <th>Lead</th>
+                          <th>Campaign</th>
+                          <th>Type</th>
+                          <th>Channel</th>
+                          <th>Touched at</th>
+                          <th>Status</th>
+                          <th>Metadata</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map(r => {
+                          const editing = editingRowId === r._id;
+                          return (
+                            <tr key={r._id}>
+                              <td>#{r.lead_id}</td>
+                              <td>{r.campaign_name || '-'}</td>
+                              <td>
+                                {editing ? (
+                                  <select value={editType} onChange={e => setEditType(e.target.value)}>
+                                    <option value="email_open">Email Open</option>
+                                    <option value="email_click">Email Click</option>
+                                    <option value="ad_click">Ad Click</option>
+                                    <option value="webinar">Webinar</option>
+                                    <option value="form_submit">Form Submit</option>
+                                    <option value="other">Other</option>
+                                  </select>
+                                ) : r.type}
+                              </td>
+                              <td>
+                                {editing ? (
+                                  <select value={editChannel} onChange={e => setEditChannel(e.target.value)}>
+                                    <option value="email">Email</option>
+                                    <option value="ads">Ads</option>
+                                    <option value="linkedin">LinkedIn</option>
+                                    <option value="webinar">Webinar</option>
+                                    <option value="other">Other</option>
+                                  </select>
+                                ) : (r.channel || '-')}
+                              </td>
+                              <td>
+                                {editing ? (
+                                  <input type="datetime-local" value={editTouchedAt} onChange={e => setEditTouchedAt(e.target.value)} />
+                                ) : new Date(r.touched_at).toLocaleString()}
+                              </td>
+                              <td>{r.status || 'active'}</td>
+                              <td style={{ maxWidth: 220 }}>
+                                {editing ? (
+                                  <textarea rows={2} value={editMetadata} onChange={e => setEditMetadata(e.target.value)} style={{ width: '100%' }} />
+                                ) : (r.metadata ? JSON.stringify(r.metadata) : '-')}
+                              </td>
+                              <td style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                {!editing ? (
+                                  <>
+                                    <button className="btn-ghost" onClick={() => beginEdit(r)}>Edit</button>
+                                    <button className="btn-ghost" onClick={() => doArchive(r._id)}>Archive</button>
+                                    <button className="btn-danger" onClick={() => doDelete(r._id)}>Delete</button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button className="btn-primary" onClick={saveEdit}>Save</button>
+                                    <button className="btn-ghost" onClick={() => setEditingRowId(null)}>Cancel</button>
+                                  </>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-              <div>
-                <div style={{ fontSize:12 }}>Channel column</div>
-                <select value={mapChannel} onChange={e=>setMapChannel(e.target.value)}>
-                  <option value="">-- optional --</option>
-                  {headers.map(h=> <option key={h} value={h}>{h}</option> )}
-                </select>
+            </section>
+          )}
+
+          {activeTab === 'form' && (
+            <section className="m06-panel">
+              <div className="m06-section-label">Add Touch</div>
+              <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Single Touch Form</h3>
+              <div className="m06-helper" style={{ marginBottom: 12 }}>
+                Create one interaction event by linking a lead, a campaign, and the touch details that feed attribution and journey analysis.
               </div>
-              <div>
-                <div style={{ fontSize:12 }}>Type column *</div>
-                <select value={mapType} onChange={e=>setMapType(e.target.value)}>
-                  <option value="">-- select --</option>
-                  {headers.map(h=> <option key={h} value={h}>{h}</option> )}
-                </select>
+              <div className="m06-form-grid">
+                <div>
+                  <label>Lead *</label>
+                  <Autocomplete
+                    value={leadQuery}
+                    placeholder="Lead id / name / company"
+                    fetchItems={async (q)=>{ const r = await searchLeads(q); return r.leads || []; }}
+                    formatItem={formatLeadOption}
+                    getValue={formatLeadOption}
+                    onChange={(val, item)=>{ setLeadQuery(val); setSelectedLead(item ? String(item._id) : ''); }}
+                  />
+                  {formErrors.lead && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.lead}</div>}
+                </div>
+                <div>
+                  <label>Campaign *</label>
+                  <Autocomplete
+                    value={campaignQuery}
+                    placeholder="Campaign name"
+                    fetchItems={async (q)=>{ const r = await searchCampaigns(q); return r.campaigns || []; }}
+                    formatItem={(c:any)=>c.name}
+                    getValue={(c:any)=>String(c.name || '')}
+                    onChange={(val,item)=>{ setCampaignQuery(val); setSelectedCampaign(item ? String(item.id) : ''); }}
+                  />
+                  {formErrors.campaign && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.campaign}</div>}
+                </div>
+                <div>
+                  <label>Type *</label>
+                  <select value={type} onChange={e=>setType(e.target.value)}>
+                    <option value="email_open">Email Open</option>
+                    <option value="email_click">Email Click</option>
+                    <option value="ad_click">Ad Click</option>
+                    <option value="webinar">Webinar</option>
+                    <option value="form_submit">Form Submit</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Channel</label>
+                  <select value={channel} onChange={e=>setChannel(e.target.value)}>
+                    <option value="email">Email</option>
+                    <option value="ads">Ads</option>
+                    <option value="linkedin">LinkedIn</option>
+                    <option value="webinar">Webinar</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Touched at *</label>
+                  <input type="datetime-local" value={touchedAt} onChange={e=>setTouchedAt(e.target.value)} />
+                  {formErrors.touched_at && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.touched_at}</div>}
+                </div>
+                <div style={{ gridColumn:'1 / -1' }}>
+                  <label>Metadata (JSON)</label>
+                  <textarea rows={3} value={metadata} onChange={e=>setMetadata(e.target.value)} style={{ width:'100%' }} />
+                </div>
               </div>
-              <div>
-                <div style={{ fontSize:12 }}>Touched at column *</div>
-                <select value={mapTouchedAt} onChange={e=>setMapTouchedAt(e.target.value)}>
-                  <option value="">-- select --</option>
-                  {headers.map(h=> <option key={h} value={h}>{h}</option> )}
-                </select>
+              <div style={{ marginTop:12, display:'flex', gap:8 }}>
+                <button className="btn-primary" onClick={submitForm}>Create Touch</button>
               </div>
-              <div>
-                <div style={{ fontSize:12 }}>Start row</div>
-                <input type="number" min={1} value={String(startRow)} onChange={e=>setStartRow(Number(e.target.value||1))} />
+            </section>
+          )}
+
+          {activeTab === 'csv' && (
+            <section className="m06-panel">
+              <div className="m06-section-label">CSV Import</div>
+              <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Import Touch CSV</h3>
+              <div className="m06-helper" style={{ marginBottom: 12 }}>
+                Upload a CSV file with touch activity, verify the preview, then map the lead, campaign, type, and timestamp columns.
               </div>
-              <div>
-                <div style={{ fontSize:12 }}>End row (optional)</div>
-                <input type="number" min={1} value={endRow!==undefined?String(endRow):''} placeholder="auto" onChange={e=>setEndRow(e.target.value?Number(e.target.value):undefined)} />
+              <div className="m06-file-drop">
+                <div className="m06-inline-note" style={{ marginBottom: 10 }}>
+                  Select a touch CSV file. Required columns are lead, campaign, type, and touched_at.
+                </div>
+                <input type="file" accept=".csv" onChange={onFileChange} />
               </div>
-              <div>
-                <div style={{ fontSize:12 }}>Duplicate policy</div>
-                <select value={duplicatePolicy} onChange={e=>setDuplicatePolicy(e.target.value as any)}>
-                  <option value="skip">Skip duplicates</option>
-                  <option value="allow">Allow duplicates</option>
-                </select>
-              </div>
-            </div>
-            <label style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:12 }}>
-              <input type="checkbox" checked={mappingConfirmed} onChange={e=>setMappingConfirmed(e.target.checked)} />
-              <span style={{ fontSize:12 }}>I have reviewed my mappings and understand they will write interaction data.</span>
-            </label>
-            <label style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:4 }}>
-              <input type="checkbox" checked={forceImport} onChange={e=>setForceImport(e.target.checked)} />
-              <span style={{ fontSize:12 }}>Force import without confirmation (advanced)</span>
-            </label>
-            {diagnostics && (
-              <div style={{ marginTop:8, fontSize:11, color:'#555' }}>Rows: {diagnostics.rows}, Blank lines: {diagnostics.blank}, Headers detected: {headers.length}</div>
-            )}
-            <div style={{ marginTop:12 }}>
-              <button className="btn-primary" disabled={importing} onClick={submitCsv}>{importing?'Importing...':'Import CSV'}</button>
-              {uploadSummary && (
-                <span style={{ marginLeft:12, fontSize:12 }}>Processed {uploadSummary.processed}, Inserted {uploadSummary.inserted}, Failed {uploadSummary.failed}, Duplicates {uploadSummary.duplicates}</span>
+              {headerError && <div style={{ marginTop:8, fontSize:12, color:'#c33' }}>{headerError}</div>}
+              {!headerError && headersPreview.length > 0 && <div className="m06-inline-note" style={{ marginTop:8 }}>Detected headers: {headersPreview.join(', ')}</div>}
+              {rowsPreview.length > 0 && (
+                <div style={{ marginTop:16 }}>
+                  <div className="m06-preview-head">
+                    Previewing rows {previewStartIndex}-{previewEndIndex} of {rowsPreview.length}
+                    {previewLimited ? ` (showing first ${rowsPreview.length} of ${totalPreviewRows})` : totalPreviewRows ? ` (total rows: ${totalPreviewRows})` : ''}
+                    {blankRowCount > 0 ? ` | Blank lines skipped: ${blankRowCount}` : ''}
+                  </div>
+                  <div className="m06-preview-shell">
+                    <div className="m06-preview-table-wrap">
+                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                        <thead>
+                          <tr>
+                            {headersPreview.map((header, idx)=><th key={idx}>{header}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {previewPageRows.map((row, rIdx)=>(
+                            <tr key={rIdx}>
+                              {headersPreview.map((_, cIdx)=><td key={cIdx}>{row[cIdx] ?? ''}</td>)}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  {rowsPreview.length > PREVIEW_PAGE_SIZE && (
+                    <div style={{ marginTop:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <div className="m06-inline-note">Page {currentPreviewPage + 1} of {previewPageCount}</div>
+                      <div style={{ display:'flex', gap:8 }}>
+                        <button className="btn-ghost" disabled={currentPreviewPage === 0} onClick={()=>setPreviewPage(p=>Math.max(0, p-1))}>Prev</button>
+                        <button className="btn-ghost" disabled={currentPreviewPage >= previewPageCount - 1} onClick={()=>setPreviewPage(p=>Math.min(previewPageCount - 1, p+1))}>Next</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
-              {uploadSummary && uploadSummary.failedRows && uploadSummary.failedRows.length>0 && (
-                <button className="btn-ghost" style={{ marginLeft:12, fontSize:12 }} onClick={downloadErrors}>Download Error CSV</button>
-              )}
-            </div>
-            {uploadSummary && uploadSummary.failedRows && uploadSummary.failedRows.length > 0 && (
-              <details style={{ marginTop:8 }}>
-                <summary style={{ cursor:'pointer', fontSize:12 }}>View failed rows</summary>
-                <ul style={{ fontSize:12, marginTop:4 }}>
-                  {uploadSummary.failedRows.slice(0,50).map((fr:any,i:number)=>(<li key={i}>Row {fr.row}: {fr.error}</li>))}
-                </ul>
-              </details>
-            )}
-          </div>
-        )}
-        {toast && <Toast message={toast.msg} type={toast.type} onClose={()=>setToast(null)} />}
+              <div className="m06-mapping-grid">
+                <div>
+                  <label>Lead column *</label>
+                  <input list="touch-upload-headers" value={mapLead} onChange={e=>setMapLead(e.target.value)} placeholder="Column name" />
+                </div>
+                <div>
+                  <label>Campaign column *</label>
+                  <input list="touch-upload-headers" value={mapCampaign} onChange={e=>{ const value = e.target.value; setMapCampaign(value); if(value && value.toLowerCase().includes('id')) setCampaignIdentifier('campaign_id'); }} placeholder="Column name" />
+                </div>
+                <div>
+                  <label>Channel column</label>
+                  <input list="touch-upload-headers" value={mapChannel} onChange={e=>setMapChannel(e.target.value)} placeholder="Optional" />
+                </div>
+                <div>
+                  <label>Type column *</label>
+                  <input list="touch-upload-headers" value={mapType} onChange={e=>setMapType(e.target.value)} placeholder="Column name" />
+                </div>
+                <div>
+                  <label>Touched at column *</label>
+                  <input list="touch-upload-headers" value={mapTouchedAt} onChange={e=>setMapTouchedAt(e.target.value)} placeholder="Column name" />
+                </div>
+                <div>
+                  <label>Campaign identifier</label>
+                  <select value={campaignIdentifier} onChange={e=>setCampaignIdentifier(e.target.value as 'name'|'campaign_id')}>
+                    <option value="name">Campaign name</option>
+                    <option value="campaign_id">Campaign ID</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Start row</label>
+                  <input type="number" min={1} value={String(startRow)} onChange={e=>setStartRow(Number(e.target.value||1))} />
+                </div>
+                <div>
+                  <label>End row</label>
+                  <input type="number" min={1} value={endRow!==undefined?String(endRow):''} placeholder="auto" onChange={e=>setEndRow(e.target.value?Number(e.target.value):undefined)} />
+                </div>
+                <div>
+                  <label>Duplicate policy</label>
+                  <select value={duplicatePolicy} onChange={e=>setDuplicatePolicy(e.target.value as any)}>
+                    <option value="skip">Skip duplicates</option>
+                    <option value="allow">Allow duplicates</option>
+                  </select>
+                </div>
+              </div>
+              <datalist id="touch-upload-headers">
+                {headerOptions.map(opt => <option key={opt.value} value={opt.value} />)}
+              </datalist>
+              <label style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:12 }}>
+                <input type="checkbox" checked={mappingConfirmed} onChange={e=>setMappingConfirmed(e.target.checked)} />
+                <span className="m06-inline-note">I have reviewed my mappings and understand they will create touch records.</span>
+              </label>
+              <label style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:4 }}>
+                <input type="checkbox" checked={forceImport} onChange={e=>setForceImport(e.target.checked)} />
+                <span className="m06-inline-note">Force import without confirmation (advanced)</span>
+              </label>
+              <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}>
+                <button className="btn-primary" disabled={importing} onClick={submitCsv}>{importing?'Importing...':'Import CSV'}</button>
+                {uploadSummary && <span className="m06-inline-note">Processed {uploadSummary.processed}, Inserted {uploadSummary.inserted}, Failed {uploadSummary.failed}, Duplicates {uploadSummary.duplicates}</span>}
+                {uploadSummary && uploadSummary.failedRows && uploadSummary.failedRows.length>0 && (
+                  <button className="btn-ghost" onClick={downloadErrors}>Download Error CSV</button>
+                )}
+              </div>
+            </section>
+          )}
+
+          {toast && <Toast message={toast.msg} type={toast.type} onClose={()=>setToast(null)} />}
+        </div>
       </main>
     </Layout>
   );

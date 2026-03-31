@@ -4,7 +4,7 @@ import WorkspaceHeader from './WorkspaceHeader';
 import '../styles/components.css';
 import '../modules/core/auth/auth.css';
 
-export default function Layout({ children }: { children: React.ReactNode }){
+export default function Layout({ children, fullBleed = false }: { children: React.ReactNode; fullBleed?: boolean }){
   return (
     <div className="app-root">
       <Header />
@@ -16,7 +16,9 @@ export default function Layout({ children }: { children: React.ReactNode }){
       )}
       <div className="app-layout">
         <main className="app-main">
-          <div className="surface card-pad">{children}</div>
+          <div className={fullBleed ? 'surface' : 'surface card-pad'} style={fullBleed ? { padding: 0, maxHeight: 'none', overflow: 'visible' } : {}}>
+            {children}
+          </div>
         </main>
       </div>
     </div>

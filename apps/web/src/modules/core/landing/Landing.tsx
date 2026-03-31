@@ -1,68 +1,101 @@
-import { useEffect } from "react";
+import React from 'react';
 import Layout from '../../../components/Layout';
+import heroImg from '../../../assets/landing-page-img1.png';
 import "../auth/auth.css";
 
+const gradient = 'linear-gradient(135deg, #0f1f3a 0%, #0f4258 45%, #1597a7 100%)';
+
 export default function Landing() {
-  useEffect(() => {
-    // Handle Google redirect: #/landing?token=...
-    const hash = window.location.hash || '';
-    const [_, query = ''] = hash.split('?');
-    const params = new URLSearchParams(query);
-    const tokenFromUrl = params.get('token');
-
-    if (tokenFromUrl) {
-      localStorage.setItem('token', tokenFromUrl);
-      // Clean URL so token isn't visible any more
-      window.location.hash = '#/landing';
-      return;
-    }
-
-    const token = localStorage.getItem('token');
-    if (!token) {
-      window.location.hash = '#/login';
-    }
-  }, []);
-
   return (
-    <Layout>
-      <div style={{ minHeight: 'calc(100vh - 80px)', background: 'var(--page-bg)', padding: 28 }}>
-        <main style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ maxWidth: 1100, width: '100%', display: 'flex', gap: 24 }}>
-            <section style={{ flex: 1, padding: 24, background: 'var(--container-bg)', borderRadius: 12 }}>
-              <h1 style={{ marginTop: 0, color: 'var(--text-primary)', fontSize: 48 }}>Welcome back</h1>
-              <p style={{ fontSize: 18, color: 'var(--text-muted)' }}>Manage your account and workspaces here. Create a workspace or request to join an existing one using the workspace ID. Workspace admins must approve join requests.</p>
-              <div style={{ marginTop: 24, display: 'flex', gap: 12 }}>
-                <button className="btn-primary" onClick={() => window.location.hash = '#/create-workspace'} style={{ width: 160 }}>Create Workspace</button>
-                <button className="btn-primary" onClick={() => window.location.hash = '#/join-workspace'} style={{ width: 160 }}>Join Workspace</button>
-                <button className="btn-primary" onClick={() => window.location.hash = '#/workspaces'} style={{ width: 160 }}>View My Workspaces</button>
-              </div>
-            </section>
-            <aside style={{ width: 320, background: 'var(--container-bg)', borderRadius: 8, padding: 20 }}>
-              <h3 style={{ marginTop: 0, color: 'var(--text-primary)' }}>Quick Links</h3>
-              <ul style={{ color: 'var(--text-muted)', listStyle: 'none', paddingLeft: 0 }}>
-                <li style={{ marginBottom: 8 }}>
-                  <button
-                    className="btn-ghost"
-                    style={{ width: '100%', textAlign: 'left' }}
-                    onClick={() => (window.location.hash = '#/profile')}
-                  >
-                    Profile
-                  </button>
-                </li>
-                <li>
-                  <button
-                    className="btn-ghost"
-                    style={{ width: '100%', textAlign: 'left' }}
-                    onClick={() => (window.location.hash = '#/workspaces')}
-                  >
-                    Manage workspaces
-                  </button>
-                </li>
-              </ul>
-            </aside>
-          </div>
-        </main>
+    <Layout fullBleed>
+      <div style={{ background: '#f6f7fb', color: '#0f1f3a' }}>
+        <HeroFull />
       </div>
     </Layout>
   );
 }
+
+function HeroFull() {
+  return (
+    <section
+      style={{
+        background: gradient,
+        color: '#eaf7ff',
+        minHeight: 'calc(100vh - 72px)',
+        height: 'calc(100vh - 72px)',
+        display: 'flex',
+        alignItems: 'center',
+        padding: 0,
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 1400,
+          margin: '0 auto',
+          padding: '24px 28px',
+          display: 'grid',
+          gridTemplateColumns: '1.1fr 0.9fr',
+          gap: 36,
+          alignItems: 'center',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 13, letterSpacing: 0.6, textTransform: 'uppercase', opacity: 0.85 }}>
+            AI layer for B2B SMEs
+          </div>
+          <h1 style={{ fontSize: 48, margin: '14px 0 12px', lineHeight: 1.08, color: '#fefefe' }}>
+            Unify sales & marketing signals into decisions—not just dashboards
+          </h1>
+          <p style={{ color: '#d7eaf5', fontSize: 18, lineHeight: 1.6, maxWidth: 760 }}>
+            Consolidate leads, score intent, analyze conversations, track leakage, and attribute ROI. Modular by
+            design so teams stay aligned without replacing the tools they already use.
+          </p>
+          <div style={{ display: 'flex', gap: 12, marginTop: 22, flexWrap: 'wrap' }}>
+            <button style={ghostBtn} onClick={() => (window.location.hash = '#/create-workspace')}>Create workspace</button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: '#0f1f3a',
+            borderRadius: 18,
+            padding: 18,
+            boxShadow: '0 30px 80px rgba(4,12,24,0.35)',
+            alignSelf: 'stretch',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <img
+            src={heroImg}
+            alt="Product hero"
+            style={{ width: '100%', height: '100%', borderRadius: 14, objectFit: 'cover', maxHeight: '72vh' }}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+const primaryBtn: React.CSSProperties = {
+  background: '#0f4258',
+  color: '#fefefe',
+  border: 'none',
+  borderRadius: 10,
+  padding: '12px 16px',
+  fontWeight: 700,
+  cursor: 'pointer',
+  boxShadow: '0 10px 30px rgba(15,66,88,0.3)',
+};
+
+const ghostBtn: React.CSSProperties = {
+  background: '#ffffff',
+  color: '#0f4258',
+  border: '1px solid #d6e2f0',
+  borderRadius: 10,
+  padding: '12px 14px',
+  fontWeight: 600,
+  cursor: 'pointer',
+};

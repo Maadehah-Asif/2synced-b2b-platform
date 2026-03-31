@@ -4,27 +4,30 @@ import pandas as pd
 import numpy as np
 
 # -------------------------------------------------
-# CONFIG (edit these before running)
+# CONFIG
 # -------------------------------------------------
-BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR   = os.path.join(BASE_DIR, "data")
-MODEL_DIR  = os.path.join(BASE_DIR, "models")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # .../apps/ml/m01
+ROOT_DIR = os.path.dirname(BASE_DIR)                   # .../apps/ml
+DATA_DIR = os.path.join(ROOT_DIR, "data")
+MODEL_DIR = os.path.join(ROOT_DIR, "models")
 
 # pick which trained model you want to score with:
-# default to RandomForest saved under models/m01/randomforest.pkl
-MODEL_PATH = os.path.join(MODEL_DIR, "m01", "randomforest.pkl")
-# To use CatBoost again, switch to:
-# MODEL_PATH = os.path.join(MODEL_DIR, "m01", "catboost.pkl")
-# Other examples:
-# MODEL_PATH = os.path.join(MODEL_DIR, "logisticregression.pkl")
-# MODEL_PATH = os.path.join(MODEL_DIR, "svm_linear.pkl")
-# MODEL_PATH = os.path.join(MODEL_DIR, "deeplearnnetwork.pkl")
-# etc. just change this path when you test another .pkl
+# default (Module 1) -> models/m01/randomforest.pkl
+# for Module 2 -> models/m02/randomforest.pkl
+MODULE_KEY = os.environ.get("MODULE_KEY", "m01")
+if MODULE_KEY == "m02":
+    MODEL_PATH = os.path.join(MODEL_DIR, "m02", "randomforest.pkl")
+else:
+    MODEL_PATH = os.path.join(MODEL_DIR, "m01", "randomforest.pkl")
+# explicit override if provided
+MODEL_PATH = os.environ.get("MODEL_PATH", MODEL_PATH)
+# enable intent outputs only for Module 2 (or explicit override)
+DO_INTENT = MODULE_KEY == "m02" or os.environ.get("ENABLE_INTENT_SCORE") == "1"
 
 # I/O: use structured folders
-INPUT_DIR  = os.path.join(DATA_DIR, "input")
+INPUT_DIR = os.path.join(DATA_DIR, "input")
 OUTPUT_DIR = os.path.join(DATA_DIR, "output")
-INPUT_CSV  = os.path.join(INPUT_DIR, "sample_input.csv")
+INPUT_CSV = os.path.join(INPUT_DIR, "sample_input.csv")
 OUTPUT_CSV = os.path.join(OUTPUT_DIR, "output.csv")
 
 CLASS_MAP = {
@@ -34,15 +37,9 @@ CLASS_MAP = {
 }
 
 # -------------------------------------------------
-# Helper: prepare features for inference
+# Feature prep
 # -------------------------------------------------
 def prep_features(df_in: pd.DataFrame) -> pd.DataFrame:
-    """
-    Light cleanup:
-    - Do NOT drop any columns here because we assume sample_input.csv
-      was already aligned with the model's training features.
-    - Just fill NAs so inference never crashes.
-    """
     df = df_in.copy()
 
     for col in df.columns:
@@ -60,137 +57,118 @@ def prep_features(df_in: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # -------------------------------------------------
-# Helper: load model or wrapped pipeline
+# Load model
 # -------------------------------------------------
 def load_model(path: str):
-    """
-    Sometimes we save raw sklearn/CatBoost model directly.
-    Sometimes we save dicts like {"model": pipeline, ...}.
-    This returns the actual thing with .predict().
-    """
     obj = joblib.load(path)
     if isinstance(obj, dict) and "model" in obj:
         return obj["model"]
     return obj
 
 # -------------------------------------------------
-# Helper: safe probability extraction
+# Probability extraction
 # -------------------------------------------------
 def get_probs(model, X: pd.DataFrame, hard_preds: np.ndarray):
-    """
-    Returns:
-    - probs matrix shape [n,3] if we can
-    - confidence vector shape [n]
-    If model doesn't support predict_proba, will try decision_function,
-    else fallback to 1.0 confidence on the predicted class.
-    """
 
-    # case 1: native predict_proba
     if hasattr(model, "predict_proba"):
         raw = model.predict_proba(X)
-
-        # many sklearn models return shape [n_classes], CatBoost returns [n,3]
-        # If binary this would be [n,2]; we assume 3-class so should be [n,3].
         probs = np.array(raw)
 
-    # case 2: decision_function (SVM without prob=True, etc.)
     elif hasattr(model, "decision_function"):
         raw = model.decision_function(X)
         raw = np.array(raw)
 
-        # If shape is [n_classes], we softmax it ourselves
         if raw.ndim == 1:
             raw = raw.reshape(-1, 1)
 
-        # softmax
         e_x = np.exp(raw - raw.max(axis=1, keepdims=True))
         probs = e_x / e_x.sum(axis=1, keepdims=True)
 
-    # fallback: no score info at all
     else:
-        # Build dummy probs: 1.0 on predicted class, 0 elsewhere
         classes_unique = np.array(sorted(np.unique(hard_preds)))
-        n_classes = max(classes_unique) + 1  # assume classes are 0,1,2
+        n_classes = max(classes_unique) + 1
         probs = np.zeros((len(hard_preds), n_classes), dtype=float)
         for i, c in enumerate(hard_preds):
             probs[i, int(c)] = 1.0
 
-    # ensure we always have columns 0,1,2 in order
-    # if model ended up giving (n,2) or weird order, we need to align.
-    # We assume the class labels are [0,1,2]; let's try to detect that.
-
     n_samples = probs.shape[0]
 
-    # If probs not 3-wide, try to expand/reindex
     if probs.shape[1] != 3:
-        # build all-zero 3-col
         aligned = np.zeros((n_samples, 3), dtype=float)
-
-        # try to infer class order from model.classes_ if present
         if hasattr(model, "classes_"):
-            # model.classes_ is like array([0,1,2])
             for class_idx, actual_label in enumerate(model.classes_):
-                if actual_label in [0,1,2] and class_idx < probs.shape[1]:
+                if actual_label in [0, 1, 2] and class_idx < probs.shape[1]:
                     aligned[:, int(actual_label)] = probs[:, class_idx]
         else:
-            # fallback: just put everything in the predicted bucket
             for i, c in enumerate(hard_preds):
-                aligned[i, int(c)] = 1.0
+                aligned[i, int(c)] = probs[:, 0][i] if probs.shape[1] > 0 else 1.0
 
         probs = aligned
 
-    # confidence = max prob per row
     confidence = probs.max(axis=1)
-
     return probs, confidence
+
+# -------------------------------------------------
+# Map numeric score → segment (Module 2 only)
+# -------------------------------------------------
+def score_to_segment(s: float) -> str:
+    if s < 25:
+        return "COLD"
+    elif s < 50:
+        return "WARM"
+    elif s < 75:
+        return "HOT"
+    else:
+        return "BLAZING"
 
 # -------------------------------------------------
 # Main
 # -------------------------------------------------
 def main():
-    # ensure output folder exists
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    # 1. load model
     model = load_model(MODEL_PATH)
 
-    # 2. read input rows to score
     raw_df = pd.read_csv(INPUT_CSV)
-
-    # keep original columns for output
     out_df = raw_df.copy()
 
-    # 3. prepare features for inference
     X = prep_features(raw_df)
 
-    # 4. hard predictions
     hard_preds = model.predict(X)
     hard_preds = np.array(hard_preds).astype(int).reshape(-1)
 
-    # 5. probabilities / confidence
     probs, confidence = get_probs(model, X, hard_preds)
 
-    p_low    = probs[:, 0]
+    p_low = probs[:, 0]
     p_medium = probs[:, 1]
-    p_high   = probs[:, 2]
+    p_high = probs[:, 2]
 
-    # map numeric class -> label text
     pred_labels = [CLASS_MAP.get(int(c), "UNKNOWN") for c in hard_preds]
 
-    # 6. attach predictions to output
+    if DO_INTENT:
+        numeric_tier = (0 * p_low) + (1 * p_medium) + (2 * p_high)
+        intent_score = (numeric_tier / 2.0) * 100.0
+        intent_score = np.round(intent_score, 1)
+        intent_segment = np.array([score_to_segment(s) for s in intent_score])
+    else:
+        intent_score = None
+        intent_segment = None
+
     out_df["predicted_class"] = hard_preds
     out_df["predicted_label"] = pred_labels
     out_df["confidence"] = confidence
     out_df["p_low"] = p_low
     out_df["p_medium"] = p_medium
     out_df["p_high"] = p_high
+    if DO_INTENT:
+        out_df["intent_score"] = intent_score
+        out_df["intent_segment"] = intent_segment
 
-    # 7. print and save
     print("\n=== PREDICTIONS ===")
-    print(
-        out_df[
-            ["predicted_class", "predicted_label", "confidence", "p_low", "p_medium", "p_high"]
-        ]
-    )
+    cols = ["predicted_class", "predicted_label", "confidence", "p_low", "p_medium", "p_high"]
+    if DO_INTENT:
+        cols.insert(2, "intent_score")
+        cols.insert(3, "intent_segment")
+    print(out_df[cols])
 
     out_df.to_csv(OUTPUT_CSV, index=False)
     print(f"\nSaved scored output to: {OUTPUT_CSV}\n")

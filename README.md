@@ -105,6 +105,12 @@ npm run dev
 
 3) Backend API (Express + TypeScript, ESM)
 
+for esha vs code cannot fix the problem rn so adding this 
+
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+
+for maado and hania normal the above is just for esha 
 ```powershell
 cd ../api
 npm install

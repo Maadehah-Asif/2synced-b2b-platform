@@ -2,28 +2,21 @@ import { useState, useRef, useEffect } from 'react'
 import './module6.css'
 import RoundedButton from './RoundedButton.tsx'
 import Page1Stats from './Page1Stats'
+import { getWorkspaceIdFromHash } from '../../utils/workspace'
 
 export default function Module6Dropdown() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
 
-  function getWorkspaceId(){
-    const hash = window.location.hash || '';
-    const m = hash.match(/#\/workspace\/(.+?)(?:\/|$)/);
-    return m ? m[1] : null;
-  }
-
   function openInWorkspace(){
-    const wid = getWorkspaceId();
-    if(!wid) return;
-    window.location.hash = `#/workspace/${wid}/m06/element1`;
+    const wid = getWorkspaceIdFromHash();
+    window.location.hash = wid ? `#/workspace/${wid}/m06/element1` : '#/workspaces';
     setOpen(false);
   }
 
   function go(path: string){
-    const wid = getWorkspaceId();
-    if(!wid) return;
-    window.location.hash = `#/workspace/${wid}${path}`;
+    const wid = getWorkspaceIdFromHash();
+    window.location.hash = wid ? `#/workspace/${wid}${path}` : '#/workspaces';
     setOpen(false);
   }
 
@@ -45,13 +38,12 @@ export default function Module6Dropdown() {
           <button className="m7-rounded" onClick={openInWorkspace} style={{ padding: '6px 10px', fontSize: 12 }}>Open in Workspace</button>
         </div>
         <div style={{ marginTop: 8 }}>
-          <Page1Stats />
+          {/* Compact summary version for dropdown */}
+          <Page1Stats compact />
         </div>
         <div style={{ marginTop: 12, display:'grid', gap:6 }}>
-          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/campaigns/manage')}>Campaign Manager</button>
-          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/campaigns')}>View Campaigns</button>
-          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/touches/input')}>Add Touches</button>
-          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/touches')}>Campaign Touches</button>
+          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/campaigns')}>Campaign Workspace</button>
+          <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/touch-workspace')}>Touch Workspace</button>
           <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/journeys')}>Journey Preview</button>
           <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/run-attribution')}>Run Attribution</button>
         </div>

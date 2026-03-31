@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import '../m06/module6.css';
+import { useWorkspaceId } from '../../utils/workspace';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -105,12 +106,6 @@ function formatDate(input?: string) {
   return d.toLocaleDateString();
 }
 
-function getWorkspaceIdFromHash(): string | null {
-  const hash = window.location.hash || '';
-  const m = hash.match(/#\/workspace\/(.+?)(?:\/?$|\/)/);
-  return m ? m[1] : null;
-}
-
 function mapError(err: unknown): string {
   if (err && typeof err === 'object') {
     const anyErr = err as ApiErrorShape & { status?: number };
@@ -160,7 +155,7 @@ export default function AllocationDashboard() {
 
   const hasRuns = runs.length > 0;
 
-  const projectId = useMemo(() => getWorkspaceIdFromHash(), []);
+  const projectId = useWorkspaceId({ redirectToWorkspaces: true });
 
   useEffect(() => {
     if (!projectId) return;
@@ -311,9 +306,19 @@ export default function AllocationDashboard() {
 
   return (
     <Layout>
+      <div className="m06-page">
       <div style={{ marginTop: 8 }}>
         <ModuleBackButton toSuffix="/m06" />
       </div>
+      <section className="m06-hero">
+        <div className="m06-hero-inner">
+          <div className="m06-pill">Allocation Dashboard</div>
+          <h1>Allocation Explorer</h1>
+          <div className="m06-hero-copy">
+            Review how revenue share is distributed across campaigns and deals for a selected attribution run, with the same filters and drill-down logic already in place.
+          </div>
+        </div>
+      </section>
       <div className="card" style={{ marginTop: 8 }}>
         <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <h2 style={{ margin: 0 }}>Allocation Dashboard</h2>
@@ -360,9 +365,8 @@ export default function AllocationDashboard() {
                 type="button"
                 className="btn-primary btn-sm"
                 onClick={() => {
-                  const wid = getWorkspaceIdFromHash();
-                  if (!wid) return;
-                  window.location.hash = `#/workspace/${wid}/m06/run-attribution`;
+                  if (!projectId) return;
+                  window.location.hash = `#/workspace/${projectId}/m06/run-attribution`;
                 }}
               >
                 Go to Run Attribution
@@ -372,6 +376,9 @@ export default function AllocationDashboard() {
 
           {hasRuns && (
             <div style={{ marginTop: 16 }}>
+              <div className="m06-helper" style={{ marginBottom: 12 }}>
+                Choose a run, switch between campaign and deal views, then use filters to understand how attributed revenue is being distributed.
+              </div>
               <h4 style={{ margin: '0 0 8px 0', fontSize: 14, color: '#4d4f67' }}>Filters</h4>
               <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
                 <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -670,6 +677,7 @@ export default function AllocationDashboard() {
           </div>
         </div>
       )}
+      </div>
     </Layout>
   );
 }

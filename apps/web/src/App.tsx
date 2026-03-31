@@ -20,6 +20,15 @@ import Module6Home from './modules/m06/Module6Home'
 import Module1Home from './modules/m01/Module1Home'
 import Module2Home from './modules/m02/Module2Home'
 import Module3Home from './modules/m03/Module3Home'
+import ConversationUpload from './modules/m03/ConversationUpload'
+import ConversationManualLog from './modules/m03/ConversationManualLog'
+import Module3Companies from './modules/m03/Module3Companies'
+import ConversationExplorer from './modules/m03/ConversationExplorer'
+import ConversationThreadDetail from './modules/m03/ConversationThreadDetail'
+import AnalyticsPage from './modules/m03/AnalyticsPage'
+import DealHealthBoard from './modules/m03/DealHealthBoard'
+import FollowUpsPage from './modules/m03/FollowUpsPage'
+import OrgTimelinePage from './modules/m03/OrgTimelinePage'
 import Module5Home from './modules/m05/Module5Home'
 import Module7Home from './modules/m07/Module7Home'
 import Module9Home from './modules/m09/Module9Home'
@@ -112,6 +121,15 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m02/upload-wizard')) return <UploadWizardM02 />
   // Module 2 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m02') && !route.includes('/m02/')) return <Module2Home />
+  if (route.startsWith('#/workspace/') && route.includes('/m03/conversations/') ) return <ConversationThreadDetail />
+  if (route.startsWith('#/workspace/') && route.includes('/m03/upload')) return <ConversationUpload />
+  if (route.startsWith('#/workspace/') && route.includes('/m03/manual-log')) return <ConversationManualLog />
+  if (route.startsWith('#/workspace/') && route.includes('/m03/companies')) return <Module3Companies />
+  if (route.startsWith('#/workspace/') && route.includes('/m03/explorer')) return <ConversationExplorer />
+  if (route.startsWith('#/workspace/') && route.includes('/m03/analytics')) return <AnalyticsPage />
+  if (route.startsWith('#/workspace/') && route.includes('/m03/deal-health')) return <DealHealthBoard />
+  if (route.startsWith('#/workspace/') && route.includes('/m03/follow-ups')) return <FollowUpsPage />
+  if (route.startsWith('#/workspace/') && route.includes('/m03/org-timeline')) return <OrgTimelinePage />
   // Module 3 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m03') && !route.includes('/m03/')) return <Module3Home />
   // Module 5 workspace home (no trailing slash)

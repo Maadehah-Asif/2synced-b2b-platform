@@ -48,6 +48,7 @@ export default function OrgTimelinePage() {
       setError("Workspace id missing in URL.");
       return;
     }
+    const activeWorkspaceId = workspaceId;
 
     async function loadOrgs() {
       setLoadingOrgs(true);
@@ -62,7 +63,7 @@ export default function OrgTimelinePage() {
         }
 
         const res = await fetch(
-          `${API_URL}/m03/orgs?workspaceId=${encodeURIComponent(workspaceId)}`,
+          `${API_URL}/m03/orgs?workspaceId=${encodeURIComponent(activeWorkspaceId)}`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -97,6 +98,8 @@ export default function OrgTimelinePage() {
       setTimeline(null);
       return;
     }
+    const activeWorkspaceId = workspaceId;
+    const activeOrgId = selectedOrgId;
 
     async function loadTimeline() {
       setLoadingTimeline(true);
@@ -111,7 +114,7 @@ export default function OrgTimelinePage() {
         }
 
         const res = await fetch(
-          `${API_URL}/m03/orgs/${encodeURIComponent(selectedOrgId)}/timeline?days=90&workspaceId=${encodeURIComponent(workspaceId)}`,
+          `${API_URL}/m03/orgs/${encodeURIComponent(activeOrgId)}/timeline?days=90&workspaceId=${encodeURIComponent(activeWorkspaceId)}`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -261,7 +264,7 @@ export default function OrgTimelinePage() {
                           <div key={dayKey} className="timeline-day">
                             <div className="timeline-day-label">{formatDayLabel(dayKey)}</div>
                             <div className="timeline-day-events">
-                              {dayEvents.map((event, idx) => (
+                              {dayEvents.map((event: TimelineEvent, idx: number) => (
                                 <div
                                   key={`${event.threadId}-${idx}`}
                                   className={getDotClass(event.channel, event.direction)}

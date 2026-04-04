@@ -13,6 +13,7 @@ import {
 import {
   createStage,
   previewStageUpload,
+  validateStageUpload,
   commitStageUpload,
   listStages,
   getStage,
@@ -29,6 +30,7 @@ router.get('/', (_req, res) => res.json({ ok: true, module: 'm07' }));
 // Stage history routes
 router.post('/stages', createStage);
 router.post('/stages/upload/preview', upload.single('file'), previewStageUpload);
+router.post('/stages/upload/validate', validateStageUpload);
 router.post('/stages/upload/commit', commitStageUpload);
 
 router.get('/stages', listStages);

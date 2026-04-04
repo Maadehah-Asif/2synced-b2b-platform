@@ -1,37 +1,92 @@
-import type { CampaignTouchImportSummary } from '../../../types/campaignTouch';
 import { getWorkspaceIdFromHash } from '../../../utils/workspace';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 export interface Deal {
   _id?: string;
-  deal_id?: string;
-  lead_id: number | string;
-  amount: number;
-  currency?: string;
+  deal_id: string;
+  lead_id: string;
+  project_id?: string;
+  revenue: number;
+  currency?: string | null;
   closed_won: boolean;
-  closed_at?: string;
-  stage?: string;
-  notes?: string;
-  status?: string; // active | archived
+  closed_at?: string | null;
 }
 
-export async function createDeal(payload: Partial<Deal> & { lead_id: string | number; amount: number; closed_won: boolean; closed_at?: string; }): Promise<{ id: string } | { error: string }>{
+export interface DealValidationIssue {
+  field: string;
+  message: string;
+}
+
+export interface DealValidationRow {
+  rowNumber: number;
+  original: Record<string, string>;
+  mapped: Record<string, unknown>;
+  action: 'insert' | 'update';
+  errors: DealValidationIssue[];
+  warnings: DealValidationIssue[];
+  valid: boolean;
+}
+
+export interface DealValidationResult {
+  ok: true;
+  header: string[];
+  mapping: Record<string, number | null>;
+  selectedRange: {
+    startRow: number;
+    endRow: number;
+    totalRows: number;
+    selectedRows: number;
+  };
+  summary: {
+    checkedRows: number;
+    validRows: number;
+    invalidRows: number;
+    warningRows: number;
+  };
+  rowResults: DealValidationRow[];
+}
+
+export interface DealImportSummary {
+  ok?: boolean;
+  processed?: number;
+  inserted?: number;
+  failed?: number;
+  duplicates?: number;
+  failedRows?: Array<{ row: number; error: string }>;
+  selected?: number;
+  skipped?: number;
+  warnings?: number;
+}
+
+export async function createDeal(payload: Partial<Deal> & { lead_id: string; deal_id: string; revenue: number; closed_won: boolean; closed_at?: string; }) {
   const projectId = getWorkspaceIdFromHash();
-  if(!projectId) return { error: 'workspace_required' } as any;
+  if(!projectId) throw new Error('workspace_required');
   const res = await fetch(`${API_URL}/m06/deals`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ ...payload, projectId }) });
-  const j = await res.json();
-  if(!res.ok) return { error: j.error || 'failed' } as any;
-  return j.deal || j;
+  const json = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(json?.error || 'deal_create_failed');
+  return json;
 }
 
-export async function importDealsCSV(payload: { csv: string; map: any; startRow?: number; endRow?: number; duplicatePolicy?: string; }): Promise<CampaignTouchImportSummary>{
+export async function validateDealsCSV(payload: { csv: string; map: Record<string, string | null>; startRow?: number; endRow?: number; duplicatePolicy?: 'skip' | 'allow'; }) {
   const projectId = getWorkspaceIdFromHash();
-  const body = { ...payload, projectId };
-  const res = await fetch(`${API_URL}/m06/deals/import/csv`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
-  return res.json();
+  if(!projectId) throw new Error('workspace_required');
+  const res = await fetch(`${API_URL}/m06/deals/import/validate`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ ...payload, projectId }) });
+  const json = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(json?.error || 'deal_validation_failed');
+  return json as DealValidationResult;
 }
 
-export async function listDeals(params: { leadId?: string; from?: string; to?: string; status?: string; minAmount?: number; maxAmount?: number; stage?: string; includeArchived?: boolean; }): Promise<Deal[]>{
+export async function importDealsCSV(payload: { csv: string; map: Record<string, string | null>; startRow?: number; endRow?: number; duplicatePolicy?: 'skip' | 'allow'; allowPartial?: boolean; }) {
+  const projectId = getWorkspaceIdFromHash();
+  if(!projectId) throw new Error('workspace_required');
+  const res = await fetch(`${API_URL}/m06/deals/import/csv`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ ...payload, projectId }) });
+  const json = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(json?.error || 'deal_import_failed');
+  return json as DealImportSummary;
+}
+
+export async function listDeals(params: { leadId?: string; from?: string; to?: string; status?: string; minAmount?: number; maxAmount?: number; includeArchived?: boolean; }): Promise<Deal[]>{
   const qs = new URLSearchParams();
   const projectId = getWorkspaceIdFromHash();
   if(projectId) qs.set('projectId', projectId);
@@ -41,32 +96,39 @@ export async function listDeals(params: { leadId?: string; from?: string; to?: s
   if(params.status) qs.set('status', params.status);
   if(params.minAmount!==undefined) qs.set('minAmount', String(params.minAmount));
   if(params.maxAmount!==undefined) qs.set('maxAmount', String(params.maxAmount));
-  if(params.stage) qs.set('stage', params.stage);
   if(params.includeArchived) qs.set('includeArchived','true');
   const res = await fetch(`${API_URL}/m06/deals?${qs.toString()}`);
-  return res.json();
+  const json = await res.json().catch(() => ([]));
+  if(!res.ok) throw new Error('deal_list_failed');
+  return json;
 }
 
 export async function updateDeal(id: string, payload: Partial<Deal>){
   const res = await fetch(`${API_URL}/m06/deals/${id}`, { method:'PUT', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
-  return res.json();
+  const json = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(json?.error || 'deal_update_failed');
+  return json;
 }
 
 export async function archiveDeal(id: string){
   const res = await fetch(`${API_URL}/m06/deals/${id}/archive`, { method:'POST' });
-  return res.json();
+  const json = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(json?.error || 'deal_archive_failed');
+  return json;
 }
 
 export async function deleteDealPermanent(id: string){
   const res = await fetch(`${API_URL}/m06/deals/${id}/permanent`, { method:'DELETE' });
-  return res.json();
+  const json = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(json?.error || 'deal_delete_failed');
+  return json;
 }
 
 export async function searchLeads(query: string){
   const projectId = getWorkspaceIdFromHash();
   const qs = new URLSearchParams({ projectId: projectId || '', q: query });
   const res = await fetch(`${API_URL}/m06/leads/search?${qs.toString()}`);
-  if(!res.ok) return { leads: [] } as any;
-  const j = await res.json();
-  return { leads: j.leads || [] } as any;
+  if(!res.ok) return { leads: [] };
+  const json = await res.json();
+  return { leads: json.leads || [] };
 }

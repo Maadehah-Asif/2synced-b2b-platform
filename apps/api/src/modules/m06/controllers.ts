@@ -4,7 +4,7 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import { Deal } from './models/Deal.js';
 import { Campaign } from './models/Campaign.js';
 import { CampaignTouch } from './models/CampaignTouch.js';
-import { importCampaignTouchesCSV } from './touchImportUtils.js';
+import { importCampaignTouchesCSV, validateCampaignTouchesCSV } from './touchImportUtils.js';
 import { AttributionRun } from './models/AttributionRun.js';
 import { AttributionResult } from './models/AttributionResult.js';
 import { CampaignSpend } from './models/CampaignSpend.js';
@@ -88,6 +88,10 @@ const TOUCH_STATUSES = new Set(['active', 'archived']);
 const DEAL_CURRENCIES = new Set(['USD', 'PKR', 'EUR']);
 const LEAD_IMPORT_FIELDS = ['lead_id', 'full_name', 'first_name', 'last_name', 'company', 'source', 'owner', 'industry', 'region', 'lead_score', 'intent_score', 'email', 'job_title', 'segment'] as const;
 const LEAD_REQUIRED_FIELDS = ['lead_id'] as const;
+const CAMPAIGN_IMPORT_FIELDS = ['campaign_id', 'name', 'channel', 'description', 'tags', 'start_date', 'end_date', 'status', 'spend'] as const;
+const CAMPAIGN_REQUIRED_FIELDS = ['campaign_id', 'name', 'channel', 'spend'] as const;
+const DEAL_IMPORT_FIELDS = ['deal_id', 'lead_id', 'revenue', 'currency', 'closed_won', 'closed_at'] as const;
+const DEAL_REQUIRED_FIELDS = ['deal_id', 'lead_id', 'revenue', 'closed_won'] as const;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
 function normalizeEnumValue(value: unknown, allowed: Set<string>, fallback: string | null = null): string | null {
@@ -138,6 +142,25 @@ function parseLeadCsvText(csv: string) {
   return { header, records };
 }
 
+function parseFlatCsvText(csv: string) {
+  const rows = parseCsv(csv, {
+    columns: false,
+    relax_column_count: true,
+    skip_empty_lines: false,
+    trim: true,
+  }) as string[][];
+
+  const normalizedRows = rows.map((row) => (Array.isArray(row) ? row.map((cell) => String(cell ?? '').trim()) : []));
+  const nonEmptyRows = normalizedRows.filter((row) => row.some((cell) => cell.length > 0));
+  if (nonEmptyRows.length < 2) {
+    throw new Error('csv_no_rows');
+  }
+
+  const header = (nonEmptyRows[0] || []).map((cell) => cell.trim());
+  const records = nonEmptyRows.slice(1);
+  return { header, records };
+}
+
 function buildLeadHeaderIndex(header: string[]) {
   const exact = new Map<string, number>();
   const normalized = new Map<string, number>();
@@ -147,6 +170,332 @@ function buildLeadHeaderIndex(header: string[]) {
     if (normalizedKey && !normalized.has(normalizedKey)) normalized.set(normalizedKey, index);
   });
   return { exact, normalized };
+}
+
+function buildCampaignPayload(input: Record<string, unknown>) {
+  const campaignId = requireStringId(input.campaign_id ?? input.campaignId);
+  const name = sanitizeStringValue(input.name);
+  const channel = normalizeEnumValue(input.channel, CAMPAIGN_CHANNELS);
+  const description = sanitizeStringValue(input.description);
+  const tagsValue = input.tags;
+  const tags = Array.isArray(tagsValue)
+    ? sanitizeStringArray(tagsValue)
+    : sanitizeStringValue(tagsValue)
+      ? String(tagsValue).split(/[|,]/).map((item) => item.trim()).filter(Boolean)
+      : [];
+  const startDateRaw = input.start_date ?? input.startDate ?? null;
+  const endDateRaw = input.end_date ?? input.endDate ?? null;
+  const startDate = parseDateInput(typeof startDateRaw === 'string' ? startDateRaw : sanitizeStringValue(startDateRaw));
+  const endDate = parseDateInput(typeof endDateRaw === 'string' ? endDateRaw : sanitizeStringValue(endDateRaw));
+  const statusProvided = input.status !== undefined;
+  const status = statusProvided ? normalizeEnumValue(input.status, CAMPAIGN_STATUSES) : 'active';
+  const spend = sanitizeNumberValue(input.spend);
+
+  return {
+    campaign_id: campaignId,
+    name,
+    channel,
+    description,
+    tags,
+    start_date: startDate ?? null,
+    end_date: endDate ?? null,
+    status,
+    spend,
+  };
+}
+
+function validateCampaignValueFields(input: Record<string, unknown>) {
+  const payload = buildCampaignPayload(input);
+  const errors: Array<{ field: string; message: string }> = [];
+  if (!payload.campaign_id) errors.push({ field: 'campaign_id', message: 'campaign_id is required' });
+  if (!payload.name) errors.push({ field: 'name', message: 'name is required' });
+  if (!payload.channel) errors.push({ field: 'channel', message: `channel must be one of ${Array.from(CAMPAIGN_CHANNELS).join(', ')}` });
+  if (payload.spend === null || payload.spend < 0) errors.push({ field: 'spend', message: 'spend must be a number greater than or equal to 0' });
+  if ((input.start_date !== undefined || input.startDate !== undefined) && !payload.start_date) errors.push({ field: 'start_date', message: 'start_date must be a valid date' });
+  if ((input.end_date !== undefined || input.endDate !== undefined) && !payload.end_date) errors.push({ field: 'end_date', message: 'end_date must be a valid date' });
+  if (input.status !== undefined && !payload.status) errors.push({ field: 'status', message: `status must be one of ${Array.from(CAMPAIGN_STATUSES).join(', ')}` });
+  if (payload.start_date && payload.end_date && payload.end_date.getTime() < payload.start_date.getTime()) {
+    errors.push({ field: 'end_date', message: 'end_date cannot be earlier than start_date' });
+  }
+  return { payload, errors };
+}
+
+function buildDealPayload(input: Record<string, unknown>) {
+  const dealId = requireStringId(input.deal_id ?? input.dealId);
+  const leadId = requireStringId(input.lead_id ?? input.leadId);
+  const revenue = sanitizeNumberValue(input.revenue ?? input.amount);
+  const currency = input.currency === undefined || input.currency === null || input.currency === ''
+    ? null
+    : normalizeCurrency(input.currency);
+  const closedWon = sanitizeBooleanValue(input.closed_won);
+  const closedAtRaw = input.closed_at;
+  const closedAt = closedAtRaw ? parseDateInput(String(closedAtRaw)) : null;
+
+  return {
+    deal_id: dealId,
+    lead_id: leadId,
+    revenue,
+    currency,
+    closed_won: closedWon,
+    closed_at: closedAt,
+  };
+}
+
+function validateDealValueFields(input: Record<string, unknown>) {
+  const payload = buildDealPayload(input);
+  const errors: Array<{ field: string; message: string }> = [];
+  if (!payload.deal_id) errors.push({ field: 'deal_id', message: 'deal_id is required' });
+  if (!payload.lead_id) errors.push({ field: 'lead_id', message: 'lead_id is required' });
+  if (payload.revenue === null || payload.revenue < 0) errors.push({ field: 'revenue', message: 'revenue must be a number greater than or equal to 0' });
+  if (payload.currency === null && input.currency !== undefined && input.currency !== null && input.currency !== '') {
+    errors.push({ field: 'currency', message: `currency must be one of ${Array.from(DEAL_CURRENCIES).join(', ')}` });
+  }
+  if (payload.closed_won === null) errors.push({ field: 'closed_won', message: 'closed_won is required and must be true or false' });
+  if (input.closed_at !== undefined && input.closed_at !== null && input.closed_at !== '' && !payload.closed_at) {
+    errors.push({ field: 'closed_at', message: 'closed_at must be a valid date' });
+  }
+  if (payload.closed_won === true) {
+    if (!payload.closed_at) errors.push({ field: 'closed_at', message: 'closed_at is required when closed_won is true' });
+    if ((payload.revenue || 0) <= 0) errors.push({ field: 'revenue', message: 'closed deals must have a non-zero revenue' });
+  }
+  return { payload, errors };
+}
+
+function resolveDealMappingIndexes(header: string[], map: Record<string, unknown> | null | undefined) {
+  const mapping = map && typeof map === 'object' ? map : {};
+  const headerIndex = buildLeadHeaderIndex(header);
+  const indexes: Record<string, number | null> = {};
+  for (const field of DEAL_IMPORT_FIELDS) {
+    const mapped = mapping[field] ?? (field === 'lead_id' ? mapping.lead : field === 'revenue' ? mapping.amount : undefined);
+    const exactKey = sanitizeStringValue(mapped);
+    if (exactKey && headerIndex.exact.has(exactKey)) {
+      indexes[field] = headerIndex.exact.get(exactKey) ?? null;
+      continue;
+    }
+    const normalizedKey = normalizeMappingHeader(mapped);
+    indexes[field] = normalizedKey && headerIndex.normalized.has(normalizedKey)
+      ? (headerIndex.normalized.get(normalizedKey) ?? null)
+      : null;
+  }
+  return indexes as Record<(typeof DEAL_IMPORT_FIELDS)[number], number | null>;
+}
+
+async function validateDealsCsvImport(options: {
+  projectId: string;
+  csv: string;
+  map?: Record<string, unknown> | null;
+  startRow?: number;
+  endRow?: number;
+  duplicatePolicy?: 'skip' | 'allow';
+}) {
+  const { projectId, csv, map } = options;
+  const { header, records } = parseFlatCsvText(csv);
+  const indexes = resolveDealMappingIndexes(header, map);
+  const missingMappings = DEAL_REQUIRED_FIELDS.filter((field) => indexes[field] === null);
+  if (missingMappings.length) return { ok: false, error: 'required_mapping_missing', header, missingMappings };
+
+  const requestedStart = options.startRow === undefined ? 1 : Number(options.startRow);
+  const requestedEnd = options.endRow === undefined ? records.length : Number(options.endRow);
+  if (!Number.isInteger(requestedStart) || !Number.isInteger(requestedEnd) || requestedStart < 1 || requestedEnd < requestedStart || requestedEnd > records.length) {
+    return { ok: false, error: 'invalid_row_range', header, totalRows: records.length };
+  }
+
+  const selectedRows = records.slice(requestedStart - 1, requestedEnd);
+  const candidateDealIds = new Set<string>();
+  const duplicateSelection = new Map<string, number[]>();
+  const candidateLeadIds = new Set<string>();
+  selectedRows.forEach((row, index) => {
+    const rowNumber = requestedStart + index;
+    const dealValue = indexes.deal_id === null ? null : sanitizeStringValue(row[indexes.deal_id] ?? '');
+    const leadValue = indexes.lead_id === null ? null : sanitizeStringValue(row[indexes.lead_id] ?? '');
+    if (dealValue) {
+      candidateDealIds.add(dealValue);
+      const key = dealValue.toLowerCase();
+      const rowsForKey = duplicateSelection.get(key) || [];
+      rowsForKey.push(rowNumber);
+      duplicateSelection.set(key, rowsForKey);
+    }
+    if (leadValue) candidateLeadIds.add(leadValue);
+  });
+
+  const existingDeals = await Deal.find({ project_id: projectId, deal_id: { $in: Array.from(candidateDealIds) } }).select('deal_id').lean();
+  const existingDealIds = new Set(existingDeals.map((deal) => String(deal.deal_id).toLowerCase()));
+  const existingLeads = await Module6Lead.find({ project_id: projectId, lead_id: { $in: Array.from(candidateLeadIds) } }).select('lead_id').lean();
+  const existingLeadIds = new Set(existingLeads.map((lead) => String(lead.lead_id).toLowerCase()));
+
+  const rowResults = selectedRows.map((row, index) => {
+    const rowNumber = requestedStart + index;
+    const original = Object.fromEntries(header.map((column, columnIndex) => [column, row[columnIndex] ?? '']));
+    const validation = validateDealValueFields({
+      deal_id: indexes.deal_id !== null ? row[indexes.deal_id] : null,
+      lead_id: indexes.lead_id !== null ? row[indexes.lead_id] : null,
+      revenue: indexes.revenue !== null ? row[indexes.revenue] : null,
+      currency: indexes.currency !== null ? row[indexes.currency] : null,
+      closed_won: indexes.closed_won !== null ? row[indexes.closed_won] : null,
+      closed_at: indexes.closed_at !== null ? row[indexes.closed_at] : null,
+    });
+    const errors = [...validation.errors];
+    const warnings: Array<{ field: string; message: string }> = [];
+    const dealKey = validation.payload.deal_id?.toLowerCase() || null;
+    const leadKey = validation.payload.lead_id?.toLowerCase() || null;
+    if (dealKey && (duplicateSelection.get(dealKey)?.length || 0) > 1) {
+      errors.push({ field: 'deal_id', message: 'deal_id appears multiple times in this upload selection' });
+    }
+    if (leadKey && !existingLeadIds.has(leadKey)) {
+      errors.push({ field: 'lead_id', message: 'lead_id does not exist' });
+    }
+    const action = dealKey && existingDealIds.has(dealKey) ? 'update' : 'insert';
+    if (action === 'update' && options.duplicatePolicy === 'skip') {
+      warnings.push({ field: 'deal_id', message: `deal_id ${validation.payload.deal_id} already exists and will be skipped on import` });
+    } else if (action === 'update') {
+      errors.push({ field: 'deal_id', message: 'deal_id already exists' });
+    }
+    return {
+      rowNumber,
+      original,
+      mapped: validation.payload,
+      action,
+      errors,
+      warnings,
+      valid: errors.length === 0,
+    };
+  });
+
+  const invalidRows = rowResults.filter((row) => !row.valid);
+  const validRows = rowResults.filter((row) => row.valid);
+  const warningRows = rowResults.filter((row) => row.warnings.length > 0).length;
+  return {
+    ok: true,
+    header,
+    mapping: indexes,
+    selectedRange: { startRow: requestedStart, endRow: requestedEnd, totalRows: records.length, selectedRows: selectedRows.length },
+    summary: { checkedRows: rowResults.length, validRows: validRows.length, invalidRows: invalidRows.length, warningRows },
+    rowResults,
+    validRows,
+    invalidRows,
+  };
+}
+
+function resolveCampaignMappingIndexes(header: string[], map: Record<string, unknown> | null | undefined) {
+  const mapping = map && typeof map === 'object' ? map : {};
+  const headerIndex = buildLeadHeaderIndex(header);
+  const indexes: Record<string, number | null> = {};
+
+  for (const field of CAMPAIGN_IMPORT_FIELDS) {
+    const mapped = mapping[field];
+    const exactKey = sanitizeStringValue(mapped);
+    if (exactKey && headerIndex.exact.has(exactKey)) {
+      indexes[field] = headerIndex.exact.get(exactKey) ?? null;
+      continue;
+    }
+    const normalizedKey = normalizeMappingHeader(mapped);
+    indexes[field] = normalizedKey && headerIndex.normalized.has(normalizedKey)
+      ? (headerIndex.normalized.get(normalizedKey) ?? null)
+      : null;
+  }
+
+  return indexes as Record<(typeof CAMPAIGN_IMPORT_FIELDS)[number], number | null>;
+}
+
+async function validateCampaignsCsvImport(options: {
+  projectId: string;
+  csv: string;
+  map?: Record<string, unknown> | null;
+  startRow?: number;
+  endRow?: number;
+}) {
+  const { projectId, csv, map } = options;
+  const { header, records } = parseFlatCsvText(csv);
+  const indexes = resolveCampaignMappingIndexes(header, map);
+  const missingMappings = CAMPAIGN_REQUIRED_FIELDS.filter((field) => indexes[field] === null);
+  if (missingMappings.length) {
+    return { ok: false, error: 'required_mapping_missing', header, missingMappings };
+  }
+
+  const requestedStart = options.startRow === undefined ? 1 : Number(options.startRow);
+  const requestedEnd = options.endRow === undefined ? records.length : Number(options.endRow);
+  if (!Number.isInteger(requestedStart) || !Number.isInteger(requestedEnd) || requestedStart < 1 || requestedEnd < requestedStart || requestedEnd > records.length) {
+    return { ok: false, error: 'invalid_row_range', header, totalRows: records.length };
+  }
+
+  const selectedRows = records.slice(requestedStart - 1, requestedEnd);
+  const candidateIds = new Set<string>();
+  const selectedIds = new Map<string, number[]>();
+  selectedRows.forEach((row, index) => {
+    const rowNumber = requestedStart + index;
+    const value = indexes.campaign_id === null ? null : sanitizeStringValue(row[indexes.campaign_id] ?? '');
+    if (!value) return;
+    const key = value.toLowerCase();
+    const matches = selectedIds.get(key) || [];
+    matches.push(rowNumber);
+    selectedIds.set(key, matches);
+    candidateIds.add(value);
+  });
+
+  const existingCampaigns = await Campaign.find({ project_id: projectId, campaign_id: { $in: Array.from(candidateIds) } }).select('campaign_id').lean();
+  const existingIds = new Set(existingCampaigns.map((campaign) => String(campaign.campaign_id).toLowerCase()));
+
+  const rowResults = selectedRows.map((row, index) => {
+    const rowNumber = requestedStart + index;
+    const original = Object.fromEntries(header.map((column, columnIndex) => [column, row[columnIndex] ?? '']));
+    const input = {
+      campaign_id: indexes.campaign_id !== null ? row[indexes.campaign_id] : null,
+      name: indexes.name !== null ? row[indexes.name] : null,
+      channel: indexes.channel !== null ? row[indexes.channel] : null,
+      description: indexes.description !== null ? row[indexes.description] : null,
+      tags: indexes.tags !== null ? row[indexes.tags] : null,
+      start_date: indexes.start_date !== null ? row[indexes.start_date] : null,
+      end_date: indexes.end_date !== null ? row[indexes.end_date] : null,
+      status: indexes.status !== null ? row[indexes.status] : null,
+      spend: indexes.spend !== null ? row[indexes.spend] : null,
+    };
+    const validation = validateCampaignValueFields(input);
+    const errors = [...validation.errors];
+    const warnings: Array<{ field: string; message: string }> = [];
+    const campaignKey = validation.payload.campaign_id?.toLowerCase() || null;
+    if (campaignKey && (selectedIds.get(campaignKey)?.length || 0) > 1) {
+      errors.push({ field: 'campaign_id', message: 'campaign_id appears multiple times in this upload selection' });
+    }
+    const action = campaignKey && existingIds.has(campaignKey) ? 'update' : 'insert';
+    if (action === 'update' && validation.payload.campaign_id) {
+      warnings.push({ field: 'campaign_id', message: `campaign_id ${validation.payload.campaign_id} already exists and will be updated` });
+    }
+
+    return {
+      rowNumber,
+      original,
+      mapped: validation.payload,
+      action,
+      errors,
+      warnings,
+      valid: errors.length === 0,
+    };
+  });
+
+  const invalidRows = rowResults.filter((row) => !row.valid);
+  const warningRows = rowResults.filter((row) => row.warnings.length > 0).length;
+  const validRows = rowResults.filter((row) => row.valid);
+
+  return {
+    ok: true,
+    header,
+    mapping: indexes,
+    selectedRange: {
+      startRow: requestedStart,
+      endRow: requestedEnd,
+      totalRows: records.length,
+      selectedRows: selectedRows.length,
+    },
+    summary: {
+      checkedRows: rowResults.length,
+      validRows: validRows.length,
+      invalidRows: invalidRows.length,
+      warningRows,
+    },
+    rowResults,
+    validRows,
+    invalidRows,
+  };
 }
 
 function resolveLeadMappingIndexes(header: string[], map: Record<string, unknown> | null | undefined) {
@@ -1214,13 +1563,32 @@ export async function importCampaignTouches(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     if (!projectId) return res.status(400).json({ error: 'projectId_required' });
-    const { csv, map, startRow, endRow, campaignIdentifier, duplicatePolicy } = req.body || {};
+    const { csv, map, startRow, endRow, campaignIdentifier, duplicatePolicy, allowPartial, leadIdentifier } = req.body || {};
     if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
     if (!map || typeof map !== 'object') return res.status(400).json({ error: 'mapping_required' });
-    const summary = await importCampaignTouchesCSV({ projectId, csv, map, startRow, endRow, campaignIdentifier, duplicatePolicy });
+    const validation = await validateCampaignTouchesCSV({ projectId, csv, map, startRow, endRow, campaignIdentifier, duplicatePolicy, leadIdentifier });
+    if (validation.summary.invalidRows > 0 && !allowPartial) {
+      return res.status(400).json({ error: 'invalid_rows_present', validation });
+    }
+    const summary = await importCampaignTouchesCSV({ projectId, csv, map, startRow, endRow, campaignIdentifier, duplicatePolicy, leadIdentifier });
     return res.json({ ok: true, ...summary });
   } catch (e) {
     console.error('[m06/importCampaignTouches]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+export async function validateCampaignTouchesImport(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+    const { csv, map, startRow, endRow, campaignIdentifier, duplicatePolicy, leadIdentifier } = req.body || {};
+    if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
+    if (!map || typeof map !== 'object') return res.status(400).json({ error: 'mapping_required' });
+    const validation = await validateCampaignTouchesCSV({ projectId, csv, map, startRow, endRow, campaignIdentifier, duplicatePolicy, leadIdentifier });
+    return res.json(validation);
+  } catch (e) {
+    console.error('[m06/validateCampaignTouchesImport]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -1272,35 +1640,23 @@ export async function createCampaign(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     if (!projectId) return res.status(400).json({ error: 'projectId_required' });
-    const { campaign_id, campaignId, name, channel, start_date, startDate, end_date, endDate, description, tags, spend, status } = req.body || {};
-    const campaignKey = requireStringId(campaign_id ?? campaignId);
-    const campaignName = sanitizeStringValue(name);
-    const normalizedChannel = normalizeEnumValue(channel, CAMPAIGN_CHANNELS);
-    const normalizedStatus = status === undefined ? 'active' : normalizeEnumValue(status, CAMPAIGN_STATUSES);
-    const spendValue = sanitizeNumberValue(spend);
-    const parsedStart = parseDateInput(start_date ?? startDate ?? null);
-    const parsedEnd = parseDateInput(end_date ?? endDate ?? null);
-    if (!campaignKey) return res.status(400).json({ error: 'campaign_id_required' });
-    if (!campaignName) return res.status(400).json({ error: 'name_required' });
-    if (!normalizedChannel) return res.status(400).json({ error: 'invalid_channel', allowed: Array.from(CAMPAIGN_CHANNELS) });
-    if (status !== undefined && normalizedStatus === null) return res.status(400).json({ error: 'invalid_status', allowed: Array.from(CAMPAIGN_STATUSES) });
-    if (spendValue === null || spendValue < 0) return res.status(400).json({ error: 'invalid_spend' });
-    if ((start_date ?? startDate) && !parsedStart) return res.status(400).json({ error: 'invalid_start_date' });
-    if ((end_date ?? endDate) && !parsedEnd) return res.status(400).json({ error: 'invalid_end_date' });
-    if (parsedStart && parsedEnd && parsedEnd.getTime() < parsedStart.getTime()) return res.status(400).json({ error: 'invalid_date_range' });
-    const dup = await Campaign.findOne({ project_id: projectId, campaign_id: campaignKey }).select('_id').lean();
+    const validation = validateCampaignValueFields(req.body || {});
+    if (validation.errors.length > 0) return res.status(400).json({ error: 'validation_failed', fieldErrors: validation.errors });
+    const payload = validation.payload;
+    if (!payload.campaign_id) return res.status(400).json({ error: 'campaign_id_required' });
+    const dup = await Campaign.findOne({ project_id: projectId, campaign_id: payload.campaign_id }).select('_id').lean();
     if (dup) return res.status(409).json({ error: 'duplicate_campaign_id' });
     const campaign = await Campaign.create({
-      campaign_id: campaignKey,
+      campaign_id: payload.campaign_id,
       project_id: projectId,
-      channel: normalizedChannel,
-      name: campaignName,
-      description: sanitizeStringValue(description),
-      tags: sanitizeStringArray(tags),
-      start_date: parsedStart ?? null,
-      end_date: parsedEnd ?? null,
-      status: (normalizedStatus || 'active') as any,
-      spend: spendValue,
+      channel: payload.channel,
+      name: payload.name,
+      description: payload.description,
+      tags: payload.tags,
+      start_date: payload.start_date,
+      end_date: payload.end_date,
+      status: (payload.status || 'active') as any,
+      spend: payload.spend,
     });
     return res.status(201).json({ ok: true, campaign: { id: String(campaign._id), name: campaign.name } });
   } catch (e) {
@@ -1313,7 +1669,7 @@ export async function updateCampaign(req: Request, res: Response) {
   try {
     const id = req.params.id;
     if (!mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'invalid id' });
-    const { campaign_id, campaignId, name, channel, start_date, startDate, end_date, endDate, description, tags, status, spend } = req.body || {};
+    const { campaign_id, campaignId } = req.body || {};
     const camp = await Campaign.findById(id).exec();
     if (!camp) return res.status(404).json({ error: 'not_found' });
     const nextCampaignId = requireStringId(campaign_id ?? campaignId);
@@ -1322,39 +1678,9 @@ export async function updateCampaign(req: Request, res: Response) {
       if (dup) return res.status(409).json({ error: 'duplicate_campaign_id' });
       camp.campaign_id = nextCampaignId;
     }
-    if (name !== undefined) {
-      const campaignName = sanitizeStringValue(name);
-      if (!campaignName) return res.status(400).json({ error: 'name_required' });
-      camp.name = campaignName;
-    }
-    if (channel !== undefined) {
-      const normalizedChannel = normalizeEnumValue(channel, CAMPAIGN_CHANNELS);
-      if (!normalizedChannel) return res.status(400).json({ error: 'invalid_channel', allowed: Array.from(CAMPAIGN_CHANNELS) });
-      camp.channel = normalizedChannel as any;
-    }
-    if (description !== undefined) camp.description = sanitizeStringValue(description);
-    if (tags !== undefined) camp.tags = sanitizeStringArray(tags);
-    if (start_date !== undefined || startDate !== undefined) {
-      const parsedStart = parseDateInput(start_date ?? startDate ?? null);
-      if ((start_date ?? startDate) && !parsedStart) return res.status(400).json({ error: 'invalid_start_date' });
-      camp.start_date = parsedStart ?? null;
-    }
-    if (end_date !== undefined || endDate !== undefined) {
-      const parsedEnd = parseDateInput(end_date ?? endDate ?? null);
-      if ((end_date ?? endDate) && !parsedEnd) return res.status(400).json({ error: 'invalid_end_date' });
-      camp.end_date = parsedEnd ?? null;
-    }
-    if (camp.start_date && camp.end_date && camp.end_date.getTime() < camp.start_date.getTime()) return res.status(400).json({ error: 'invalid_date_range' });
-    if (spend !== undefined) {
-      const spendValue = sanitizeNumberValue(spend);
-      if (spendValue === null || spendValue < 0) return res.status(400).json({ error: 'invalid_spend' });
-      camp.spend = spendValue;
-    }
-    if (status !== undefined) {
-      const normalizedStatus = normalizeEnumValue(status, CAMPAIGN_STATUSES);
-      if (!normalizedStatus) return res.status(400).json({ error: 'invalid_status', allowed: Array.from(CAMPAIGN_STATUSES) });
-      camp.status = normalizedStatus as any;
-    }
+    const validation = validateCampaignValueFields({ ...camp.toObject(), ...req.body, campaign_id: nextCampaignId || camp.campaign_id });
+    if (validation.errors.length > 0) return res.status(400).json({ error: 'validation_failed', fieldErrors: validation.errors });
+    Object.assign(camp, validation.payload);
     await camp.save();
     return res.json({ ok: true });
   } catch (e) {
@@ -1844,105 +2170,115 @@ export async function searchModule6Leads(req: Request, res: Response) {
 }
 
 // Bulk CSV import for campaigns: maps headers and creates campaigns
+export async function validateCampaignsCSV(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+    const { csv, map, startRow, endRow } = req.body || {};
+    if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
+    const validation = await validateCampaignsCsvImport({
+      projectId,
+      csv,
+      map: map && typeof map === 'object' ? map : undefined,
+      startRow,
+      endRow,
+    });
+    if (!validation.ok) return res.status(400).json(validation);
+    return res.json({
+      ok: true,
+      header: validation.header,
+      mapping: validation.mapping,
+      selectedRange: validation.selectedRange,
+      summary: validation.summary,
+      rowResults: validation.rowResults,
+    });
+  } catch (e) {
+    console.error('[m06/validateCampaignsCSV]', e);
+    if (e instanceof Error && e.message === 'csv_no_rows') {
+      return res.status(400).json({ error: 'csv_no_rows' });
+    }
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
 export async function importCampaignsCSV(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     if (!projectId) return res.status(400).json({ error: 'projectId_required' });
-    const { csv, map } = req.body || {};
+    const { csv, map, startRow, endRow, allowPartial } = req.body || {};
     if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
-    if (!map || typeof map !== 'object') return res.status(400).json({ error: 'mapping_required' });
-
-    const lines = csv.split(/\r?\n/).filter(l => l.trim().length > 0);
-    if (lines.length < 2) return res.status(400).json({ error: 'csv_no_rows' });
-    const header = (lines[0] || '').split(',').map(h => h.trim());
-
-    function idx(name: string | null | undefined, fallback: number | null = null) {
-      if (!name) return fallback;
-      const i = header.indexOf(String(name));
-      return i >= 0 ? i : fallback;
+    const validation = await validateCampaignsCsvImport({
+      projectId,
+      csv,
+      map: map && typeof map === 'object' ? map : undefined,
+      startRow,
+      endRow,
+    });
+    if (!validation.ok || !validation.summary || !validation.selectedRange || !validation.validRows || !validation.invalidRows) {
+      return res.status(400).json(validation);
+    }
+    const importValidation = validation as typeof validation & {
+      summary: NonNullable<typeof validation.summary>;
+      selectedRange: NonNullable<typeof validation.selectedRange>;
+      validRows: NonNullable<typeof validation.validRows>;
+      invalidRows: NonNullable<typeof validation.invalidRows>;
+    };
+    if (importValidation.summary.invalidRows > 0 && !allowPartial) {
+      return res.status(400).json({ error: 'invalid_rows_present', validation: {
+        header: importValidation.header,
+        mapping: importValidation.mapping,
+        selectedRange: importValidation.selectedRange,
+        summary: importValidation.summary,
+        rowResults: importValidation.rowResults,
+      } });
     }
 
-    const nameIdx = idx(map.name, null);
-    const channelIdx = idx(map.channel, null);
-    const startIdx = idx(map.start_date, null);
-    const endIdx = idx(map.end_date, null);
-    const descIdx = idx(map.description, null);
-    const spendIdx = idx(map.spend, null);
-    const campaignIdIdx = idx(map.campaign_id, null);
-    const statusIdx = idx(map.status, null);
-    const tagsIdx = idx(map.tags, null);
+    let processed = 0;
+    let created = 0;
+    let updated = 0;
+    let failed = importValidation.summary.invalidRows;
+    const errors: Array<{ row: number, reason: string }> = importValidation.invalidRows.map((row) => ({
+      row: row.rowNumber,
+      reason: row.errors.map((error) => error.message).join('; '),
+    }));
 
-    if (nameIdx === null || channelIdx === null) {
-      return res.status(400).json({ error: 'required_mapping_missing', required: ['name', 'channel'], header });
+    for (const row of importValidation.validRows) {
+      processed++;
+      try {
+        const existing = await Campaign.findOne({ project_id: projectId, campaign_id: row.mapped.campaign_id }).exec();
+        if (existing) {
+          Object.assign(existing, row.mapped);
+          await existing.save();
+          updated++;
+          continue;
+        }
+        await Campaign.create({
+          ...row.mapped,
+          project_id: projectId,
+        });
+        created++;
+      } catch (err: any) {
+        failed++;
+        errors.push({ row: row.rowNumber, reason: err.code === 11000 ? 'duplicate_campaign_id' : (err.message || 'insert_failed') });
+      }
     }
 
-    const startRow = Number(req.body.startRow || 1);
-    const endRow = req.body.endRow ? Number(req.body.endRow) : (lines.length - 1);
-    if (startRow < 1 || endRow < startRow) return res.status(400).json({ error: 'invalid_row_range' });
-
-    const allowedChannels = new Set(['email','ads','linkedin','webinar','other']);
-    let created = 0, skipped = 0;
-    const errors: Array<{ row: number, reason: string }> = [];
-
-    for (let i = startRow; i <= endRow; i++) {
-      const rowNum = i + 1; // account for header
-      const cols = (lines[i] || '').split(',').map(c => c.trim());
-      const name = cols[nameIdx] || '';
-      const channel = (cols[channelIdx] || '').toLowerCase();
-      const start = startIdx !== null ? cols[startIdx] : '';
-      const end = endIdx !== null ? cols[endIdx] : '';
-      const desc = descIdx !== null ? cols[descIdx] : '';
-      const spendRaw = spendIdx !== null ? cols[spendIdx] : '';
-      const campaignIdentifier = campaignIdIdx !== null ? (cols[campaignIdIdx] || '').trim() : '';
-
-      if (!name) { skipped++; errors.push({ row: rowNum, reason: 'name_missing' }); continue; }
-      const finalChannel = allowedChannels.has(channel) ? channel : 'other';
-
-      // Duplicate name: optionally skip (soft rule)
-      const dup = await Campaign.findOne({ project_id: projectId, name }).lean();
-      if (dup) { skipped++; errors.push({ row: rowNum, reason: 'duplicate_name' }); continue; }
-
-      if (campaignIdentifier) {
-        const dupId = await Campaign.findOne({ project_id: projectId, campaign_id: campaignIdentifier }).lean();
-        if (dupId) { skipped++; errors.push({ row: rowNum, reason: 'duplicate_campaign_id' }); continue; }
-      }
-
-      let startDate: Date | undefined = undefined;
-      let endDate: Date | undefined = undefined;
-      if (start) {
-        const sd = new Date(start);
-        if (!isNaN(sd.getTime())) startDate = sd; else errors.push({ row: rowNum, reason: 'invalid_start_date' });
-      }
-      if (end) {
-        const ed = new Date(end);
-        if (!isNaN(ed.getTime())) endDate = ed; else errors.push({ row: rowNum, reason: 'invalid_end_date' });
-      }
-      const spend = spendRaw ? Number(String(spendRaw).replace(/[^0-9.-]/g, '')) : 0;
-      if (!Number.isFinite(spend) || spend < 0) { skipped++; errors.push({ row: rowNum, reason: 'invalid_spend' }); continue; }
-      const statusValue = statusIdx !== null ? normalizeEnumValue(cols[statusIdx], CAMPAIGN_STATUSES, 'active') : 'active';
-      if (statusIdx !== null && !statusValue) { skipped++; errors.push({ row: rowNum, reason: 'invalid_status' }); continue; }
-      const tagValues = tagsIdx !== null ? String(cols[tagsIdx] || '').split('|').map(s => s.trim()).filter(Boolean) : [];
-
-      const assignedCampaignId = campaignIdentifier || `camp-${Date.now()}-${Math.floor(Math.random()*1000)}`;
-
-      await Campaign.create({
-        campaign_id: assignedCampaignId,
-        project_id: projectId,
-        name,
-        channel: finalChannel as any,
-        start_date: startDate,
-        end_date: endDate,
-        description: desc || undefined,
-        tags: tagValues,
-        spend: spend || 0,
-        status: statusValue as any,
-      });
-      created++;
-    }
-
-    return res.json({ ok: true, created, skipped, errors, selected: (endRow - startRow + 1) });
+    return res.json({
+      ok: true,
+      processed,
+      created,
+      updated,
+      skipped: importValidation.summary.invalidRows,
+      failed,
+      warnings: importValidation.summary.warningRows,
+      errors,
+      selected: importValidation.selectedRange.selectedRows,
+    });
   } catch (e) {
     console.error('[m06/importCampaignsCSV]', e);
+    if (e instanceof Error && e.message === 'csv_no_rows') {
+      return res.status(400).json({ error: 'csv_no_rows' });
+    }
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -1968,39 +2304,24 @@ export async function createDeal(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     if (!projectId) return res.status(400).json({ error: 'projectId_required' });
-    const { deal_id, lead_id, revenue, amount, currency, closed_won, closed_at } = req.body || {};
-    const dealKey = requireStringId(deal_id);
-    const leadKey = requireStringId(lead_id);
-    if (!dealKey) return res.status(400).json({ error: 'deal_id_required' });
-    if (!leadKey) return res.status(400).json({ error: 'lead_id_required' });
-    const lead = await Module6Lead.findOne({ project_id: projectId, lead_id: leadKey }).select('_id').lean();
+    const validation = validateDealValueFields(req.body || {});
+    if (validation.errors.length > 0) return res.status(400).json({ error: 'validation_failed', fieldErrors: validation.errors });
+    const payload = validation.payload;
+    if (!payload.deal_id) return res.status(400).json({ error: 'deal_id_required' });
+    if (!payload.lead_id) return res.status(400).json({ error: 'lead_id_required' });
+    const lead = await Module6Lead.findOne({ project_id: projectId, lead_id: payload.lead_id }).select('_id').lean();
     if (!lead) return res.status(400).json({ error: 'lead_not_found' });
-    const revenueNum = sanitizeNumberValue(revenue ?? amount);
-    if (revenueNum === null || revenueNum < 0) return res.status(400).json({ error: 'revenue_invalid' });
-    const currencyValue = currency === undefined ? null : normalizeCurrency(currency);
-    if (currency !== undefined && currencyValue === null) return res.status(400).json({ error: 'invalid_currency', allowed: Array.from(DEAL_CURRENCIES) });
-    const cw = sanitizeBooleanValue(closed_won);
-    if (cw === null) return res.status(400).json({ error: 'closed_won_required' });
-    let closedAt: Date | undefined = undefined;
-    if (cw) {
-      if (!closed_at) return res.status(400).json({ error: 'closed_at_required' });
-      const dt = new Date(closed_at);
-      if (isNaN(dt.getTime())) return res.status(400).json({ error: 'closed_at_invalid' });
-      closedAt = dt;
-    }
-    const dup = await Deal.findOne({ project_id: projectId, deal_id: dealKey }).lean();
+    const dup = await Deal.findOne({ project_id: projectId, deal_id: payload.deal_id }).lean();
     if (dup) return res.status(409).json({ error: 'duplicate_deal_id' });
-    // closed deals must have a non-zero amount
-    if (cw && (!revenueNum || revenueNum <= 0)) return res.status(400).json({ error: 'closed_deal_amount_required', message: 'Closed deals must have a non-zero amount' });
 
     const doc = await Deal.create({
-      deal_id: dealKey,
-      lead_id: leadKey,
+      deal_id: payload.deal_id,
+      lead_id: payload.lead_id,
       project_id: projectId,
-      revenue: revenueNum,
-      currency: currencyValue,
-      closed_won: cw,
-      closed_at: closedAt,
+      revenue: payload.revenue,
+      currency: payload.currency,
+      closed_won: payload.closed_won,
+      closed_at: payload.closed_at,
     });
     return res.status(201).json({ ok: true, deal: { id: String(doc._id) } });
   } catch (e) {
@@ -2060,7 +2381,7 @@ export async function updateDeal(req: Request, res: Response) {
     if (!mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'invalid_id' });
     const d = await Deal.findById(id).exec();
     if (!d) return res.status(404).json({ error: 'not_found' });
-    const { deal_id, lead_id, revenue, amount, currency, closed_won, closed_at } = req.body || {};
+    const { deal_id, lead_id } = req.body || {};
     if (deal_id !== undefined) {
       const nextDealId = requireStringId(deal_id);
       if (!nextDealId) return res.status(400).json({ error: 'deal_id_required' });
@@ -2077,39 +2398,9 @@ export async function updateDeal(req: Request, res: Response) {
       if (!lead) return res.status(400).json({ error: 'lead_not_found' });
       d.lead_id = leadKey;
     }
-    if (revenue !== undefined || amount !== undefined) {
-      const value = sanitizeNumberValue(revenue ?? amount);
-      if (value === null || value < 0) return res.status(400).json({ error: 'revenue_invalid' });
-      d.revenue = value as any;
-    }
-    if (currency !== undefined) {
-      const currencyValue = normalizeCurrency(currency);
-      if (currencyValue === null) return res.status(400).json({ error: 'invalid_currency', allowed: Array.from(DEAL_CURRENCIES) });
-      (d as any).currency = currencyValue;
-    }
-    if (closed_won !== undefined) {
-      const cw = sanitizeBooleanValue(closed_won);
-      if (cw === null) return res.status(400).json({ error: 'closed_won_required' });
-      d.closed_won = cw;
-    }
-    if (closed_at !== undefined) {
-      if (closed_at) {
-        const dt = new Date(closed_at);
-        if (isNaN(dt.getTime())) return res.status(400).json({ error: 'closed_at_invalid' });
-        d.closed_at = dt;
-      } else {
-        d.closed_at = null;
-      }
-    }
-    // enforce closed deals have non-zero amount
-    try {
-      const revNum = Number(d.revenue || 0);
-      if (d.closed_won && (!revNum || revNum <= 0)) {
-        return res.status(400).json({ error: 'closed_deal_amount_required', message: 'Closed deals must have a non-zero amount' });
-      }
-    } catch (err) {
-      return res.status(400).json({ error: 'amount_invalid' });
-    }
+    const validation = validateDealValueFields({ ...d.toObject(), ...req.body });
+    if (validation.errors.length > 0) return res.status(400).json({ error: 'validation_failed', fieldErrors: validation.errors });
+    Object.assign(d, validation.payload);
 
     await d.save();
     return res.json({ ok: true });
@@ -2157,115 +2448,86 @@ export async function importDealsCSV(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     if (!projectId) return res.status(400).json({ error: 'projectId_required' });
-    const { csv, map, startRow, endRow, duplicatePolicy } = req.body || {};
+    const { csv, map, startRow, endRow, duplicatePolicy, allowPartial } = req.body || {};
     if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
     if (!map || typeof map !== 'object') return res.status(400).json({ error: 'mapping_required' });
-    const lines = csv.split(/\r?\n/).filter(l => l.trim().length > 0);
-    if (lines.length < 2) return res.status(400).json({ error: 'csv_no_rows' });
-    const header = (lines[0] || '').split(',').map(h => h.trim());
-
-    function idx(name: string | null | undefined, fallback: number | null = null) {
-      if (!name) return fallback;
-      const i = header.indexOf(String(name));
-      return i >= 0 ? i : fallback;
+    const validation = await validateDealsCsvImport({ projectId, csv, map, startRow, endRow, duplicatePolicy });
+    if (!validation.ok || !validation.summary || !validation.selectedRange || !validation.validRows || !validation.invalidRows) {
+      return res.status(400).json(validation);
     }
-    function findByAliases(aliases: string[]): number | null {
-      for (const a of aliases) {
-        const i = header.findIndex(h => h.trim().toLowerCase() === a.toLowerCase());
-        if (i >= 0) return i;
-      }
-      // loose regex match
-      for (const a of aliases) {
-        const re = new RegExp(a.replace(/[^a-z0-9]/gi, '').replace(/\s+/g,'').toLowerCase(), 'i');
-        const i = header.findIndex(h => h.replace(/[^a-z0-9]/gi,'').toLowerCase().includes(re.source));
-        if (i >= 0) return i;
-      }
-      return null;
+    const importValidation = validation as typeof validation & {
+      summary: NonNullable<typeof validation.summary>;
+      selectedRange: NonNullable<typeof validation.selectedRange>;
+      validRows: NonNullable<typeof validation.validRows>;
+      invalidRows: NonNullable<typeof validation.invalidRows>;
+    };
+    if (importValidation.summary.invalidRows > 0 && !allowPartial) {
+      return res.status(400).json({ error: 'invalid_rows_present', validation: importValidation });
     }
 
-    const dealIdIdx = idx(map.deal_id, null) ?? findByAliases(['deal_id','id','external_id']);
-    const leadIdx = idx(map.lead, null) ?? idx(map.lead_id, null) ?? findByAliases(['lead','lead_id','email','lead_email']);
-    const amountIdx = idx(map.amount, null) ?? idx(map.revenue, null) ?? findByAliases(['amount','value','revenue']);
-    const currencyIdx = idx(map.currency, null) ?? findByAliases(['currency','curr']);
-    const wonIdx = idx(map.closed_won, null) ?? findByAliases(['closed_won','won','is_won','status']);
-    const closedAtIdx = idx(map.closed_at, null) ?? findByAliases(['closed_at','closed','close_date']);
+    let processed = 0;
+    let inserted = 0;
+    let failed = importValidation.summary.invalidRows;
+    let duplicates = 0;
+    const failedRows: Array<{ row: number; error: string }> = importValidation.invalidRows.map((row) => ({
+      row: row.rowNumber,
+      error: row.errors.map((error) => error.message).join('; '),
+    }));
 
-    if (leadIdx === null || amountIdx === null) {
-      return res.status(400).json({ error: 'required_mapping_missing', required: ['lead','amount'], header });
-    }
-
-    const srow = Number(startRow || 1);
-    const erow = endRow ? Number(endRow) : (lines.length - 1);
-    if (srow < 1 || erow < srow) return res.status(400).json({ error: 'invalid_row_range' });
-
-    let processed = 0, inserted = 0, failed = 0, duplicates = 0;
-    const failedRows: Array<{ row: number; error: string; raw?: string; lead?: string; amount?: string }> = [];
-
-    for (let i = srow; i <= erow; i++) {
+    for (const row of importValidation.validRows) {
       processed++;
-      const rowNum = i + 1;
-      const cols = (lines[i] || '').split(',').map(c => c.trim());
-      const dealId = dealIdIdx !== null ? (cols[dealIdIdx] || '') : '';
-      const leadVal = (cols[leadIdx] || '').trim();
-      const amountRaw = amountIdx !== null ? (cols[amountIdx] || '') : '';
-      const currency = currencyIdx !== null ? (cols[currencyIdx] || '') : '';
-      const wonVal = wonIdx !== null ? (cols[wonIdx] || '') : '';
-      const closedAtVal = closedAtIdx !== null ? (cols[closedAtIdx] || '') : '';
-
-      const leadKey = sanitizeStringValue(leadVal);
-      if (!leadKey) { failed++; failedRows.push({ row: rowNum, error: 'lead_not_found', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
-      const leadDoc = await Module6Lead.findOne({ project_id: projectId, lead_id: leadKey }).select('_id').lean();
-      if (!leadDoc) { failed++; failedRows.push({ row: rowNum, error: 'lead_not_found', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
-
-      const currencyVal = currency ? normalizeCurrency(currency) : null;
-      if (currency && !currencyVal) {
-        failed++; failedRows.push({ row: rowNum, error: 'invalid_currency', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue;
-      }
-
-      const revenueRaw = String(amountRaw || '').replace(/[^0-9.-]/g, '');
-      const revenue = Number(revenueRaw);
-      if (isNaN(revenue) || revenue < 0) { failed++; failedRows.push({ row: rowNum, error: 'amount_invalid', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
-
-      const cw = /^(1|true|yes|y)$/i.test(wonVal);
-      let closedAt: Date | undefined = undefined;
-      if (cw) {
-        const dt = new Date(closedAtVal);
-        if (isNaN(dt.getTime())) { failed++; failedRows.push({ row: rowNum, error: 'closed_at_invalid', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
-        closedAt = dt;
-        // closed deals must have non-zero amount
-        if (!revenue || revenue <= 0) { failed++; failedRows.push({ row: rowNum, error: 'closed_deal_amount_required', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
-      }
-
-      if (!dealId) {
-        failed++; failedRows.push({ row: rowNum, error: 'deal_id_missing', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue;
-      }
-      const dup = await Deal.findOne({ project_id: projectId, deal_id: dealId }).lean();
+      const payload = row.mapped as ReturnType<typeof buildDealPayload>;
+      const dup = await Deal.findOne({ project_id: projectId, deal_id: payload.deal_id }).lean();
       if (dup) {
         duplicates++;
-        if (duplicatePolicy === 'skip') { continue; }
-        failed++; failedRows.push({ row: rowNum, error: 'duplicate_deal_id', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue;
+        if (duplicatePolicy === 'skip') continue;
       }
-
       try {
         await Deal.create({
-          deal_id: dealId,
-          lead_id: leadKey,
+          deal_id: payload.deal_id,
+          lead_id: payload.lead_id,
           project_id: projectId,
-          revenue,
-          currency: currencyVal,
-          closed_won: cw,
-          closed_at: closedAt,
+          revenue: payload.revenue,
+          currency: payload.currency,
+          closed_won: payload.closed_won,
+          closed_at: payload.closed_at,
         } as any);
         inserted++;
       } catch (ie:any) {
         failed++;
-        failedRows.push({ row: rowNum, error: ie.message || 'insert_failed', raw: lines[i] || '', lead: leadVal, amount: amountRaw });
+        failedRows.push({ row: row.rowNumber, error: ie.message || 'insert_failed' });
       }
     }
 
-    return res.json({ ok: true, processed, inserted, failed, duplicates, failedRows });
+    return res.json({
+      ok: true,
+      processed,
+      inserted,
+      failed,
+      duplicates,
+      failedRows,
+      selected: importValidation.selectedRange.selectedRows,
+      skipped: importValidation.summary.invalidRows,
+      warnings: importValidation.summary.warningRows,
+    });
   } catch (e) {
     console.error('[m06/importDealsCSV]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+export async function validateDealsCSV(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+    const { csv, map, startRow, endRow, duplicatePolicy } = req.body || {};
+    if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
+    if (!map || typeof map !== 'object') return res.status(400).json({ error: 'mapping_required' });
+    const validation = await validateDealsCsvImport({ projectId, csv, map, startRow, endRow, duplicatePolicy });
+    if (!validation.ok) return res.status(400).json(validation);
+    return res.json(validation);
+  } catch (e) {
+    console.error('[m06/validateDealsCSV]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }

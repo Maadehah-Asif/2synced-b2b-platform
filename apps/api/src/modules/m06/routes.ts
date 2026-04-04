@@ -12,6 +12,7 @@ import {
 	deleteCampaign,
 	deleteCampaignPermanent,
 	importCampaignsCSV,
+	validateCampaignsCSV,
 	deleteDeal,
 	createCampaignTouch,
 	listCampaignTouchesByCampaign,
@@ -20,6 +21,7 @@ import {
 	archiveCampaignTouch,
 	deleteCampaignTouchPermanent,
 	importCampaignTouches,
+	validateCampaignTouchesImport,
 	runAttribution,
 	previewDeals,
 	allocationByCampaign,
@@ -48,6 +50,7 @@ import {
 } from './controllers.js';
 import { seedHttp, demoProjects } from './seedController.js';
 import { createDeal, listDeals, updateDeal, archiveDeal, deleteDealPermanent, importDealsCSV } from './controllers.js';
+import { validateDealsCSV } from './controllers.js';
 
 const router = Router();
 
@@ -81,6 +84,7 @@ router.get('/campaigns', listCampaigns);
 router.post('/campaigns', createCampaign);
 router.put('/campaigns/:id', updateCampaign);
 router.post('/campaigns/:id/archive', archiveCampaign);
+router.post('/campaigns/import/validate', validateCampaignsCSV);
 router.post('/campaigns/:id/spend', addSpendEntry);
 router.post('/campaigns/:id/spend/csv', uploadSpendCSV);
 router.post('/campaigns/spend/csv', uploadSpendCSVMulti);
@@ -97,6 +101,7 @@ router.post('/deals', createDeal);
 router.put('/deals/:id', updateDeal);
 router.post('/deals/:id/archive', archiveDeal);
 router.delete('/deals/:id/permanent', deleteDealPermanent);
+router.post('/deals/import/validate', validateDealsCSV);
 router.post('/deals/import/csv', importDealsCSV);
 
 // Campaign Touch management (Screen 2)
@@ -106,6 +111,7 @@ router.get('/campaign-touches/by-lead', listCampaignTouchesByLead);
 router.put('/campaign-touches/:id', updateCampaignTouch);
 router.post('/campaign-touches/:id/archive', archiveCampaignTouch);
 router.delete('/campaign-touches/:id/permanent', deleteCampaignTouchPermanent);
+router.post('/campaign-touches/import/validate', validateCampaignTouchesImport);
 router.post('/campaign-touches/import/csv', importCampaignTouches);
 
 // Debug: touch counts and sample rows

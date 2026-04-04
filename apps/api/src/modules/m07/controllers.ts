@@ -37,6 +37,21 @@ function normalizeStageStatus(value: unknown, fallback = 'active'): string | nul
   return STAGE_STATUSES.has(normalized) ? normalized : null;
 }
 
+function normalizeHeaderValue(value: string) {
+  return value.toLowerCase().replace(/[\s_-]+/g, '');
+}
+
+function parseCsvRecords(text: string): string[][] {
+  const records = parse(text, { bom: true, relax_column_count: true });
+  return Array.isArray(records)
+    ? records.map((row: any) => (Array.isArray(row) ? row.map((cell: any) => String(cell ?? '')) : []))
+    : [];
+}
+
+function buildOriginalRow(header: string[], row: string[]) {
+  return Object.fromEntries(header.map((column, index) => [column, String(row[index] ?? '')]));
+}
+
 function normalizeEngagementScore(value: unknown): number | null {
   if (value === undefined || value === null || value === '') return null;
   const score = Number(value);
@@ -279,6 +294,129 @@ export async function createStage(req: Request, res: Response){
   }catch(e){ console.error('[m07.createStage]', e); return res.status(500).json({ error: 'internal' }); }
 }
 
+async function validateStageRows(params: {
+  workspaceId: string;
+  csv: string;
+  map: Record<string, string | null | undefined>;
+  startRow?: number;
+  endRow?: number;
+  overwriteMode?: 'overwrite_existing' | 'skip_duplicates';
+}) {
+  const records = parseCsvRecords(params.csv);
+  if (records.length === 0) {
+    return {
+      ok: true as const,
+      rowResults: [],
+      summary: { checkedRows: 0, validRows: 0, invalidRows: 0, warningRows: 0 },
+    };
+  }
+
+  const header = (records[0] || []).map((column) => String(column || '').trim());
+  const dataRows = records.slice(1);
+  const totalRows = dataRows.length;
+  const safeStart = Number.isInteger(params.startRow) ? Math.max(1, Number(params.startRow)) : 1;
+  const safeEnd = Number.isInteger(params.endRow) ? Number(params.endRow) : totalRows;
+  if (safeStart < 1) throw new Error('start_row_invalid');
+  if (safeEnd < safeStart) throw new Error('end_row_before_start');
+  if (safeEnd > totalRows) throw new Error('end_row_exceeds_total');
+
+  const headerIndex = new Map<string, number>();
+  header.forEach((column, index) => headerIndex.set(normalizeHeaderValue(column), index));
+
+  const rowResults: Array<{
+    rowNumber: number;
+    original: Record<string, string>;
+    valid: boolean;
+    errors: Array<{ field: string; message: string }>;
+    warnings: Array<{ field: string; message: string }>;
+    mappedRow?: Record<string, unknown>;
+  }> = [];
+
+  for (let offset = safeStart - 1; offset < safeEnd; offset += 1) {
+    const csvRow = dataRows[offset] || [];
+    const rowNumber = offset + 1;
+    const original = buildOriginalRow(header, csvRow);
+    const errors: Array<{ field: string; message: string }> = [];
+    const warnings: Array<{ field: string; message: string }> = [];
+    const mapped: Record<string, string | null> = {};
+    const usedHeaders = new Set<string>();
+
+    for (const field of ['lead_id', 'stage_name', 'entered_at']) {
+      if (!sanitizeStringValue(params.map[field])) errors.push({ field, message: `${field} is missing from the mapping.` });
+    }
+
+    for (const [field, mappedHeaderRaw] of Object.entries(params.map || {})) {
+      const mappedHeader = sanitizeStringValue(mappedHeaderRaw);
+      if (!mappedHeader) continue;
+      const normalizedHeader = normalizeHeaderValue(mappedHeader);
+      if (usedHeaders.has(normalizedHeader)) {
+        errors.push({ field, message: `${mappedHeader} is mapped more than once.` });
+        continue;
+      }
+      usedHeaders.add(normalizedHeader);
+      const index = headerIndex.get(normalizedHeader);
+      if (index === undefined) {
+        errors.push({ field, message: `${mappedHeader} was not found in the uploaded CSV headers.` });
+        continue;
+      }
+      mapped[field] = String(csvRow[index] ?? '').trim();
+    }
+
+    const leadId = sanitizeStringValue(mapped.lead_id);
+    const stageName = sanitizeStringValue(mapped.stage_name);
+    const enteredAt = parseDateValue(mapped.entered_at);
+    const exitedAtRaw = sanitizeStringValue(mapped.exited_at);
+    const exitedAt = exitedAtRaw ? parseDateValue(exitedAtRaw) : null;
+    const stageStatus = normalizeStageStatus(mapped.stage_status);
+
+    if (!leadId) errors.push({ field: 'lead_id', message: 'lead_id is missing.' });
+    if (!stageName) errors.push({ field: 'stage_name', message: 'stage_name is missing.' });
+    if (!enteredAt) errors.push({ field: 'entered_at', message: 'entered_at must be a valid date.' });
+    if (exitedAtRaw && !exitedAt) errors.push({ field: 'exited_at', message: 'exited_at must be a valid date.' });
+    if (enteredAt && exitedAt && exitedAt.getTime() < enteredAt.getTime()) errors.push({ field: 'exited_at', message: 'exited_at cannot be earlier than entered_at.' });
+    if (!stageStatus) errors.push({ field: 'stage_status', message: `stage_status must be one of ${Array.from(STAGE_STATUSES).join(', ')}.` });
+
+    if (leadId) {
+      const lead = await FunnelLead.findOne({ workspace_id: params.workspaceId, lead_id: leadId }).select('_id').lean();
+      if (!lead) errors.push({ field: 'lead_id', message: 'lead_id does not exist in funnel leads.' });
+    }
+
+    if (leadId && stageName && enteredAt) {
+      const existing = await StageHistory.findOne({ workspace_id: params.workspaceId, lead_id: leadId, stage_name: stageName, entered_at: enteredAt }).select('_id').lean();
+      if (existing && params.overwriteMode === 'skip_duplicates') warnings.push({ field: 'stage_name', message: 'A matching record already exists and will be skipped.' });
+    }
+
+    rowResults.push({
+      rowNumber,
+      original,
+      valid: errors.length === 0,
+      errors,
+      warnings,
+      mappedRow: errors.length === 0 ? {
+        lead_id: leadId,
+        stage_name: stageName,
+        entered_at: enteredAt,
+        exited_at: exitedAt,
+        stage_status: stageStatus,
+        next_stage: sanitizeStringValue(mapped.next_stage),
+        exit_reason: sanitizeStringValue(mapped.exit_reason),
+        notes: sanitizeStringValue(mapped.notes),
+      } : undefined,
+    });
+  }
+
+  return {
+    ok: true as const,
+    rowResults,
+    summary: {
+      checkedRows: rowResults.length,
+      validRows: rowResults.filter((row) => row.valid).length,
+      invalidRows: rowResults.filter((row) => !row.valid).length,
+      warningRows: rowResults.filter((row) => row.warnings.length > 0).length,
+    },
+  };
+}
+
 // POST /m07/stages/upload/preview - parse CSV and return columns+preview+warnings
 export async function previewStageUpload(req: Request, res: Response){
   try{
@@ -298,15 +436,57 @@ export async function previewStageUpload(req: Request, res: Response){
   }catch(e){ console.error('[m07.previewStageUpload]', e); return res.status(500).json({ error: 'internal' }); }
 }
 
+export async function validateStageUpload(req: Request, res: Response){
+  try{
+    const body: any = req.body || {};
+    const workspaceId = body.workspaceId || body.workspace || null;
+    if(!workspaceId) return res.status(400).json({ error: 'workspaceId required' });
+    if(!body.csv || typeof body.csv !== 'string') return res.status(400).json({ error: 'csv required' });
+    if(!body.map || typeof body.map !== 'object') return res.status(400).json({ error: 'map required' });
+    const validation = await validateStageRows({
+      workspaceId,
+      csv: body.csv,
+      map: body.map,
+      startRow: body.startRow,
+      endRow: body.endRow,
+      overwriteMode: body.overwriteMode,
+    });
+    return res.json(validation);
+  }catch(e){
+    if (e instanceof Error && ['start_row_invalid', 'end_row_before_start', 'end_row_exceeds_total'].includes(e.message)) {
+      return res.status(400).json({ error: e.message });
+    }
+    console.error('[m07.validateStageUpload]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
 // POST /m07/stages/upload/commit - accept mapped rows and insert/update into funnel_stage_history
 export async function commitStageUpload(req: Request, res: Response){
   try{
     const body: any = req.body || {};
     const workspaceId = body.workspaceId || body.workspace || null;
-    const rows = body.rows || [];
     const overwriteMode = body.overwriteMode || 'overwrite_existing';
+    const allowPartial = body.allowPartial === true;
     if(!workspaceId) return res.status(400).json({ error: 'workspaceId required' });
-    if(!Array.isArray(rows)) return res.status(400).json({ error: 'rows required' });
+    let rows = Array.isArray(body.rows) ? body.rows : [];
+
+    if (rows.length === 0 && body.csv && body.map) {
+      const validation = await validateStageRows({
+        workspaceId,
+        csv: String(body.csv),
+        map: body.map,
+        startRow: body.startRow,
+        endRow: body.endRow,
+        overwriteMode,
+      });
+      if (validation.summary.invalidRows > 0 && !allowPartial) {
+        return res.status(400).json({ error: 'invalid_rows_present', summary: validation.summary, rowResults: validation.rowResults });
+      }
+      rows = validation.rowResults.filter((row) => row.valid).map((row) => row.mappedRow);
+    }
+
+    if(!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ error: 'rows required' });
 
     let importedCount = 0; let updatedCount = 0; let skippedCount = 0;
     const warnings: string[] = [];

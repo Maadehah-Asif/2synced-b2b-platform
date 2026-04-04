@@ -35,6 +35,24 @@ export interface FailedRow {
   error_message?: string | undefined;
 }
 export interface ImportSummary { processed: number; inserted: number; failed: number; failedRows: FailedRow[]; duplicates: number; }
+export interface ValidationIssue { field: string; message: string; }
+export interface ValidationRowResult {
+  rowNumber: number;
+  original: Record<string, string>;
+  mapped: Record<string, unknown>;
+  action: 'insert';
+  errors: ValidationIssue[];
+  warnings: ValidationIssue[];
+  valid: boolean;
+}
+export interface ValidationSummary {
+  header: string[];
+  selectedRange: { startRow: number; endRow: number; totalRows: number; selectedRows: number; };
+  summary: { checkedRows: number; validRows: number; invalidRows: number; warningRows: number; };
+  rowResults: ValidationRowResult[];
+  validRows: ValidationRowResult[];
+  invalidRows: ValidationRowResult[];
+}
 
 // Resolve campaign by name or campaign_id within project, with simple in-memory cache
 export async function resolveCampaignCached(value: string, projectId: string, mode: 'name' | 'campaign_id', cache: Record<string, any>) {
@@ -92,9 +110,70 @@ export async function resolveLeadCached(value: string, projectId: string, cache:
 }
 
 export async function importCampaignTouchesCSV(opts: ImportOptions): Promise<ImportSummary> {
-  const { projectId, csv, map, startRow = 1, endRow, campaignIdentifier = 'name', leadIdentifier = 'id', duplicatePolicy = 'skip' } = opts;
+  const { projectId, duplicatePolicy = 'skip' } = opts;
+  const validation = await validateCampaignTouchesCSV(opts);
+  const cacheCampaign: Record<string, any> = {};
+  const cacheLead: Record<string, any> = {};
+  const failedRows: FailedRow[] = validation.invalidRows.map((row) => ({
+    row: row.rowNumber,
+    error: row.errors.map((issue) => issue.message).join('; '),
+    raw: JSON.stringify(row.original),
+  }));
+  let inserted = 0;
+  let duplicates = 0;
+
+  for (const row of validation.validRows) {
+    const leadVal = String(row.mapped.lead_id || '');
+    const campVal = String(row.mapped.campaign_lookup_value || '');
+    const finalType = String(row.mapped.type || 'other');
+    const touchedAt = row.mapped.touched_at as Date;
+    const finalChannel = String(row.mapped.channel || 'other');
+    const metadataObj = row.mapped.metadata as Record<string, unknown> | undefined;
+    const campaignIdentifier = row.mapped.campaign_identifier_mode as 'name' | 'campaign_id';
+    const leadIdentifier = row.mapped.lead_identifier_mode as 'id' | 'email';
+    const campDoc = await resolveCampaignCached(campVal, projectId, campaignIdentifier, cacheCampaign);
+    const leadDoc = await resolveLeadCached(leadVal, projectId, cacheLead, leadIdentifier);
+    if (!campDoc || !leadDoc) {
+      failedRows.push({ row: row.rowNumber, error: !campDoc ? 'campaign_not_found' : 'lead_not_found', raw: JSON.stringify(row.original) });
+      continue;
+    }
+    if(duplicatePolicy === 'skip') {
+      const dup = await CampaignTouch.findOne({ lead_id: leadDoc.lead_id, campaign_id: campDoc.campaign_id, type: finalType, touched_at: touchedAt }).lean();
+      if(dup) { duplicates++; continue; }
+    }
+    try {
+      await CampaignTouch.create({
+        project_id: projectId,
+        lead_id: leadDoc.lead_id,
+        campaign_id: campDoc.campaign_id,
+        channel: finalChannel as any,
+        type: finalType as any,
+        touched_at: touchedAt,
+        status: String(row.mapped.status || 'active') as any,
+        metadata: metadataObj || null,
+      });
+      inserted++;
+    } catch (e:any) {
+      failedRows.push({ row: row.rowNumber, error: e?.message || 'insert_error', raw: JSON.stringify(row.original) });
+    }
+  }
+
+  return { processed: validation.summary.checkedRows, inserted, failed: failedRows.length, failedRows, duplicates };
+}
+
+export async function validateCampaignTouchesCSV(opts: ImportOptions): Promise<ValidationSummary> {
+  const { projectId, csv, map, startRow = 1, endRow, campaignIdentifier = 'name', leadIdentifier = 'id' } = opts;
   const lines = csv.split(/\r?\n/).filter(l => l.trim().length > 0);
-  if(lines.length < 2) return { processed: 0, inserted: 0, failed: lines.length === 1 ? 1 : 0, failedRows: [{ row: 1, error: 'csv_no_rows'}], duplicates: 0 };
+  if(lines.length < 2) {
+    return {
+      header: [],
+      selectedRange: { startRow: 1, endRow: 0, totalRows: 0, selectedRows: 0 },
+      summary: { checkedRows: 0, validRows: 0, invalidRows: 0, warningRows: 0 },
+      rowResults: [],
+      validRows: [],
+      invalidRows: [],
+    };
+  }
   const headerLine = lines[0] ?? '';
   const header = headerLine.split(',').map(h => h.trim());
 
@@ -109,18 +188,19 @@ export async function importCampaignTouchesCSV(opts: ImportOptions): Promise<Imp
   const typeIdx = colIndex(map.type);
   const touchedIdx = colIndex(map.touched_at);
   if(leadIdx < 0 || campIdx < 0 || typeIdx < 0 || touchedIdx < 0) {
-    return { processed: 0, inserted: 0, failed: 1, failedRows: [{ row: 0, error: 'required_mapping_missing'}], duplicates: 0 };
+    return {
+      header,
+      selectedRange: { startRow: 1, endRow: 0, totalRows: lines.length - 1, selectedRows: 0 },
+      summary: { checkedRows: 0, validRows: 0, invalidRows: 0, warningRows: 0 },
+      rowResults: [],
+      validRows: [],
+      invalidRows: [],
+    };
   }
 
   const lastDataRow = typeof endRow === 'number' ? Math.min(endRow, lines.length - 1) : lines.length - 1;
-  const cacheCampaign: Record<string, any> = {};
-  const cacheLead: Record<string, any> = {};
-  const failedRows: FailedRow[] = [];
-  let inserted = 0; let processed = 0; let duplicates = 0;
-
+  const rowResults: ValidationRowResult[] = [];
   for(let i = startRow; i <= lastDataRow; i++) {
-    processed++;
-    // Use the same numbering the frontend preview shows: data rows start at 1
     const rowNumber = i; 
     const raw = lines[i] ?? '';
     const cols = raw.split(',').map(c => c.trim());
@@ -131,50 +211,55 @@ export async function importCampaignTouchesCSV(opts: ImportOptions): Promise<Imp
     const typeVal = cols[typeIdx];
     const touchedVal = cols[touchedIdx];
 
-    if(!leadVal || !campVal || !typeVal || !touchedVal) {
-      failedRows.push({ row: rowNumber, error: 'missing_required_field', raw, lead: leadVal, campaign: campVal, type: typeVal });
-      continue;
-    }
+    const original = Object.fromEntries(header.map((key, index) => [key, cols[index] ?? '']));
+    const errors: ValidationIssue[] = [];
+    const warnings: ValidationIssue[] = [];
+    if(!leadVal) errors.push({ field: 'lead_id', message: 'lead_id is missing' });
+    if(!campVal) errors.push({ field: 'campaign_id', message: 'campaign_id is missing' });
+    if(!typeVal) errors.push({ field: 'type', message: 'type is missing' });
+    if(!touchedVal) errors.push({ field: 'touched_at', message: 'touched_at is missing' });
     const dt = parseDate(touchedVal);
-    if(!dt) { failedRows.push({ row: rowNumber, error: 'invalid_datetime', raw, lead: leadVal, campaign: campVal, type: typeVal }); continue; }
+    if(touchedVal && !dt) errors.push({ field: 'touched_at', message: 'touched_at must be a valid datetime' });
     const finalChannel = channelVal;
-
-    // Normalize incoming touch type to a canonical form (lowercase, underscores)
     const rawType = String(typeVal || '').trim();
     const normalizedType = rawType.toLowerCase().replace(/[\s\-]+/g, '_');
     const finalType = TOUCH_TYPE_SET.has(normalizedType as any) ? normalizedType as any : 'other';
     const metadataObj: any = finalType === 'other' && rawType && rawType !== 'other' ? { original_type: rawType } : undefined;
+    if(!TOUCH_TYPE_SET.has(finalType as any) && finalType === 'other') warnings.push({ field: 'type', message: `Unknown type "${rawType}" will be imported as other` });
+    const campDoc = campVal ? await resolveCampaignCached(campVal, projectId, campaignIdentifier, {}) : null;
+    if(campVal && !campDoc) errors.push({ field: 'campaign_id', message: 'campaign_id does not exist' });
+    const leadDoc = leadVal ? await resolveLeadCached(leadVal, projectId, {}, leadIdentifier) : null;
+    if(leadVal && !leadDoc) errors.push({ field: 'lead_id', message: 'lead_id does not exist' });
 
-    // resolve campaign
-    const campDoc = await resolveCampaignCached(campVal, projectId, campaignIdentifier, cacheCampaign);
-    if(!campDoc) { failedRows.push({ row: rowNumber, error: 'campaign_not_found', raw, lead: leadVal, campaign: campVal, type: rawType, normalized_type: normalizedType }); continue; }
-
-    // resolve lead (pass hint for id vs email)
-    const leadDoc = await resolveLeadCached(leadVal, projectId, cacheLead, leadIdentifier);
-    if(!leadDoc) { failedRows.push({ row: rowNumber, error: 'lead_not_found', raw, lead: leadVal, campaign: campVal, type: rawType, normalized_type: normalizedType }); continue; }
-
-    // duplicate check
-    if(duplicatePolicy === 'skip') {
-      const dup = await CampaignTouch.findOne({ lead_id: leadDoc.lead_id, campaign_id: campDoc.campaign_id, type: finalType, touched_at: dt }).lean();
-      if(dup) { duplicates++; continue; }
-    }
-
-    try {
-      await CampaignTouch.create({
-        project_id: projectId,
-        lead_id: leadDoc.lead_id,
-        campaign_id: campDoc.campaign_id,
-        channel: finalChannel as any,
-        type: finalType as any,
-        touched_at: dt,
+    rowResults.push({
+      rowNumber,
+      original,
+      mapped: {
+        lead_id: leadVal || null,
+        campaign_lookup_value: campVal || null,
+        campaign_identifier_mode: campaignIdentifier,
+        lead_identifier_mode: leadIdentifier,
+        channel: finalChannel || null,
+        type: finalType,
+        touched_at: dt || null,
         status: 'active',
         metadata: metadataObj,
-      });
-      inserted++;
-    } catch(e:any) {
-      failedRows.push({ row: rowNumber, error: 'insert_error', raw, lead: leadVal, campaign: campVal, type: rawType, normalized_type: normalizedType, error_message: e && e.message });
-    }
+      },
+      action: 'insert',
+      errors,
+      warnings,
+      valid: errors.length === 0,
+    });
   }
-
-  return { processed, inserted, failed: failedRows.length, failedRows, duplicates };
+  const invalidRows = rowResults.filter((row) => !row.valid);
+  const validRows = rowResults.filter((row) => row.valid);
+  const warningRows = rowResults.filter((row) => row.warnings.length > 0).length;
+  return {
+    header,
+    selectedRange: { startRow, endRow: lastDataRow, totalRows: lines.length - 1, selectedRows: Math.max(0, lastDataRow - startRow + 1) },
+    summary: { checkedRows: rowResults.length, validRows: validRows.length, invalidRows: invalidRows.length, warningRows },
+    rowResults,
+    validRows,
+    invalidRows,
+  };
 }

@@ -2,15 +2,148 @@ import { getWorkspaceIdFromHash } from '../../../utils/workspace';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-export async function searchCampaigns(q: string){
-  const workspaceId = getWorkspaceIdFromHash();
-  const usp = new URLSearchParams();
-  if(workspaceId) usp.set('projectId', workspaceId);
-  if(q) usp.set('search', q);
-  const res = await fetch(`${API_BASE}/m06/campaigns?${usp.toString()}`);
-  if(!res.ok) throw new Error('campaign_search_failed');
-  const data = await res.json();
-  // normalize to minimal structure
-  const items = (data.campaigns || []).map((c:any)=> ({ id: c.id, name: c.name, channel: c.channel }));
-  return items;
+export interface CampaignRecord {
+  id: string;
+  campaign_id: string;
+  name: string;
+  channel: 'email' | 'ads' | 'linkedin' | 'webinar' | 'other';
+  description?: string | null;
+  tags?: string[];
+  start_date?: string | null;
+  end_date?: string | null;
+  status?: 'active' | 'archived';
+  spend: number;
+  created_at?: string;
+}
+
+export interface CampaignCsvValidationIssue {
+  field: string;
+  message: string;
+}
+
+export interface CampaignCsvValidationRow {
+  rowNumber: number;
+  original: Record<string, string>;
+  mapped: Record<string, unknown>;
+  action: 'insert' | 'update';
+  errors: CampaignCsvValidationIssue[];
+  warnings: CampaignCsvValidationIssue[];
+  valid: boolean;
+}
+
+export interface CampaignCsvValidationResult {
+  ok: true;
+  header: string[];
+  mapping: Record<string, number | null>;
+  selectedRange: {
+    startRow: number;
+    endRow: number;
+    totalRows: number;
+    selectedRows: number;
+  };
+  summary: {
+    checkedRows: number;
+    validRows: number;
+    invalidRows: number;
+    warningRows: number;
+  };
+  rowResults: CampaignCsvValidationRow[];
+}
+
+export interface CampaignImportSummary {
+  ok?: boolean;
+  processed?: number;
+  created?: number;
+  updated?: number;
+  skipped?: number;
+  failed?: number;
+  warnings?: number;
+  errors?: Array<{ row: number; reason: string }>;
+  selected?: number;
+}
+
+export async function fetchCampaigns(params: Record<string, string | boolean | undefined>) {
+  const projectId = getWorkspaceIdFromHash();
+  if (!projectId) return { campaigns: [] as CampaignRecord[] };
+  const searchParams = new URLSearchParams({ projectId });
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === '' || value === false) return;
+    searchParams.set(key, String(value));
+  });
+  const res = await fetch(`${API_BASE}/m06/campaigns?${searchParams.toString()}`);
+  if (!res.ok) throw new Error('campaign_list_failed');
+  return res.json() as Promise<{ campaigns: CampaignRecord[] }>;
+}
+
+export async function searchCampaigns(q: string) {
+  const result = await fetchCampaigns({ search: q });
+  return (result.campaigns || []).map((campaign) => ({
+    id: campaign.id,
+    name: campaign.name,
+    channel: campaign.channel,
+  }));
+}
+
+export async function createCampaign(payload: Record<string, unknown>) {
+  const projectId = getWorkspaceIdFromHash();
+  if (!projectId) throw new Error('workspace_required');
+  const res = await fetch(`${API_BASE}/m06/campaigns`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, projectId }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error || 'campaign_create_failed');
+  return json;
+}
+
+export async function updateCampaign(id: string, payload: Record<string, unknown>) {
+  const projectId = getWorkspaceIdFromHash();
+  if (!projectId) throw new Error('workspace_required');
+  const res = await fetch(`${API_BASE}/m06/campaigns/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, projectId }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error || 'campaign_update_failed');
+  return json;
+}
+
+export async function archiveCampaign(id: string) {
+  const res = await fetch(`${API_BASE}/m06/campaigns/${encodeURIComponent(id)}/archive`, { method: 'POST' });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error || 'campaign_archive_failed');
+}
+
+export async function deleteCampaignPermanent(id: string) {
+  const res = await fetch(`${API_BASE}/m06/campaigns/${encodeURIComponent(id)}/permanent`, { method: 'DELETE' });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error || 'campaign_delete_failed');
+}
+
+export async function validateCampaignsCsv(payload: { csv: string; map: Record<string, string | null>; startRow?: number; endRow?: number }) {
+  const projectId = getWorkspaceIdFromHash();
+  if (!projectId) throw new Error('workspace_required');
+  const res = await fetch(`${API_BASE}/m06/campaigns/import/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, projectId }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error || 'campaign_validation_failed');
+  return json as CampaignCsvValidationResult;
+}
+
+export async function importCampaignsCsv(payload: { csv: string; map: Record<string, string | null>; startRow?: number; endRow?: number; allowPartial?: boolean }) {
+  const projectId = getWorkspaceIdFromHash();
+  if (!projectId) throw new Error('workspace_required');
+  const res = await fetch(`${API_BASE}/m06/campaigns/import/csv`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, projectId }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error || 'campaign_import_failed');
+  return json as CampaignImportSummary;
 }

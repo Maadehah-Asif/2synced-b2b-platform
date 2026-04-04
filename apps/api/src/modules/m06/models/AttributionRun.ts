@@ -5,7 +5,7 @@ export type AttributionModelType = 'first_touch' | 'last_touch' | 'linear' | 'ti
 export interface AttributionRunDoc {
   _id: Types.ObjectId;
   run_id: string; // external id
-  project_id: Types.ObjectId | string;
+  project_id: string;
   model_type: AttributionModelType;
   timestamp: Date;
   status: 'success' | 'error' | 'running' | 'pending';
@@ -27,7 +27,7 @@ export interface AttributionRunDoc {
 const AttributionRunSchema = new Schema<AttributionRunDoc>(
   {
     run_id: { type: String, required: true, unique: true, index: true },
-    project_id: { type: Schema.Types.ObjectId, required: true, index: true },
+    project_id: { type: String, required: true, index: true },
     model_type: { type: String, enum: ['first_touch', 'last_touch', 'linear', 'time_decay', 'other'], required: true },
     timestamp: { type: Date, required: true },
     status: { type: String, enum: ['success', 'error', 'running', 'pending'], required: true },
@@ -42,7 +42,7 @@ const AttributionRunSchema = new Schema<AttributionRunDoc>(
     unattributed_revenue: { type: Number },
     campaign_count: { type: Number },
   },
-  { timestamps: true }
+  { timestamps: true, collection: 'attribution_runs' }
 );
 
 export const AttributionRun: Model<AttributionRunDoc> = (mongoose.models.AttributionRun as Model<AttributionRunDoc>) || mongoose.model<AttributionRunDoc>('AttributionRun', AttributionRunSchema);

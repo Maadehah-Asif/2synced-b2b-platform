@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import mongoose from 'mongoose';
+import { parse as parseCsv } from 'csv-parse/sync';
 import { Deal } from './models/Deal.js';
 import { Campaign } from './models/Campaign.js';
 import { CampaignTouch } from './models/CampaignTouch.js';
@@ -38,6 +39,11 @@ function parseDateInput(value?: string | null) {
   return date;
 }
 
+function requireStringId(value: unknown): string | null {
+  const text = sanitizeStringValue(value);
+  return text || null;
+}
+
 function sanitizeStringValue(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   const text = String(value).trim();
@@ -50,8 +56,56 @@ function sanitizeNumberValue(value: unknown): number | null {
   return Number.isFinite(num) ? num : null;
 }
 
-function deriveFullName(parts: { full_name?: unknown; name?: unknown; first_name?: unknown; last_name?: unknown }) {
-  const full = sanitizeStringValue(parts.full_name) || sanitizeStringValue(parts.name);
+function sanitizeBooleanValue(value: unknown): boolean | null {
+  if (value === undefined) return null;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'n'].includes(normalized)) return false;
+  }
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  return null;
+}
+
+function sanitizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(item => sanitizeStringValue(item)).filter(Boolean) as string[];
+}
+
+function isObjectRecord(value: unknown): value is Record<string, any> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+const CAMPAIGN_CHANNELS = new Set(['email', 'ads', 'linkedin', 'webinar', 'other']);
+const CAMPAIGN_STATUSES = new Set(['active', 'archived']);
+const TOUCH_CHANNELS = new Set(['email', 'ads', 'linkedin', 'webinar', 'other']);
+const TOUCH_TYPES = new Set(['email_open', 'ad_click', 'webinar', 'email_click', 'form_submit', 'other']);
+const TOUCH_STATUSES = new Set(['active', 'archived']);
+const DEAL_CURRENCIES = new Set(['USD', 'PKR', 'EUR']);
+const LEAD_IMPORT_FIELDS = ['lead_id', 'full_name', 'first_name', 'last_name', 'company', 'source', 'owner', 'industry', 'region', 'lead_score', 'intent_score', 'email', 'job_title', 'segment'] as const;
+const LEAD_REQUIRED_FIELDS = ['lead_id'] as const;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+
+function normalizeEnumValue(value: unknown, allowed: Set<string>, fallback: string | null = null): string | null {
+  const text = sanitizeStringValue(value);
+  if (!text) return fallback;
+  const normalized = text.toLowerCase();
+  return allowed.has(normalized) ? normalized : null;
+}
+
+function normalizeCurrency(value: unknown): string | null {
+  const text = sanitizeStringValue(value);
+  if (!text) return null;
+  const normalized = text.toUpperCase();
+  return DEAL_CURRENCIES.has(normalized) ? normalized : null;
+}
+
+function deriveFullName(parts: { full_name?: unknown; first_name?: unknown; last_name?: unknown }) {
+  const full = sanitizeStringValue(parts.full_name);
   if (full) return full;
   const first = sanitizeStringValue(parts.first_name);
   const last = sanitizeStringValue(parts.last_name);
@@ -59,12 +113,233 @@ function deriveFullName(parts: { full_name?: unknown; name?: unknown; first_name
   return combined || null;
 }
 
+function normalizeMappingHeader(value: unknown) {
+  const text = sanitizeStringValue(value);
+  if (!text) return null;
+  return text.toLowerCase().replace(/[\s_-]+/g, '');
+}
+
+function parseLeadCsvText(csv: string) {
+  const rows = parseCsv(csv, {
+    columns: false,
+    relax_column_count: true,
+    skip_empty_lines: false,
+    trim: true,
+  }) as string[][];
+
+  const normalizedRows = rows.map((row) => (Array.isArray(row) ? row.map((cell) => String(cell ?? '').trim()) : []));
+  const nonEmptyRows = normalizedRows.filter((row) => row.some((cell) => cell.length > 0));
+  if (nonEmptyRows.length < 2) {
+    throw new Error('csv_no_rows');
+  }
+
+  const header = (nonEmptyRows[0] || []).map((cell) => cell.trim());
+  const records = nonEmptyRows.slice(1);
+  return { header, records };
+}
+
+function buildLeadHeaderIndex(header: string[]) {
+  const exact = new Map<string, number>();
+  const normalized = new Map<string, number>();
+  header.forEach((value, index) => {
+    exact.set(value, index);
+    const normalizedKey = normalizeMappingHeader(value);
+    if (normalizedKey && !normalized.has(normalizedKey)) normalized.set(normalizedKey, index);
+  });
+  return { exact, normalized };
+}
+
+function resolveLeadMappingIndexes(header: string[], map: Record<string, unknown> | null | undefined) {
+  const mapping = map && typeof map === 'object' ? map : {};
+  const headerIndex = buildLeadHeaderIndex(header);
+  const indexes: Record<string, number | null> = {};
+
+  for (const field of LEAD_IMPORT_FIELDS) {
+    const mapped = mapping[field];
+    const exactKey = sanitizeStringValue(mapped);
+    if (exactKey && headerIndex.exact.has(exactKey)) {
+      indexes[field] = headerIndex.exact.get(exactKey) ?? null;
+      continue;
+    }
+    const normalizedKey = normalizeMappingHeader(mapped);
+    indexes[field] = normalizedKey && headerIndex.normalized.has(normalizedKey)
+      ? (headerIndex.normalized.get(normalizedKey) ?? null)
+      : null;
+  }
+
+  return indexes as Record<(typeof LEAD_IMPORT_FIELDS)[number], number | null>;
+}
+
+function validateLeadValueFields(input: Record<string, unknown>) {
+  const errors: Array<{ field: string; message: string }> = [];
+
+  const leadId = sanitizeStringValue(input.lead_id ?? input.leadId);
+  if (!leadId) errors.push({ field: 'lead_id', message: 'lead_id is required' });
+
+  const rowNumberRaw = input.row_number;
+  const rowNumberProvided = rowNumberRaw !== undefined && rowNumberRaw !== null && rowNumberRaw !== '';
+  const rowNumber = rowNumberProvided ? sanitizeNumberValue(rowNumberRaw) : null;
+  if (rowNumberProvided) {
+    if (rowNumber === null || !Number.isInteger(rowNumber) || rowNumber < 1) {
+      errors.push({ field: 'row_number', message: 'row_number must be a positive integer' });
+    }
+  }
+
+  const leadScoreRaw = input.lead_score;
+  if (leadScoreRaw !== undefined && leadScoreRaw !== null && leadScoreRaw !== '' && sanitizeNumberValue(leadScoreRaw) === null) {
+    errors.push({ field: 'lead_score', message: 'lead_score must be a number' });
+  }
+
+  const intentScoreRaw = input.intent_score;
+  if (intentScoreRaw !== undefined && intentScoreRaw !== null && intentScoreRaw !== '' && sanitizeNumberValue(intentScoreRaw) === null) {
+    errors.push({ field: 'intent_score', message: 'intent_score must be a number' });
+  }
+
+  const email = sanitizeStringValue(input.email);
+  if (email && !EMAIL_REGEX.test(email)) {
+    errors.push({ field: 'email', message: 'email must be a valid email address' });
+  }
+
+  return {
+    errors,
+    leadId,
+    rowNumber,
+    payload: buildModule6LeadPayload(input as Record<string, any>),
+  };
+}
+
+async function validateModule6LeadCsvImport(options: {
+  projectId: string;
+  csv: string;
+  map?: Record<string, unknown> | null;
+  startRow?: number;
+  endRow?: number;
+}) {
+  const { projectId, csv, map } = options;
+  const { header, records } = parseLeadCsvText(csv);
+  const indexes = resolveLeadMappingIndexes(header, map);
+  const missingMappings = LEAD_REQUIRED_FIELDS.filter((field) => indexes[field] === null);
+
+  if (missingMappings.length) {
+    return {
+      ok: false,
+      error: 'required_mapping_missing',
+      header,
+      missingMappings,
+    };
+  }
+
+  const requestedStart = options.startRow === undefined ? 1 : Number(options.startRow);
+  const requestedEnd = options.endRow === undefined ? records.length : Number(options.endRow);
+  if (!Number.isInteger(requestedStart) || !Number.isInteger(requestedEnd) || requestedStart < 1 || requestedEnd < requestedStart || requestedEnd > records.length) {
+    return {
+      ok: false,
+      error: 'invalid_row_range',
+      header,
+      totalRows: records.length,
+    };
+  }
+
+  const selectedRows = records.slice(requestedStart - 1, requestedEnd);
+  const selectedLeadIds = new Map<string, number[]>();
+  const candidateIds = new Set<string>();
+
+  selectedRows.forEach((row, idx) => {
+    const rowNumber = requestedStart + idx;
+    const leadIdIdx = indexes.lead_id;
+    const leadId = leadIdIdx === null ? null : sanitizeStringValue(row[leadIdIdx] ?? '');
+    if (!leadId) return;
+    const key = leadId.toLowerCase();
+    const matches = selectedLeadIds.get(key) || [];
+    matches.push(rowNumber);
+    selectedLeadIds.set(key, matches);
+    candidateIds.add(leadId);
+  });
+
+  const existingLeads = await Module6Lead.find({ project_id: projectId, lead_id: { $in: Array.from(candidateIds) } }).select('lead_id').lean();
+  const existingLeadIds = new Set(existingLeads.map((lead) => String(lead.lead_id).toLowerCase()));
+
+  const rowResults = selectedRows.map((row, idx) => {
+    const rowNumber = requestedStart + idx;
+    const original = Object.fromEntries(header.map((column, columnIndex) => [column, row[columnIndex] ?? '']));
+    const input = {
+      lead_id: indexes.lead_id !== null ? row[indexes.lead_id] : null,
+      full_name: indexes.full_name !== null ? row[indexes.full_name] : null,
+      first_name: indexes.first_name !== null ? row[indexes.first_name] : null,
+      last_name: indexes.last_name !== null ? row[indexes.last_name] : null,
+      company: indexes.company !== null ? row[indexes.company] : null,
+      source: indexes.source !== null ? row[indexes.source] : null,
+      owner: indexes.owner !== null ? row[indexes.owner] : null,
+      industry: indexes.industry !== null ? row[indexes.industry] : null,
+      region: indexes.region !== null ? row[indexes.region] : null,
+      lead_score: indexes.lead_score !== null ? row[indexes.lead_score] : null,
+      intent_score: indexes.intent_score !== null ? row[indexes.intent_score] : null,
+      email: indexes.email !== null ? row[indexes.email] : null,
+      job_title: indexes.job_title !== null ? row[indexes.job_title] : null,
+      segment: indexes.segment !== null ? row[indexes.segment] : null,
+      raw: original,
+      row_number: rowNumber,
+    };
+
+    const validation = validateLeadValueFields(input);
+    const errors = [...validation.errors];
+    const warnings: Array<{ field: string; message: string }> = [];
+    const leadIdKey = validation.leadId ? validation.leadId.toLowerCase() : null;
+    if (leadIdKey && (selectedLeadIds.get(leadIdKey)?.length || 0) > 1) {
+      errors.push({ field: 'lead_id', message: 'lead_id appears multiple times in this upload selection' });
+    }
+
+    const action = leadIdKey && existingLeadIds.has(leadIdKey) ? 'update' : 'insert';
+    if (action === 'update' && validation.leadId) {
+      warnings.push({ field: 'lead_id', message: `lead_id ${validation.leadId} already exists and will be updated` });
+    }
+
+    return {
+      rowNumber,
+      original,
+      mapped: {
+        lead_id: validation.leadId,
+        ...validation.payload,
+        row_number: validation.rowNumber,
+      },
+      action,
+      errors,
+      warnings,
+      valid: errors.length === 0,
+    };
+  });
+
+  const invalidRows = rowResults.filter((row) => !row.valid);
+  const warningRows = rowResults.filter((row) => row.warnings.length > 0).length;
+  const validRows = rowResults.filter((row) => row.valid);
+
+  return {
+    ok: true,
+    header,
+    mapping: indexes,
+    selectedRange: {
+      startRow: requestedStart,
+      endRow: requestedEnd,
+      totalRows: records.length,
+      selectedRows: selectedRows.length,
+    },
+    summary: {
+      checkedRows: rowResults.length,
+      validRows: validRows.length,
+      invalidRows: invalidRows.length,
+      warningRows,
+    },
+    rowResults,
+    validRows,
+    invalidRows,
+  };
+}
+
 function buildModule6LeadPayload(input: Record<string, any>) {
   const fullName = deriveFullName(input);
   const firstName = sanitizeStringValue(input.first_name);
   const lastName = sanitizeStringValue(input.last_name);
   return {
-    name: fullName,
     full_name: fullName,
     first_name: firstName,
     last_name: lastName,
@@ -78,17 +353,18 @@ function buildModule6LeadPayload(input: Record<string, any>) {
     email: sanitizeStringValue(input.email),
     job_title: sanitizeStringValue(input.job_title),
     segment: sanitizeStringValue(input.segment),
-    is_archived: input.is_archived === undefined ? undefined : Boolean(input.is_archived),
-    raw: input.raw && typeof input.raw === 'object' ? input.raw : null,
+    is_archived: input.is_archived === undefined ? undefined : sanitizeBooleanValue(input.is_archived),
+    raw: isObjectRecord(input.raw) ? input.raw : null,
   };
 }
 
 function serializeModule6Lead(lead: any) {
   return {
     _id: String(lead._id),
+    project_id: String(lead.project_id),
+    row_number: lead.row_number ?? null,
     lead_id: lead.lead_id,
-    name: lead.name || lead.full_name || null,
-    full_name: lead.full_name || lead.name || null,
+    full_name: lead.full_name || null,
     first_name: lead.first_name || null,
     last_name: lead.last_name || null,
     company: lead.company || null,
@@ -110,7 +386,7 @@ function serializeModule6Lead(lead: any) {
 
 async function syncModule6LeadToFunnelLead(projectId: string, lead: any) {
   const payload = {
-    full_name: lead.full_name || lead.name || null,
+    full_name: lead.full_name || null,
     first_name: lead.first_name || null,
     last_name: lead.last_name || null,
     company: lead.company || null,
@@ -150,7 +426,7 @@ async function loadLeadSummariesByObjectIds(ids: string[]) {
 
   const [legacyDocs, module6Docs] = await Promise.all([
     Lead.find({ _id: { $in: objectIds } }).select('First_Name Last_Name Email Company lead_id').lean(),
-    Module6Lead.find({ _id: { $in: objectIds } }).select('lead_id name full_name first_name last_name email company').lean(),
+    Module6Lead.find({ _id: { $in: objectIds } }).select('lead_id full_name first_name last_name email company').lean(),
   ]);
 
   for (const doc of legacyDocs) {
@@ -164,7 +440,7 @@ async function loadLeadSummariesByObjectIds(ids: string[]) {
 
   for (const doc of module6Docs) {
     summaries[String(doc._id)] = {
-      name: doc.full_name || doc.name || `${doc.first_name || ''} ${doc.last_name || ''}`.trim() || null,
+      name: doc.full_name || `${doc.first_name || ''} ${doc.last_name || ''}`.trim() || null,
       email: doc.email || null,
       company: doc.company || null,
       lead_id: doc.lead_id || null,
@@ -175,7 +451,7 @@ async function loadLeadSummariesByObjectIds(ids: string[]) {
 }
 
 async function resolveLeadObjectId(
-  projectOid: mongoose.Types.ObjectId,
+  projectId: string,
   rawValue: string,
   cache: Record<string, string>
 ): Promise<string | null> {
@@ -192,13 +468,13 @@ async function resolveLeadObjectId(
   };
 
   if (mongoose.isValidObjectId(value)) {
-    const direct = await Module6Lead.findOne({ _id: value, project_id: projectOid }).select('_id').lean();
+    const direct = await Module6Lead.findOne({ _id: value, project_id: projectId }).select('_id').lean();
     if (remember(direct)) return cache[cacheKey] ?? null;
     const legacy = await Lead.findById(value).select('_id').lean();
     if (remember(legacy)) return cache[cacheKey] ?? null;
   }
 
-  const directLead = await Module6Lead.findOne({ project_id: projectOid, lead_id: value }).select('_id').lean();
+  const directLead = await Module6Lead.findOne({ project_id: projectId, lead_id: value }).select('_id').lean();
   if (remember(directLead)) return cache[cacheKey] ?? null;
 
   if (/^\d+$/.test(value)) {
@@ -208,22 +484,25 @@ async function resolveLeadObjectId(
 
   if (value.includes('@')) {
     const emailRegex = new RegExp(`^${sanitizeRegex(value)}$`, 'i');
-    const moduleByEmail = await Module6Lead.findOne({ project_id: projectOid, email: emailRegex }).select('_id').lean();
+    const moduleByEmail = await Module6Lead.findOne({ project_id: projectId, email: emailRegex }).select('_id').lean();
     if (remember(moduleByEmail)) return cache[cacheKey] ?? null;
     const legacyByEmail = await Lead.findOne({ Email: emailRegex }).select('_id').lean();
     if (remember(legacyByEmail)) return cache[cacheKey] ?? null;
   }
 
   const nameRegex = new RegExp(sanitizeRegex(value), 'i');
-  const moduleByName = await Module6Lead.findOne({ project_id: projectOid, name: nameRegex }).select('_id').lean();
+  const moduleByName = await Module6Lead.findOne({
+    project_id: projectId,
+    $or: [{ full_name: nameRegex }, { first_name: nameRegex }, { last_name: nameRegex }],
+  }).select('_id').lean();
   if (remember(moduleByName)) return cache[cacheKey] ?? null;
 
   return null;
 }
 
 type AllocationPipelineOptions = {
-  projectOid: mongoose.Types.ObjectId;
-  runOid: mongoose.Types.ObjectId;
+  projectId: string;
+  runId: string;
   minShare?: number | undefined;
   channel?: string | null | undefined;
   closedFrom?: Date | undefined;
@@ -236,8 +515,8 @@ type AllocationPipelineOptions = {
 
 function buildAllocationBasePipeline(options: AllocationPipelineOptions, initialMatch: Record<string, any> = {}) {
   const baseMatch: Record<string, any> = {
-    project_id: options.projectOid,
-    run_id: options.runOid,
+    project_id: options.projectId,
+    run_id: options.runId,
     ...initialMatch,
   };
 
@@ -247,9 +526,9 @@ function buildAllocationBasePipeline(options: AllocationPipelineOptions, initial
 
   const pipeline: any[] = [
     { $match: baseMatch },
-    { $lookup: { from: 'deals', localField: 'deal_id', foreignField: '_id', as: 'deal' } },
+    { $lookup: { from: 'deals', localField: 'deal_id', foreignField: 'deal_id', as: 'deal' } },
     { $unwind: '$deal' },
-    { $lookup: { from: 'campaigns', localField: 'campaign_id', foreignField: '_id', as: 'campaign' } },
+    { $lookup: { from: 'campaigns', localField: 'campaign_id', foreignField: 'campaign_id', as: 'campaign' } },
     { $unwind: { path: '$campaign', preserveNullAndEmptyArrays: true } },
     {
       $addFields: {
@@ -288,7 +567,7 @@ function buildAllocationBasePipeline(options: AllocationPipelineOptions, initial
 
   pipeline.push(
     { $lookup: { from: 'leads', localField: 'deal.lead_id', foreignField: '_id', as: 'lead_legacy' } },
-    { $lookup: { from: 'm06_leads', localField: 'deal.lead_id', foreignField: '_id', as: 'lead_module6' } },
+    { $lookup: { from: 'm06_leads', localField: 'deal.lead_id', foreignField: 'lead_id', as: 'lead_module6' } },
     {
       $addFields: {
         lead: {
@@ -332,20 +611,16 @@ export async function allocationDealsForCampaign(req: Request, res: Response) {
     const projectId = getProjectId(req);
     const runId = req.query.runId as string | undefined;
     const campaignId = req.query.campaignId as string | undefined;
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     if (!runId || !mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'runId_required' });
-    if (!campaignId || !mongoose.isValidObjectId(campaignId)) return res.status(400).json({ error: 'campaignId_required' });
+    if (!campaignId) return res.status(400).json({ error: 'campaignId_required' });
 
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const runOid = new mongoose.Types.ObjectId(runId);
-    const campaignOid = new mongoose.Types.ObjectId(campaignId);
-
-    const pipeline = buildAllocationBasePipeline({ projectOid, runOid }, { campaign_id: campaignOid });
+    const pipeline = buildAllocationBasePipeline({ projectId, runId }, { campaign_id: campaignId });
     pipeline.push({ $limit: MAX_ALLOCATIONS_LIMIT });
 
     const rows = await AttributionResult.aggregate(pipeline).exec();
     const out = rows.map((r: any) => ({
-      deal_id: String(r.deal._id),
+      deal_id: String(r.deal.deal_id || r.deal_id),
       deal_amount: r.deal.revenue || 0,
       revenue_share: r.revenue_share || 0,
       closed_at: r.deal.closed_at,
@@ -366,20 +641,16 @@ export async function allocationCampaignsForDeal(req: Request, res: Response) {
     const projectId = getProjectId(req);
     const runId = req.query.runId as string | undefined;
     const dealId = req.query.dealId as string | undefined;
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     if (!runId || !mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'runId_required' });
-    if (!dealId || !mongoose.isValidObjectId(dealId)) return res.status(400).json({ error: 'dealId_required' });
+    if (!dealId) return res.status(400).json({ error: 'dealId_required' });
 
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const runOid = new mongoose.Types.ObjectId(runId);
-    const dealOid = new mongoose.Types.ObjectId(dealId);
-
-    const pipeline = buildAllocationBasePipeline({ projectOid, runOid }, { deal_id: dealOid });
+    const pipeline = buildAllocationBasePipeline({ projectId, runId }, { deal_id: dealId });
     pipeline.push({ $limit: MAX_ALLOCATIONS_LIMIT });
 
     const rows = await AttributionResult.aggregate(pipeline).exec();
     const out = rows.map((r: any) => ({
-      campaign_id: String(r.campaign?._id || r.campaign_id),
+      campaign_id: String(r.campaign?.campaign_id || r.campaign_id),
       campaign_name: r.campaign?.name || null,
       channel: r.campaign_channel || null,
       revenue_share: r.revenue_share || 0,
@@ -395,22 +666,20 @@ export async function allocationCampaignsForDeal(req: Request, res: Response) {
 export async function stats(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     // Require runId for stats
     const runId = (req.query.runId as string) || '';
     if (!runId || !mongoose.isValidObjectId(runId)) return res.status(400).json({ ok: false, error: 'runId_required' });
-    const runOid = new mongoose.Types.ObjectId(runId);
 
-    const runDoc = await AttributionRun.findOne({ _id: runOid, project_id: projectOid }).lean();
+    const runDoc = await AttributionRun.findOne({ _id: runId, project_id: projectId }).lean();
     if (!runDoc || runDoc.status === 'error') return res.status(400).json({ ok: false, error: 'invalid_run' });
 
     // Attribution rows for the run
     const rows = await AttributionResult.aggregate([
-      { $match: { run_id: runOid, project_id: projectOid } },
-      { $lookup: { from: 'deals', localField: 'deal_id', foreignField: '_id', as: 'deal' } },
+      { $match: { run_id: runId, project_id: projectId } },
+      { $lookup: { from: 'deals', localField: 'deal_id', foreignField: 'deal_id', as: 'deal' } },
       { $unwind: { path: '$deal', preserveNullAndEmptyArrays: true } },
-      { $lookup: { from: 'campaigns', localField: 'campaign_id', foreignField: '_id', as: 'campaign' } },
+      { $lookup: { from: 'campaigns', localField: 'campaign_id', foreignField: 'campaign_id', as: 'campaign' } },
       { $unwind: { path: '$campaign', preserveNullAndEmptyArrays: true } },
       {
         $addFields: {
@@ -486,9 +755,8 @@ export async function stats(req: Request, res: Response) {
 export async function latestRun(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ ok: false, error: 'workspaceId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const run = await AttributionRun.findOne({ project_id: projectOid, status: 'success' }).sort({ createdAt: -1 }).lean();
+    if (!projectId) return res.status(400).json({ ok: false, error: 'workspaceId_required' });
+    const run = await AttributionRun.findOne({ project_id: projectId, status: 'success' }).sort({ createdAt: -1 }).lean();
     if (!run) return res.json({ ok: true, run: null });
     return res.json({ ok: true, run: { runId: String(run._id), model: (run as any).modelType || (run as any).model_type || 'linear', createdAt: (run as any).createdAt || (run as any).timestamp, status: run.status } });
   } catch (e) {
@@ -501,9 +769,8 @@ export async function latestRun(req: Request, res: Response) {
 export async function runList(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ ok: false, error: 'workspaceId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const runs = await AttributionRun.find({ project_id: projectOid }).sort({ createdAt: -1 }).select({ _id: 1, modelType: 1, model_type: 1, createdAt: 1, timestamp: 1, status: 1 }).lean();
+    if (!projectId) return res.status(400).json({ ok: false, error: 'workspaceId_required' });
+    const runs = await AttributionRun.find({ project_id: projectId }).sort({ createdAt: -1 }).select({ _id: 1, modelType: 1, model_type: 1, createdAt: 1, timestamp: 1, status: 1 }).lean();
     return res.json({ ok: true, runs: runs.map(r => ({ runId: String(r._id), model: (r as any).modelType || (r as any).model_type || 'linear', createdAt: (r as any).createdAt || (r as any).timestamp, status: (r as any).status || 'pending' })) });
   } catch (e) {
     console.error('[m06/run-list]', e);
@@ -516,11 +783,8 @@ export async function allocationByCampaign(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     const runId = req.query.runId as string | undefined;
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     if (!runId || !mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'runId_required' });
-
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const runOid = new mongoose.Types.ObjectId(runId);
 
     const minShare = req.query.minShare !== undefined ? Number(req.query.minShare) : undefined;
     const channel = (req.query.channel as string | undefined) || null;
@@ -538,8 +802,8 @@ export async function allocationByCampaign(req: Request, res: Response) {
       : null;
 
     const options: AllocationPipelineOptions = {
-      projectOid,
-      runOid,
+      projectId,
+      runId,
       minShare,
       channel,
       closedFrom,
@@ -554,18 +818,18 @@ export async function allocationByCampaign(req: Request, res: Response) {
       ...basePipeline,
       {
         $group: {
-          _id: '$campaign._id',
-          campaign_id: { $first: '$campaign._id' },
+          _id: '$campaign.campaign_id',
+          campaign_id: { $first: '$campaign.campaign_id' },
           name: { $first: '$campaign.name' },
           channel: { $first: '$campaign_channel' },
           total_revenue: { $sum: '$revenue_share' },
-          deal_ids: { $addToSet: '$deal._id' },
+          deal_ids: { $addToSet: '$deal.deal_id' },
         },
       },
       {
         $project: {
           _id: 0,
-          campaign_id: { $toString: '$campaign_id' },
+          campaign_id: '$campaign_id',
           name: 1,
           channel: 1,
           total_revenue: 1,
@@ -581,7 +845,7 @@ export async function allocationByCampaign(req: Request, res: Response) {
 
     const totalAgg = await AttributionResult.aggregate([
       ...basePipeline,
-      { $group: { _id: '$campaign._id' } },
+      { $group: { _id: '$campaign.campaign_id' } },
       { $count: 'total' },
     ]).exec();
     const total = totalAgg[0]?.total || 0;
@@ -607,11 +871,8 @@ export async function allocationByDeal(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     const runId = req.query.runId as string | undefined;
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     if (!runId || !mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'runId_required' });
-
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const runOid = new mongoose.Types.ObjectId(runId);
 
     const minShare = req.query.minShare !== undefined ? Number(req.query.minShare) : undefined;
     const channel = (req.query.channel as string | undefined) || null;
@@ -631,8 +892,8 @@ export async function allocationByDeal(req: Request, res: Response) {
       : null;
 
     const options: AllocationPipelineOptions = {
-      projectOid,
-      runOid,
+      projectId,
+      runId,
       minShare,
       channel,
       closedFrom,
@@ -649,20 +910,20 @@ export async function allocationByDeal(req: Request, res: Response) {
       ...basePipeline,
       {
         $group: {
-          _id: '$deal._id',
-          deal_id: { $first: '$deal._id' },
+          _id: '$deal.deal_id',
+          deal_id: { $first: '$deal.deal_id' },
           amount: { $first: '$deal.revenue' },
           closed_at: { $first: '$deal.closed_at' },
           closed_won: { $first: '$deal.closed_won' },
           lead: { $first: '$lead' },
           total_attributed: { $sum: '$revenue_share' },
-          campaign_count: { $addToSet: '$campaign._id' },
+          campaign_count: { $addToSet: '$campaign.campaign_id' },
         },
       },
       {
         $project: {
           _id: 0,
-          deal_id: { $toString: '$deal_id' },
+          deal_id: '$deal_id',
           amount: 1,
           closed_at: 1,
           closed_won: 1,
@@ -689,7 +950,7 @@ export async function allocationByDeal(req: Request, res: Response) {
 
     const totalAgg = await AttributionResult.aggregate([
       ...basePipeline,
-      { $group: { _id: '$deal._id' } },
+      { $group: { _id: '$deal.deal_id' } },
       { $count: 'total' },
     ]).exec();
     const total = totalAgg[0]?.total || 0;
@@ -733,21 +994,19 @@ export async function getRunResults(req: Request, res: Response) {
     const runId = (req.params.id as string) || (req.query.runId as string) || null;
     const projectId = getProjectId(req);
     if (!runId || !mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'runId_required' });
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const runOid = new mongoose.Types.ObjectId(runId);
-    const projectOid = new mongoose.Types.ObjectId(projectId);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
 
-    const rows = await AttributionResult.find({ run_id: runOid, project_id: projectOid }).lean();
+    const rows = await AttributionResult.find({ run_id: runId, project_id: projectId }).lean();
     const campaignIds = Array.from(new Set(rows.map(r => String(r.campaign_id))));
     const dealIds = Array.from(new Set(rows.map(r => String(r.deal_id))));
 
-    const campaigns = await Campaign.find({ _id: { $in: campaignIds } }).lean();
-    const deals = await Deal.find({ _id: { $in: dealIds } }).lean();
+    const campaigns = await Campaign.find({ project_id: projectId, campaign_id: { $in: campaignIds } }).lean();
+    const deals = await Deal.find({ project_id: projectId, deal_id: { $in: dealIds } }).lean();
 
     const campaignMap: Record<string, any> = {};
-    for (const c of campaigns) campaignMap[String(c._id)] = c;
+    for (const c of campaigns) campaignMap[String(c.campaign_id)] = c;
     const dealMap: Record<string, any> = {};
-    for (const d of deals) dealMap[String(d._id)] = d;
+    for (const d of deals) dealMap[String(d.deal_id)] = d;
 
     const out = rows.map(r => ({ deal_id: String(r.deal_id), deal_external_id: dealMap[String(r.deal_id)]?.deal_id || null, campaign_id: String(r.campaign_id), campaignName: campaignMap[String(r.campaign_id)]?.name || null, revenue_share: r.revenue_share }));
     return res.json({ ok: true, results: out });
@@ -762,34 +1021,37 @@ export async function getRunResults(req: Request, res: Response) {
 export async function createCampaignTouch(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const { leadId, campaignId, channel, type, touched_at, metadata } = req.body || {};
-    if (!leadId) return res.status(400).json({ error: 'leadId_required' });
-    if (!campaignId || !mongoose.isValidObjectId(campaignId)) return res.status(400).json({ error: 'campaignId_required' });
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+    const { leadId, lead_id, campaignId, campaign_id, channel, type, touched_at, metadata, status } = req.body || {};
+    const leadValue = requireStringId(lead_id ?? leadId);
+    const campaignValue = requireStringId(campaign_id ?? campaignId);
+    if (!leadValue) return res.status(400).json({ error: 'lead_id_required' });
+    if (!campaignValue) return res.status(400).json({ error: 'campaign_id_required' });
     if (!touched_at) return res.status(400).json({ error: 'touched_at_required' });
     if (!type) return res.status(400).json({ error: 'type_required' });
     const dt = new Date(touched_at);
     if (isNaN(dt.getTime())) return res.status(400).json({ error: 'invalid_datetime' });
-    const resolvedLeadId = await resolveLeadObjectId(projectOid, String(leadId), {});
-    if (!resolvedLeadId) return res.status(400).json({ error: 'lead_not_found' });
+    const normalizedType = normalizeEnumValue(type, TOUCH_TYPES);
+    if (!normalizedType) return res.status(400).json({ error: 'invalid_type', allowed: Array.from(TOUCH_TYPES) });
+    const normalizedChannel = channel === undefined ? null : normalizeEnumValue(channel, TOUCH_CHANNELS);
+    if (channel !== undefined && normalizedChannel === null) return res.status(400).json({ error: 'invalid_channel', allowed: Array.from(TOUCH_CHANNELS) });
+    const normalizedStatus = status === undefined ? 'active' : normalizeEnumValue(status, TOUCH_STATUSES);
+    if (status !== undefined && normalizedStatus === null) return res.status(400).json({ error: 'invalid_status', allowed: Array.from(TOUCH_STATUSES) });
 
-    // Resolve campaign for optional channel fallback
-    let finalChannel = channel;
-    if (!finalChannel && mongoose.isValidObjectId(campaignId)) {
-      const camp = await Campaign.findById(campaignId).lean();
-      if (camp) finalChannel = camp.channel;
-    }
+    const lead = await Module6Lead.findOne({ project_id: projectId, lead_id: leadValue }).select('_id').lean();
+    if (!lead) return res.status(400).json({ error: 'lead_not_found' });
+    const campaign = await Campaign.findOne({ project_id: projectId, campaign_id: campaignValue }).select('campaign_id channel').lean();
+    if (!campaign) return res.status(400).json({ error: 'campaign_not_found' });
 
     const touch = await CampaignTouch.create({
-      project_id: projectOid,
-      lead_id: new mongoose.Types.ObjectId(resolvedLeadId),
-      campaign_id: new mongoose.Types.ObjectId(campaignId),
-      channel: finalChannel,
-      type,
+      project_id: projectId,
+      lead_id: leadValue,
+      campaign_id: campaignValue,
+      channel: normalizedChannel || campaign.channel,
+      type: normalizedType,
       touched_at: dt,
-      metadata: metadata && typeof metadata === 'object' ? metadata : undefined,
-      status: 'active'
+      metadata: isObjectRecord(metadata) ? metadata : null,
+      status: normalizedStatus || 'active',
     });
     return res.status(201).json({ ok: true, touch: { id: String(touch._id) } });
   } catch (e) {
@@ -803,7 +1065,7 @@ export async function listCampaignTouchesByCampaign(req: Request, res: Response)
     const projectId = getProjectId(req);
     const campaignId = (req.query.campaignId as string) || null;
     console.debug('[m06/listCampaignTouchesByCampaign] query=', { projectId: req.query.projectId, workspaceId: req.query.workspaceId, campaignId: req.query.campaignId, rawQuery: req.query });
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     if (!campaignId) return res.status(400).json({ error: 'campaignId_required' });
     const from = (req.query.from as string) || '';
     const to = (req.query.to as string) || '';
@@ -811,26 +1073,7 @@ export async function listCampaignTouchesByCampaign(req: Request, res: Response)
     const typeFilter = (req.query.type as string) || '';
     const includeArchived = req.query.includeArchived === 'true';
     const statusFilter = (req.query.status as string) || '';
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const match: any = {
-      $and: [
-        {
-          $or: [
-            { project_id: projectOid },
-            { project_id: { $exists: false } },
-            { project_id: null }
-          ]
-        },
-        {
-          $or: mongoose.isValidObjectId(campaignId)
-            ? [
-                { campaign_id: new mongoose.Types.ObjectId(campaignId) },
-                { campaign_id: campaignId }
-              ]
-            : [{ campaign_id: campaignId }]
-        }
-      ]
-    };
+    const match: any = { project_id: projectId, campaign_id: campaignId };
     if (from || to) {
       match.touched_at = {};
       if (from) match.touched_at.$gte = new Date(from);
@@ -853,7 +1096,7 @@ export async function listCampaignTouchesByLead(req: Request, res: Response) {
     const projectId = getProjectId(req);
     const leadId = (req.query.leadId as string) || null;
     console.debug('[m06/listCampaignTouchesByLead] query=', { projectId: req.query.projectId, leadId: req.query.leadId, rawQuery: req.query });
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     if (!leadId) return res.status(400).json({ error: 'leadId_required' });
     const from = (req.query.from as string) || '';
     const to = (req.query.to as string) || '';
@@ -861,26 +1104,7 @@ export async function listCampaignTouchesByLead(req: Request, res: Response) {
     const typeFilter = (req.query.type as string) || '';
     const includeArchived = req.query.includeArchived === 'true';
     const statusFilter = (req.query.status as string) || '';
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const match: any = {
-      $and: [
-        {
-          $or: [
-            { project_id: projectOid },
-            { project_id: { $exists: false } },
-            { project_id: null }
-          ]
-        },
-        {
-          $or: mongoose.isValidObjectId(leadId)
-            ? [
-                { lead_id: new mongoose.Types.ObjectId(leadId) },
-                { lead_id: leadId }
-              ]
-            : [{ lead_id: leadId }]
-        }
-      ]
-    };
+    const match: any = { project_id: projectId, lead_id: leadId };
     if (from || to) {
       match.touched_at = {};
       if (from) match.touched_at.$gte = new Date(from);
@@ -902,15 +1126,14 @@ export async function listCampaignTouchesByLead(req: Request, res: Response) {
 export async function listTouchesDebug(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     const campaignId = (req.query.campaignId as string) || null;
     const leadId = (req.query.leadId as string) || null;
     console.debug('[m06/listTouchesDebug] query=', { projectId, campaignId, leadId });
 
-    const match: any = { project_id: projectOid };
-    if (campaignId && mongoose.isValidObjectId(campaignId)) match.campaign_id = new mongoose.Types.ObjectId(campaignId);
-    if (leadId && mongoose.isValidObjectId(leadId)) match.lead_id = new mongoose.Types.ObjectId(leadId);
+    const match: any = { project_id: projectId };
+    if (campaignId) match.campaign_id = campaignId;
+    if (leadId) match.lead_id = leadId;
 
     const count = await CampaignTouch.countDocuments(match).exec();
     const sample = await CampaignTouch.find(match).sort({ touched_at: -1 }).limit(10).lean();
@@ -927,15 +1150,28 @@ export async function updateCampaignTouch(req: Request, res: Response) {
     if (!mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'invalid_id' });
     const touch = await CampaignTouch.findById(id).exec();
     if (!touch) return res.status(404).json({ error: 'not_found' });
-    const { channel, type, touched_at, metadata } = req.body || {};
-    if (channel) touch.channel = channel;
-    if (type) touch.type = type;
+    const { channel, type, touched_at, metadata, status } = req.body || {};
+    if (channel !== undefined) {
+      const normalizedChannel = normalizeEnumValue(channel, TOUCH_CHANNELS);
+      if (!normalizedChannel) return res.status(400).json({ error: 'invalid_channel', allowed: Array.from(TOUCH_CHANNELS) });
+      touch.channel = normalizedChannel as any;
+    }
+    if (type !== undefined) {
+      const normalizedType = normalizeEnumValue(type, TOUCH_TYPES);
+      if (!normalizedType) return res.status(400).json({ error: 'invalid_type', allowed: Array.from(TOUCH_TYPES) });
+      touch.type = normalizedType as any;
+    }
     if (touched_at) {
       const dt = new Date(touched_at);
       if (isNaN(dt.getTime())) return res.status(400).json({ error: 'invalid_datetime' });
       touch.touched_at = dt;
     }
-    if (metadata !== undefined) touch.metadata = metadata && typeof metadata === 'object' ? metadata : undefined;
+    if (metadata !== undefined) touch.metadata = isObjectRecord(metadata) ? metadata : null;
+    if (status !== undefined) {
+      const normalizedStatus = normalizeEnumValue(status, TOUCH_STATUSES);
+      if (!normalizedStatus) return res.status(400).json({ error: 'invalid_status', allowed: Array.from(TOUCH_STATUSES) });
+      touch.status = normalizedStatus as any;
+    }
     await touch.save();
     return res.json({ ok: true });
   } catch (e) {
@@ -977,7 +1213,7 @@ export async function deleteCampaignTouchPermanent(req: Request, res: Response) 
 export async function importCampaignTouches(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     const { csv, map, startRow, endRow, campaignIdentifier, duplicatePolicy } = req.body || {};
     if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
     if (!map || typeof map !== 'object') return res.status(400).json({ error: 'mapping_required' });
@@ -991,8 +1227,7 @@ export async function importCampaignTouches(req: Request, res: Response) {
 export async function listCampaigns(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
 
     // Filters: search(name/id), channel, status, includeArchived, date ranges
     const search = (req.query.search as string) || '';
@@ -1004,7 +1239,7 @@ export async function listCampaigns(req: Request, res: Response) {
     const startFrom = (req.query.startFrom as string) || '';
     const startTo = (req.query.startTo as string) || '';
 
-    const match: any = { project_id: projectOid };
+    const match: any = { project_id: projectId };
     if (search) {
       const regex = new RegExp(search, 'i');
       match.$or = [{ name: regex }, { campaign_id: regex }];
@@ -1036,11 +1271,37 @@ export async function listCampaigns(req: Request, res: Response) {
 export async function createCampaign(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const { name, channel, startDate, endDate, description, tags, spend } = req.body || {};
-    if (!name || !channel) return res.status(400).json({ error: 'name_channel_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const campaign = await Campaign.create({ campaign_id: `camp-${Date.now()}`, project_id: projectOid, channel, name: name.trim(), description: description || null, tags: Array.isArray(tags) ? tags : [], start_date: startDate ? new Date(startDate) : null, end_date: endDate ? new Date(endDate) : null, spend: Number(spend) || 0 });
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+    const { campaign_id, campaignId, name, channel, start_date, startDate, end_date, endDate, description, tags, spend, status } = req.body || {};
+    const campaignKey = requireStringId(campaign_id ?? campaignId);
+    const campaignName = sanitizeStringValue(name);
+    const normalizedChannel = normalizeEnumValue(channel, CAMPAIGN_CHANNELS);
+    const normalizedStatus = status === undefined ? 'active' : normalizeEnumValue(status, CAMPAIGN_STATUSES);
+    const spendValue = sanitizeNumberValue(spend);
+    const parsedStart = parseDateInput(start_date ?? startDate ?? null);
+    const parsedEnd = parseDateInput(end_date ?? endDate ?? null);
+    if (!campaignKey) return res.status(400).json({ error: 'campaign_id_required' });
+    if (!campaignName) return res.status(400).json({ error: 'name_required' });
+    if (!normalizedChannel) return res.status(400).json({ error: 'invalid_channel', allowed: Array.from(CAMPAIGN_CHANNELS) });
+    if (status !== undefined && normalizedStatus === null) return res.status(400).json({ error: 'invalid_status', allowed: Array.from(CAMPAIGN_STATUSES) });
+    if (spendValue === null || spendValue < 0) return res.status(400).json({ error: 'invalid_spend' });
+    if ((start_date ?? startDate) && !parsedStart) return res.status(400).json({ error: 'invalid_start_date' });
+    if ((end_date ?? endDate) && !parsedEnd) return res.status(400).json({ error: 'invalid_end_date' });
+    if (parsedStart && parsedEnd && parsedEnd.getTime() < parsedStart.getTime()) return res.status(400).json({ error: 'invalid_date_range' });
+    const dup = await Campaign.findOne({ project_id: projectId, campaign_id: campaignKey }).select('_id').lean();
+    if (dup) return res.status(409).json({ error: 'duplicate_campaign_id' });
+    const campaign = await Campaign.create({
+      campaign_id: campaignKey,
+      project_id: projectId,
+      channel: normalizedChannel,
+      name: campaignName,
+      description: sanitizeStringValue(description),
+      tags: sanitizeStringArray(tags),
+      start_date: parsedStart ?? null,
+      end_date: parsedEnd ?? null,
+      status: (normalizedStatus || 'active') as any,
+      spend: spendValue,
+    });
     return res.status(201).json({ ok: true, campaign: { id: String(campaign._id), name: campaign.name } });
   } catch (e) {
     console.error('[m06/createCampaign]', e);
@@ -1052,17 +1313,48 @@ export async function updateCampaign(req: Request, res: Response) {
   try {
     const id = req.params.id;
     if (!mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'invalid id' });
-    const { name, channel, startDate, endDate, description, tags, status, spend } = req.body || {};
+    const { campaign_id, campaignId, name, channel, start_date, startDate, end_date, endDate, description, tags, status, spend } = req.body || {};
     const camp = await Campaign.findById(id).exec();
     if (!camp) return res.status(404).json({ error: 'not_found' });
-    if (name) camp.name = name;
-    if (channel) camp.channel = channel;
-    if (description !== undefined) camp.description = description;
-    if (tags !== undefined) camp.tags = Array.isArray(tags) ? (tags as string[]) : null;
-    if (startDate !== undefined) camp.start_date = startDate ? new Date(startDate) : null;
-    if (endDate !== undefined) camp.end_date = endDate ? new Date(endDate) : null;
-    if (spend !== undefined) camp.spend = Number(spend) || 0;
-    if (status) camp.status = status;
+    const nextCampaignId = requireStringId(campaign_id ?? campaignId);
+    if (nextCampaignId && nextCampaignId !== camp.campaign_id) {
+      const dup = await Campaign.findOne({ project_id: camp.project_id, campaign_id: nextCampaignId, _id: { $ne: camp._id } }).select('_id').lean();
+      if (dup) return res.status(409).json({ error: 'duplicate_campaign_id' });
+      camp.campaign_id = nextCampaignId;
+    }
+    if (name !== undefined) {
+      const campaignName = sanitizeStringValue(name);
+      if (!campaignName) return res.status(400).json({ error: 'name_required' });
+      camp.name = campaignName;
+    }
+    if (channel !== undefined) {
+      const normalizedChannel = normalizeEnumValue(channel, CAMPAIGN_CHANNELS);
+      if (!normalizedChannel) return res.status(400).json({ error: 'invalid_channel', allowed: Array.from(CAMPAIGN_CHANNELS) });
+      camp.channel = normalizedChannel as any;
+    }
+    if (description !== undefined) camp.description = sanitizeStringValue(description);
+    if (tags !== undefined) camp.tags = sanitizeStringArray(tags);
+    if (start_date !== undefined || startDate !== undefined) {
+      const parsedStart = parseDateInput(start_date ?? startDate ?? null);
+      if ((start_date ?? startDate) && !parsedStart) return res.status(400).json({ error: 'invalid_start_date' });
+      camp.start_date = parsedStart ?? null;
+    }
+    if (end_date !== undefined || endDate !== undefined) {
+      const parsedEnd = parseDateInput(end_date ?? endDate ?? null);
+      if ((end_date ?? endDate) && !parsedEnd) return res.status(400).json({ error: 'invalid_end_date' });
+      camp.end_date = parsedEnd ?? null;
+    }
+    if (camp.start_date && camp.end_date && camp.end_date.getTime() < camp.start_date.getTime()) return res.status(400).json({ error: 'invalid_date_range' });
+    if (spend !== undefined) {
+      const spendValue = sanitizeNumberValue(spend);
+      if (spendValue === null || spendValue < 0) return res.status(400).json({ error: 'invalid_spend' });
+      camp.spend = spendValue;
+    }
+    if (status !== undefined) {
+      const normalizedStatus = normalizeEnumValue(status, CAMPAIGN_STATUSES);
+      if (!normalizedStatus) return res.status(400).json({ error: 'invalid_status', allowed: Array.from(CAMPAIGN_STATUSES) });
+      camp.status = normalizedStatus as any;
+    }
     await camp.save();
     return res.json({ ok: true });
   } catch (e) {
@@ -1094,9 +1386,9 @@ export async function addSpendEntry(req: Request, res: Response) {
     if (!date || amount === undefined) return res.status(400).json({ error: 'date_amount_required' });
     const camp = await Campaign.findById(id).exec();
     if (!camp) return res.status(404).json({ error: 'not_found' });
-    const projectOid = camp.project_id;
+    const projectKey = camp.project_id;
     const ds = new Date(date);
-    const spend = await CampaignSpend.create({ campaign_id: camp._id, project_id: projectOid, date: ds, amount: Number(amount) || 0, source: source || 'manual', note: note || null });
+    const spend = await CampaignSpend.create({ campaign_id: String(camp.campaign_id), project_id: projectKey, date: ds, amount: Number(amount) || 0, source: source || 'manual', note: note || null });
     // update total spend on campaign
     camp.spend = (Number(camp.spend) || 0) + Number(amount || 0);
     await camp.save();
@@ -1130,7 +1422,7 @@ export async function uploadSpendCSV(req: Request, res: Response) {
       const a = parseFloat((cols[acol] || '0').replace(/[^0-9.-]/g, '')) || 0;
       const date = new Date(String(d));
       if (isNaN(date.getTime())) continue;
-      await CampaignSpend.create({ campaign_id: camp._id, project_id: camp.project_id, date, amount: a, source: 'csv' });
+      await CampaignSpend.create({ campaign_id: String(camp.campaign_id), project_id: camp.project_id, date, amount: a, source: 'csv' });
       camp.spend = (Number(camp.spend) || 0) + a;
       inserted++;
     }
@@ -1147,8 +1439,7 @@ export async function uploadSpendCSVMulti(req: Request, res: Response) {
   try {
     const { csv, campaignColumn, dateColumn, amountColumn, startRow } = req.body || {};
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
     const lines = csv.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     if (lines.length < 2) return res.status(400).json({ error: 'csv_no_rows' });
@@ -1182,15 +1473,15 @@ export async function uploadSpendCSVMulti(req: Request, res: Response) {
       let campDoc = campaignMap[key];
       if (!campDoc) {
         // try to find existing campaign by campaign_id or name within this project
-        const found = await Campaign.findOne({ project_id: projectOid, $or: [{ campaign_id: key }, { name: key }] }).exec();
+        const found = await Campaign.findOne({ project_id: projectId, $or: [{ campaign_id: key }, { name: key }] }).exec();
         if (found) campDoc = found;
         else {
-          campDoc = await Campaign.create({ campaign_id: `camp-${Date.now()}-${Math.floor(Math.random()*1000)}`, project_id: projectOid, channel: 'other', name: key || `Imported ${Date.now()}`, description: null, tags: [], spend: 0 });
+          campDoc = await Campaign.create({ campaign_id: `camp-${Date.now()}-${Math.floor(Math.random()*1000)}`, project_id: projectId, channel: 'other', name: key || `Imported ${Date.now()}`, description: null, tags: [], spend: 0 });
         }
         campaignMap[key] = campDoc;
       }
 
-      await CampaignSpend.create({ campaign_id: campDoc._id, project_id: projectOid, date, amount: a, source: 'csv' });
+      await CampaignSpend.create({ campaign_id: String(campDoc.campaign_id), project_id: projectId, date, amount: a, source: 'csv' });
       campDoc.spend = (Number(campDoc.spend) || 0) + a;
       inserted++;
     }
@@ -1264,18 +1555,16 @@ export async function deleteCampaignPermanent(req: Request, res: Response) {
 export async function listModule6Leads(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     const search = (req.query.search as string | undefined)?.trim();
     const includeArchived = req.query.includeArchived === 'true';
     const limit = Math.min(200, Math.max(1, Number(req.query.limit || 100)));
-    const match: Record<string, any> = { project_id: projectOid };
+    const match: Record<string, any> = { project_id: projectId };
     if (!includeArchived) match.is_archived = { $ne: true };
     if (search) {
       const regex = new RegExp(sanitizeRegex(search), 'i');
       match.$or = [
         { lead_id: regex },
-        { name: regex },
         { full_name: regex },
         { first_name: regex },
         { last_name: regex },
@@ -1300,16 +1589,16 @@ export async function listModule6Leads(req: Request, res: Response) {
 export async function createModule6Lead(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const leadId = sanitizeStringValue(req.body?.lead_id ?? req.body?.leadId);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+    const validation = validateLeadValueFields(req.body || {});
+    if (validation.errors.length > 0) return res.status(400).json({ error: 'validation_failed', fieldErrors: validation.errors });
+    const leadId = validation.leadId;
     if (!leadId) return res.status(400).json({ error: 'lead_id_required' });
 
-    const exists = await Module6Lead.findOne({ project_id: projectOid, lead_id: leadId }).select('_id').lean();
+    const exists = await Module6Lead.findOne({ project_id: projectId, lead_id: leadId }).select('_id').lean();
     if (exists) return res.status(409).json({ error: 'duplicate_lead_id' });
 
-    const payload = buildModule6LeadPayload(req.body || {});
-    const doc = await Module6Lead.create({ project_id: projectOid, lead_id: leadId, ...payload });
+    const doc = await Module6Lead.create({ project_id: projectId, row_number: validation.rowNumber, lead_id: leadId, ...validation.payload });
     await syncModule6LeadToFunnelLead(projectId, doc);
     return res.status(201).json({ ok: true, lead: serializeModule6Lead(doc) });
   } catch (e) {
@@ -1322,22 +1611,25 @@ export async function updateModule6Lead(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     const id = req.params.id;
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     if (!id || !mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'invalid_id' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
 
-    const doc = await Module6Lead.findOne({ _id: id, project_id: projectOid }).exec();
+    const doc = await Module6Lead.findOne({ _id: id, project_id: projectId }).exec();
     if (!doc) return res.status(404).json({ error: 'not_found' });
 
     const nextLeadId = sanitizeStringValue(req.body?.lead_id ?? req.body?.leadId);
     if (nextLeadId && nextLeadId !== doc.lead_id) {
-      const dup = await Module6Lead.findOne({ project_id: projectOid, lead_id: nextLeadId, _id: { $ne: doc._id } }).select('_id').lean();
+      const dup = await Module6Lead.findOne({ project_id: projectId, lead_id: nextLeadId, _id: { $ne: doc._id } }).select('_id').lean();
       if (dup) return res.status(409).json({ error: 'duplicate_lead_id' });
       doc.lead_id = nextLeadId;
     }
 
-    const payload = buildModule6LeadPayload(req.body || {});
-    Object.assign(doc, payload);
+    const validation = validateLeadValueFields({ ...req.body, lead_id: nextLeadId || doc.lead_id });
+    if (validation.errors.length > 0) return res.status(400).json({ error: 'validation_failed', fieldErrors: validation.errors });
+    if (req.body?.row_number !== undefined) {
+      doc.row_number = validation.rowNumber;
+    }
+    Object.assign(doc, validation.payload);
     await doc.save();
     await syncModule6LeadToFunnelLead(projectId, doc);
     return res.json({ ok: true, lead: serializeModule6Lead(doc) });
@@ -1351,10 +1643,9 @@ export async function archiveModule6Lead(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     const id = req.params.id;
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     if (!id || !mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'invalid_id' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const doc = await Module6Lead.findOne({ _id: id, project_id: projectOid }).exec();
+    const doc = await Module6Lead.findOne({ _id: id, project_id: projectId }).exec();
     if (!doc) return res.status(404).json({ error: 'not_found' });
     doc.is_archived = true;
     await doc.save();
@@ -1366,110 +1657,92 @@ export async function archiveModule6Lead(req: Request, res: Response) {
   }
 }
 
-export async function importModule6LeadsCSV(req: Request, res: Response) {
+export async function validateModule6LeadsCSV(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     const { csv, map, startRow, endRow } = req.body || {};
     if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
 
-    const lines = csv.split(/\r?\n/).filter(l => l.trim().length > 0);
-    if (lines.length < 2) return res.status(400).json({ error: 'csv_no_rows' });
-    const header = (lines[0] || '').split(',').map(h => h.trim());
+    const validation = await validateModule6LeadCsvImport({
+      projectId,
+      csv,
+      map: map && typeof map === 'object' ? map : undefined,
+      startRow,
+      endRow,
+    });
 
-    const mapping = map && typeof map === 'object' ? map : {
-      lead_id: 'lead_id',
-      name: 'name',
-      full_name: 'full_name',
-      first_name: 'first_name',
-      last_name: 'last_name',
-      company: 'company',
-      source: 'source',
-      owner: 'owner',
-      industry: 'industry',
-      region: 'region',
-      lead_score: 'lead_score',
-      intent_score: 'intent_score',
-      email: 'email',
-      job_title: 'job_title',
-      segment: 'segment',
-    };
-
-    const indexOf = (value: string | null | undefined): number | null => {
-      if (!value) return null;
-      const idx = header.indexOf(String(value));
-      if (idx >= 0) return idx;
-      const lower = String(value).toLowerCase();
-      const match = header.findIndex(h => h.toLowerCase() === lower);
-      return match >= 0 ? match : null;
-    };
-
-    // Row number mapping removed
-    const rowIdx: number | null = null;
-    const leadIdIdx = indexOf(mapping.lead_id ?? mapping.lead);
-    const nameIdx = indexOf(mapping.name);
-    const fullNameIdx = indexOf(mapping.full_name);
-    const firstNameIdx = indexOf(mapping.first_name);
-    const lastNameIdx = indexOf(mapping.last_name);
-    const companyIdx = indexOf(mapping.company);
-    const sourceIdx = indexOf(mapping.source);
-    const ownerIdx = indexOf(mapping.owner);
-    const industryIdx = indexOf(mapping.industry);
-    const regionIdx = indexOf(mapping.region);
-    const leadScoreIdx = indexOf(mapping.lead_score);
-    const intentScoreIdx = indexOf(mapping.intent_score);
-    const emailIdx = indexOf(mapping.email);
-    const jobTitleIdx = indexOf(mapping.job_title);
-    const segmentIdx = indexOf(mapping.segment);
-
-    if (leadIdIdx === null) {
-      return res.status(400).json({ error: 'required_mapping_missing', required: ['lead_id'], header });
+    if (!validation.ok || !('summary' in validation) || !validation.summary || !validation.selectedRange || !validation.validRows || !validation.invalidRows) {
+      return res.status(400).json(validation);
     }
 
-    const firstDataRow = Number(startRow || 1);
-    const lastDataRow = endRow ? Number(endRow) : (lines.length - 1);
-    if (firstDataRow < 1 || lastDataRow < firstDataRow) return res.status(400).json({ error: 'invalid_row_range' });
+    return res.json({
+      ok: true,
+      header: validation.header,
+      mapping: validation.mapping,
+      selectedRange: validation.selectedRange,
+      summary: validation.summary,
+      rowResults: validation.rowResults,
+    });
+  } catch (e: any) {
+    console.error('[m06/validateModule6LeadsCSV]', e);
+    if (e instanceof Error && e.message === 'csv_no_rows') {
+      return res.status(400).json({ error: 'csv_no_rows' });
+    }
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+export async function importModule6LeadsCSV(req: Request, res: Response) {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+    const { csv, map, startRow, endRow, allowPartial } = req.body || {};
+    if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
+    const validation = await validateModule6LeadCsvImport({
+      projectId,
+      csv,
+      map: map && typeof map === 'object' ? map : undefined,
+      startRow,
+      endRow,
+    });
+
+    if (!validation.ok || !validation.summary || !validation.selectedRange || !validation.validRows || !validation.invalidRows) {
+      return res.status(400).json(validation);
+    }
+    const importValidation = validation as typeof validation & {
+      summary: NonNullable<typeof validation.summary>;
+      selectedRange: NonNullable<typeof validation.selectedRange>;
+      validRows: NonNullable<typeof validation.validRows>;
+      invalidRows: NonNullable<typeof validation.invalidRows>;
+    };
+    if (importValidation.summary.invalidRows > 0 && !allowPartial) {
+      return res.status(400).json({ error: 'invalid_rows_present', validation: {
+        header: importValidation.header,
+        mapping: importValidation.mapping,
+        selectedRange: importValidation.selectedRange,
+        summary: importValidation.summary,
+        rowResults: importValidation.rowResults,
+      } });
+    }
 
     let processed = 0;
     let inserted = 0;
     let updated = 0;
-    let failed = 0;
+    let failed = importValidation.summary.invalidRows;
     let duplicates = 0;
-    const failedRows: Array<{ row: number; error: string }> = [];
+    const failedRows: Array<{ row: number; error: string }> = importValidation.invalidRows.map((row) => ({
+      row: row.rowNumber,
+      error: row.errors.map((error) => error.message).join('; '),
+    }));
 
-    for (let i = firstDataRow; i <= lastDataRow; i++) {
+    for (const row of importValidation.validRows) {
       processed++;
-      const rowNumber = i + 1; // account for header line
-      const columns = (lines[i] || '').split(',').map(c => c.trim());
-      const leadIdentifier = (columns[leadIdIdx] || '').trim();
-      if (!leadIdentifier) {
-        failed++; failedRows.push({ row: rowNumber, error: 'lead_id_missing' });
-        continue;
-      }
-
-      // Row number value removed
-
-      const payload = buildModule6LeadPayload({
-        name: nameIdx !== null ? columns[nameIdx] : null,
-        full_name: fullNameIdx !== null ? columns[fullNameIdx] : null,
-        first_name: firstNameIdx !== null ? columns[firstNameIdx] : null,
-        last_name: lastNameIdx !== null ? columns[lastNameIdx] : null,
-        company: companyIdx !== null ? columns[companyIdx] : null,
-        source: sourceIdx !== null ? columns[sourceIdx] : null,
-        owner: ownerIdx !== null ? columns[ownerIdx] : null,
-        industry: industryIdx !== null ? columns[industryIdx] : null,
-        region: regionIdx !== null ? columns[regionIdx] : null,
-        lead_score: leadScoreIdx !== null ? columns[leadScoreIdx] : null,
-        intent_score: intentScoreIdx !== null ? columns[intentScoreIdx] : null,
-        email: emailIdx !== null ? columns[emailIdx] : null,
-        job_title: jobTitleIdx !== null ? columns[jobTitleIdx] : null,
-        segment: segmentIdx !== null ? columns[segmentIdx] : null,
-        raw: Object.fromEntries(header.map((key, idx) => [key, columns[idx] ?? ''])),
-      });
+      const leadIdentifier = row.mapped.lead_id;
+      const { lead_id: _leadId, ...payload } = row.mapped as Record<string, any>;
 
       try {
-        const existing = await Module6Lead.findOne({ project_id: projectOid, lead_id: leadIdentifier }).exec();
+        const existing = await Module6Lead.findOne({ project_id: projectId, lead_id: leadIdentifier }).exec();
         if (existing) {
           Object.assign(existing, payload);
           await existing.save();
@@ -1479,7 +1752,7 @@ export async function importModule6LeadsCSV(req: Request, res: Response) {
           continue;
         }
         const doc = await Module6Lead.create({
-          project_id: projectOid,
+          project_id: projectId,
           lead_id: leadIdentifier,
           ...payload,
         });
@@ -1487,13 +1760,27 @@ export async function importModule6LeadsCSV(req: Request, res: Response) {
         inserted++;
       } catch (err: any) {
         failed++;
-        failedRows.push({ row: rowNumber, error: err.code === 11000 ? 'duplicate_lead_id' : (err.message || 'insert_failed') });
+        failedRows.push({ row: row.rowNumber, error: err.code === 11000 ? 'duplicate_lead_id' : (err.message || 'insert_failed') });
       }
     }
 
-    return res.json({ ok: true, processed, inserted, updated, failed, duplicates, failedRows, selected: (lastDataRow - firstDataRow + 1) });
+    return res.json({
+      ok: true,
+      processed,
+      inserted,
+      updated,
+      failed,
+      duplicates,
+      failedRows,
+      selected: importValidation.selectedRange.selectedRows,
+      skipped: importValidation.summary.invalidRows,
+      warnings: importValidation.summary.warningRows,
+    });
   } catch (e) {
     console.error('[m06/importModule6LeadsCSV]', e);
+    if (e instanceof Error && e.message === 'csv_no_rows') {
+      return res.status(400).json({ error: 'csv_no_rows' });
+    }
     return res.status(500).json({ error: 'internal' });
   }
 }
@@ -1501,11 +1788,10 @@ export async function importModule6LeadsCSV(req: Request, res: Response) {
 export async function searchModule6Leads(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.json({ leads: [] });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
+    if (!projectId) return res.json({ leads: [] });
     const query = (req.query.q as string | undefined)?.trim();
     const limit = Math.min(50, Math.max(1, Number(req.query.limit || 15)));
-    const match: Record<string, any> = { project_id: projectOid };
+    const match: Record<string, any> = { project_id: projectId };
     match.is_archived = { $ne: true };
     if (query) {
       if (/^\d+$/.test(query)) {
@@ -1514,7 +1800,6 @@ export async function searchModule6Leads(req: Request, res: Response) {
         const regex = new RegExp(sanitizeRegex(query), 'i');
         match.$or = [
           { lead_id: regex },
-          { name: regex },
           { full_name: regex },
           { first_name: regex },
           { last_name: regex },
@@ -1528,8 +1813,7 @@ export async function searchModule6Leads(req: Request, res: Response) {
       return res.json({ leads: leads.map(l => ({
         _id: String(l._id),
         lead_id: l.lead_id,
-        name: l.full_name || l.name || `${l.first_name || ''} ${l.last_name || ''}`.trim() || null,
-        full_name: l.full_name || l.name || null,
+        full_name: l.full_name || `${l.first_name || ''} ${l.last_name || ''}`.trim() || null,
         company: l.company || null,
         email: l.email || null,
       })) });
@@ -1563,8 +1847,7 @@ export async function searchModule6Leads(req: Request, res: Response) {
 export async function importCampaignsCSV(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     const { csv, map } = req.body || {};
     if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
     if (!map || typeof map !== 'object') return res.status(400).json({ error: 'mapping_required' });
@@ -1586,6 +1869,8 @@ export async function importCampaignsCSV(req: Request, res: Response) {
     const descIdx = idx(map.description, null);
     const spendIdx = idx(map.spend, null);
     const campaignIdIdx = idx(map.campaign_id, null);
+    const statusIdx = idx(map.status, null);
+    const tagsIdx = idx(map.tags, null);
 
     if (nameIdx === null || channelIdx === null) {
       return res.status(400).json({ error: 'required_mapping_missing', required: ['name', 'channel'], header });
@@ -1614,11 +1899,11 @@ export async function importCampaignsCSV(req: Request, res: Response) {
       const finalChannel = allowedChannels.has(channel) ? channel : 'other';
 
       // Duplicate name: optionally skip (soft rule)
-      const dup = await Campaign.findOne({ project_id: projectOid, name }).lean();
+      const dup = await Campaign.findOne({ project_id: projectId, name }).lean();
       if (dup) { skipped++; errors.push({ row: rowNum, reason: 'duplicate_name' }); continue; }
 
       if (campaignIdentifier) {
-        const dupId = await Campaign.findOne({ project_id: projectOid, campaign_id: campaignIdentifier }).lean();
+        const dupId = await Campaign.findOne({ project_id: projectId, campaign_id: campaignIdentifier }).lean();
         if (dupId) { skipped++; errors.push({ row: rowNum, reason: 'duplicate_campaign_id' }); continue; }
       }
 
@@ -1633,19 +1918,24 @@ export async function importCampaignsCSV(req: Request, res: Response) {
         if (!isNaN(ed.getTime())) endDate = ed; else errors.push({ row: rowNum, reason: 'invalid_end_date' });
       }
       const spend = spendRaw ? Number(String(spendRaw).replace(/[^0-9.-]/g, '')) : 0;
+      if (!Number.isFinite(spend) || spend < 0) { skipped++; errors.push({ row: rowNum, reason: 'invalid_spend' }); continue; }
+      const statusValue = statusIdx !== null ? normalizeEnumValue(cols[statusIdx], CAMPAIGN_STATUSES, 'active') : 'active';
+      if (statusIdx !== null && !statusValue) { skipped++; errors.push({ row: rowNum, reason: 'invalid_status' }); continue; }
+      const tagValues = tagsIdx !== null ? String(cols[tagsIdx] || '').split('|').map(s => s.trim()).filter(Boolean) : [];
 
       const assignedCampaignId = campaignIdentifier || `camp-${Date.now()}-${Math.floor(Math.random()*1000)}`;
 
       await Campaign.create({
         campaign_id: assignedCampaignId,
-        project_id: projectOid,
+        project_id: projectId,
         name,
         channel: finalChannel as any,
         start_date: startDate,
         end_date: endDate,
         description: desc || undefined,
+        tags: tagValues,
         spend: spend || 0,
-        status: 'active' as any,
+        status: statusValue as any,
       });
       created++;
     }
@@ -1677,19 +1967,20 @@ export async function deleteDeal(req: Request, res: Response) {
 export async function createDeal(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const { deal_id, lead_id, amount, currency, closed_won, closed_at, stage, notes } = req.body || {};
-    if (!lead_id) return res.status(400).json({ error: 'lead_id_required' });
-    const resolvedLeadId = await resolveLeadObjectId(projectOid, String(lead_id), {});
-    if (!resolvedLeadId) return res.status(400).json({ error: 'lead_not_found' });
-    const revenueNum = Number(amount);
-    if (isNaN(revenueNum) || revenueNum < 0) return res.status(400).json({ error: 'amount_invalid' });
-    // currency enforcement: only USD supported
-    if (currency && typeof currency === 'string' && currency.toUpperCase() !== 'USD') {
-      return res.status(400).json({ error: 'currency_must_be_usd', message: 'System currently only handles U.S. dollars' });
-    }
-    const cw = Boolean(closed_won);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+    const { deal_id, lead_id, revenue, amount, currency, closed_won, closed_at } = req.body || {};
+    const dealKey = requireStringId(deal_id);
+    const leadKey = requireStringId(lead_id);
+    if (!dealKey) return res.status(400).json({ error: 'deal_id_required' });
+    if (!leadKey) return res.status(400).json({ error: 'lead_id_required' });
+    const lead = await Module6Lead.findOne({ project_id: projectId, lead_id: leadKey }).select('_id').lean();
+    if (!lead) return res.status(400).json({ error: 'lead_not_found' });
+    const revenueNum = sanitizeNumberValue(revenue ?? amount);
+    if (revenueNum === null || revenueNum < 0) return res.status(400).json({ error: 'revenue_invalid' });
+    const currencyValue = currency === undefined ? null : normalizeCurrency(currency);
+    if (currency !== undefined && currencyValue === null) return res.status(400).json({ error: 'invalid_currency', allowed: Array.from(DEAL_CURRENCIES) });
+    const cw = sanitizeBooleanValue(closed_won);
+    if (cw === null) return res.status(400).json({ error: 'closed_won_required' });
     let closedAt: Date | undefined = undefined;
     if (cw) {
       if (!closed_at) return res.status(400).json({ error: 'closed_at_required' });
@@ -1697,24 +1988,19 @@ export async function createDeal(req: Request, res: Response) {
       if (isNaN(dt.getTime())) return res.status(400).json({ error: 'closed_at_invalid' });
       closedAt = dt;
     }
-    // unique deal_id if provided
-    if (deal_id) {
-      const dup = await Deal.findOne({ deal_id }).lean();
-      if (dup) return res.status(409).json({ error: 'duplicate_deal_id' });
-    }
+    const dup = await Deal.findOne({ project_id: projectId, deal_id: dealKey }).lean();
+    if (dup) return res.status(409).json({ error: 'duplicate_deal_id' });
     // closed deals must have a non-zero amount
     if (cw && (!revenueNum || revenueNum <= 0)) return res.status(400).json({ error: 'closed_deal_amount_required', message: 'Closed deals must have a non-zero amount' });
 
     const doc = await Deal.create({
-      deal_id: deal_id || `deal-${Date.now()}`,
-      lead_id: new mongoose.Types.ObjectId(resolvedLeadId),
-      project_id: projectOid,
-      revenue: mongoose.Types.Decimal128.fromString(String(revenueNum)),
+      deal_id: dealKey,
+      lead_id: leadKey,
+      project_id: projectId,
+      revenue: revenueNum,
+      currency: currencyValue,
       closed_won: cw,
       closed_at: closedAt,
-      ...(currency ? { currency } : {}),
-      ...(stage ? { stage } : {}),
-      ...(notes ? { notes } : {}),
     });
     return res.status(201).json({ ok: true, deal: { id: String(doc._id) } });
   } catch (e) {
@@ -1726,17 +2012,16 @@ export async function createDeal(req: Request, res: Response) {
 export async function listDeals(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const match: any = { project_id: new mongoose.Types.ObjectId(projectId) };
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+    const match: any = { project_id: projectId };
     const leadId = (req.query.leadId as string) || '';
     const from = (req.query.from as string) || '';
     const to = (req.query.to as string) || '';
     const status = (req.query.status as string) || '';
     const minAmount = req.query.minAmount !== undefined ? Number(req.query.minAmount) : undefined;
     const maxAmount = req.query.maxAmount !== undefined ? Number(req.query.maxAmount) : undefined;
-    const stage = (req.query.stage as string) || '';
     const includeArchived = req.query.includeArchived === 'true';
-    if (leadId && mongoose.isValidObjectId(leadId)) match.lead_id = new mongoose.Types.ObjectId(leadId);
+    if (leadId) match.lead_id = leadId;
     if (from || to) {
       match.closed_at = {};
       if (from) match.closed_at.$gte = new Date(from);
@@ -1749,21 +2034,19 @@ export async function listDeals(req: Request, res: Response) {
     }
     if (minAmount !== undefined) match.revenue = { ...(match.revenue || {}), $gte: minAmount };
     if (maxAmount !== undefined) match.revenue = { ...(match.revenue || {}), $lte: maxAmount };
-    if (stage) match.stage = stage;
-    if (!includeArchived) match.status = { $ne: 'archived' };
+    void includeArchived;
     const rows = await Deal.find(match).sort({ closed_at: -1, createdAt: -1 }).limit(500).lean();
     return res.json(rows.map(r => ({
       _id: String(r._id),
       deal_id: r.deal_id,
+      project_id: String(r.project_id),
       lead_id: String(r.lead_id),
       // revenue stored as Decimal128 — return string to avoid precision loss in JSON
-      amount: r.revenue ? String((r as any).revenue) : '0',
-      currency: (r as any).currency || 'USD',
+      revenue: Number(r.revenue) || 0,
+      currency: (r as any).currency || null,
       closed_won: r.closed_won,
       closed_at: r.closed_at,
-      stage: (r as any).stage || undefined,
-      notes: (r as any).notes || undefined,
-      status: (r as any).status || 'active'
+      
     })));
   } catch (e) {
     console.error('[m06/listDeals]', e);
@@ -1777,19 +2060,38 @@ export async function updateDeal(req: Request, res: Response) {
     if (!mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'invalid_id' });
     const d = await Deal.findById(id).exec();
     if (!d) return res.status(404).json({ error: 'not_found' });
-    const { amount, currency, closed_won, closed_at, stage, notes } = req.body || {};
-    if (amount !== undefined) {
-      const v = Number(amount);
-      if (isNaN(v) || v < 0) return res.status(400).json({ error: 'amount_invalid' });
-      (d as any).revenue = mongoose.Types.Decimal128.fromString(String(v));
+    const { deal_id, lead_id, revenue, amount, currency, closed_won, closed_at } = req.body || {};
+    if (deal_id !== undefined) {
+      const nextDealId = requireStringId(deal_id);
+      if (!nextDealId) return res.status(400).json({ error: 'deal_id_required' });
+      if (nextDealId !== d.deal_id) {
+        const dup = await Deal.findOne({ project_id: d.project_id, deal_id: nextDealId, _id: { $ne: d._id } }).select('_id').lean();
+        if (dup) return res.status(409).json({ error: 'duplicate_deal_id' });
+      }
+      d.deal_id = nextDealId;
+    }
+    if (lead_id !== undefined) {
+      const leadKey = requireStringId(lead_id);
+      if (!leadKey) return res.status(400).json({ error: 'lead_id_required' });
+      const lead = await Module6Lead.findOne({ project_id: String(d.project_id), lead_id: leadKey }).select('_id').lean();
+      if (!lead) return res.status(400).json({ error: 'lead_not_found' });
+      d.lead_id = leadKey;
+    }
+    if (revenue !== undefined || amount !== undefined) {
+      const value = sanitizeNumberValue(revenue ?? amount);
+      if (value === null || value < 0) return res.status(400).json({ error: 'revenue_invalid' });
+      d.revenue = value as any;
     }
     if (currency !== undefined) {
-      if (typeof currency === 'string' && currency.toUpperCase() !== 'USD') {
-        return res.status(400).json({ error: 'currency_must_be_usd', message: 'System currently only handles U.S. dollars' });
-      }
-      (d as any).currency = currency;
+      const currencyValue = normalizeCurrency(currency);
+      if (currencyValue === null) return res.status(400).json({ error: 'invalid_currency', allowed: Array.from(DEAL_CURRENCIES) });
+      (d as any).currency = currencyValue;
     }
-    if (closed_won !== undefined) d.closed_won = Boolean(closed_won);
+    if (closed_won !== undefined) {
+      const cw = sanitizeBooleanValue(closed_won);
+      if (cw === null) return res.status(400).json({ error: 'closed_won_required' });
+      d.closed_won = cw;
+    }
     if (closed_at !== undefined) {
       if (closed_at) {
         const dt = new Date(closed_at);
@@ -1799,12 +2101,9 @@ export async function updateDeal(req: Request, res: Response) {
         d.closed_at = null;
       }
     }
-    if (stage !== undefined) (d as any).stage = stage || undefined;
-    if (notes !== undefined) (d as any).notes = notes || undefined;
-
     // enforce closed deals have non-zero amount
     try {
-      const revNum = d.revenue ? Number((d.revenue as any).toString()) : 0;
+      const revNum = Number(d.revenue || 0);
       if (d.closed_won && (!revNum || revNum <= 0)) {
         return res.status(400).json({ error: 'closed_deal_amount_required', message: 'Closed deals must have a non-zero amount' });
       }
@@ -1826,7 +2125,7 @@ export async function archiveDeal(req: Request, res: Response) {
     if (!mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'invalid_id' });
     const d = await Deal.findById(id).exec();
     if (!d) return res.status(404).json({ error: 'not_found' });
-    (d as any).status = 'archived';
+    d.closed_won = false;
     await d.save();
     return res.json({ ok: true });
   } catch (e) {
@@ -1845,7 +2144,6 @@ export async function deleteDealPermanent(req: Request, res: Response) {
     if (!ok) return res.status(403).json({ error: 'not_authorized' });
     const d = await Deal.findById(id).lean();
     if (!d) return res.status(404).json({ error: 'not_found' });
-    if ((d as any).status !== 'archived') return res.status(400).json({ error: 'not_archived', message: 'Deal must be archived before permanent deletion.' });
     await Deal.deleteOne({ _id: id }).exec();
     await AttributionResult.deleteMany({ deal_id: id }).exec();
     return res.json({ ok: true, deleted: true });
@@ -1858,12 +2156,11 @@ export async function deleteDealPermanent(req: Request, res: Response) {
 export async function importDealsCSV(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     const { csv, map, startRow, endRow, duplicatePolicy } = req.body || {};
     if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'csv_required' });
     if (!map || typeof map !== 'object') return res.status(400).json({ error: 'mapping_required' });
     const lines = csv.split(/\r?\n/).filter(l => l.trim().length > 0);
-    const projectOid = new mongoose.Types.ObjectId(projectId);
     if (lines.length < 2) return res.status(400).json({ error: 'csv_no_rows' });
     const header = (lines[0] || '').split(',').map(h => h.trim());
 
@@ -1887,13 +2184,11 @@ export async function importDealsCSV(req: Request, res: Response) {
     }
 
     const dealIdIdx = idx(map.deal_id, null) ?? findByAliases(['deal_id','id','external_id']);
-    const leadIdx = idx(map.lead, null) ?? findByAliases(['lead','lead_id','email','lead_email']);
-    const amountIdx = idx(map.amount, null) ?? findByAliases(['amount','value','revenue']);
+    const leadIdx = idx(map.lead, null) ?? idx(map.lead_id, null) ?? findByAliases(['lead','lead_id','email','lead_email']);
+    const amountIdx = idx(map.amount, null) ?? idx(map.revenue, null) ?? findByAliases(['amount','value','revenue']);
     const currencyIdx = idx(map.currency, null) ?? findByAliases(['currency','curr']);
     const wonIdx = idx(map.closed_won, null) ?? findByAliases(['closed_won','won','is_won','status']);
     const closedAtIdx = idx(map.closed_at, null) ?? findByAliases(['closed_at','closed','close_date']);
-    const stageIdx = idx(map.stage, null) ?? findByAliases(['stage','pipeline_stage','status']);
-    const notesIdx = idx(map.notes, null) ?? findByAliases(['notes','note','comments']);
 
     if (leadIdx === null || amountIdx === null) {
       return res.status(400).json({ error: 'required_mapping_missing', required: ['lead','amount'], header });
@@ -1906,9 +2201,6 @@ export async function importDealsCSV(req: Request, res: Response) {
     let processed = 0, inserted = 0, failed = 0, duplicates = 0;
     const failedRows: Array<{ row: number; error: string; raw?: string; lead?: string; amount?: string }> = [];
 
-    // cache lead lookups by id or email string
-    const leadCache: Record<string, string> = {};
-
     for (let i = srow; i <= erow; i++) {
       processed++;
       const rowNum = i + 1;
@@ -1919,22 +2211,20 @@ export async function importDealsCSV(req: Request, res: Response) {
       const currency = currencyIdx !== null ? (cols[currencyIdx] || '') : '';
       const wonVal = wonIdx !== null ? (cols[wonIdx] || '') : '';
       const closedAtVal = closedAtIdx !== null ? (cols[closedAtIdx] || '') : '';
-      const stageVal = stageIdx !== null ? (cols[stageIdx] || '') : '';
-      const notesVal = notesIdx !== null ? (cols[notesIdx] || '') : '';
 
-      // resolve lead: numeric id or email
-        const leadId = await resolveLeadObjectId(projectOid, leadVal, leadCache);
-        if (!leadId) { failed++; failedRows.push({ row: rowNum, error: 'lead_not_found', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
+      const leadKey = sanitizeStringValue(leadVal);
+      if (!leadKey) { failed++; failedRows.push({ row: rowNum, error: 'lead_not_found', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
+      const leadDoc = await Module6Lead.findOne({ project_id: projectId, lead_id: leadKey }).select('_id').lean();
+      if (!leadDoc) { failed++; failedRows.push({ row: rowNum, error: 'lead_not_found', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
 
-        // currency enforcement: only USD supported
-        const currencyVal = currency ? String(currency).trim() : '';
-        if (currencyVal && currencyVal.toUpperCase() !== 'USD') {
-          failed++; failedRows.push({ row: rowNum, error: 'currency_not_usd', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue;
-        }
+      const currencyVal = currency ? normalizeCurrency(currency) : null;
+      if (currency && !currencyVal) {
+        failed++; failedRows.push({ row: rowNum, error: 'invalid_currency', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue;
+      }
 
-        const revenueRaw = String(amountRaw || '').replace(/[^0-9.-]/g, '');
-        const revenue = Number(revenueRaw);
-        if (isNaN(revenue) || revenue < 0) { failed++; failedRows.push({ row: rowNum, error: 'amount_invalid', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
+      const revenueRaw = String(amountRaw || '').replace(/[^0-9.-]/g, '');
+      const revenue = Number(revenueRaw);
+      if (isNaN(revenue) || revenue < 0) { failed++; failedRows.push({ row: rowNum, error: 'amount_invalid', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
 
       const cw = /^(1|true|yes|y)$/i.test(wonVal);
       let closedAt: Date | undefined = undefined;
@@ -1946,27 +2236,25 @@ export async function importDealsCSV(req: Request, res: Response) {
         if (!revenue || revenue <= 0) { failed++; failedRows.push({ row: rowNum, error: 'closed_deal_amount_required', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
       }
 
-      if (dealId) {
-        const dup = await Deal.findOne({ deal_id: dealId }).lean();
-        if (dup) {
-          duplicates++;
-          if (duplicatePolicy === 'skip') { continue; }
-          else { failed++; failedRows.push({ row: rowNum, error: 'duplicate_deal_id', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue; }
-        }
+      if (!dealId) {
+        failed++; failedRows.push({ row: rowNum, error: 'deal_id_missing', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue;
+      }
+      const dup = await Deal.findOne({ project_id: projectId, deal_id: dealId }).lean();
+      if (dup) {
+        duplicates++;
+        if (duplicatePolicy === 'skip') { continue; }
+        failed++; failedRows.push({ row: rowNum, error: 'duplicate_deal_id', raw: lines[i] || '', lead: leadVal, amount: amountRaw }); continue;
       }
 
       try {
         await Deal.create({
-          deal_id: dealId || `deal-${Date.now()}-${Math.floor(Math.random()*1000)}`,
-          lead_id: new mongoose.Types.ObjectId(leadId),
-          project_id: new mongoose.Types.ObjectId(projectId),
-          revenue: mongoose.Types.Decimal128.fromString(String(revenue)),
+          deal_id: dealId,
+          lead_id: leadKey,
+          project_id: projectId,
+          revenue,
+          currency: currencyVal,
           closed_won: cw,
           closed_at: closedAt,
-          // optional passthrough
-          ...(currency ? { currency } : {}),
-          ...(stageVal ? { stage: stageVal } : {}),
-          ...(notesVal ? { notes: notesVal } : {}),
         } as any);
         inserted++;
       } catch (ie:any) {
@@ -1985,8 +2273,7 @@ export async function importDealsCSV(req: Request, res: Response) {
 export async function runAttribution(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
 
     const toArray = (input: unknown): string[] => {
       if (Array.isArray(input)) return input.map(val => String(val));
@@ -2020,7 +2307,7 @@ export async function runAttribution(req: Request, res: Response) {
     const rawCampaignIds = new Set(
       toArray(campaignInput)
         .map(id => id.trim())
-        .filter(id => mongoose.isValidObjectId(id))
+        .filter(Boolean)
     );
 
     if (!dateFromRaw || !dateToRaw) return res.status(400).json({ error: 'date_range_required' });
@@ -2029,25 +2316,24 @@ export async function runAttribution(req: Request, res: Response) {
     if (Number.isNaN(dateFrom.getTime()) || Number.isNaN(dateTo.getTime())) return res.status(400).json({ error: 'invalid_dates' });
     if (dateFrom.getTime() > dateTo.getTime()) return res.status(400).json({ error: 'start_after_end' });
 
-    const existingRunning = await AttributionRun.findOne({ project_id: projectOid, status: 'running' }).lean();
+    const existingRunning = await AttributionRun.findOne({ project_id: projectId, status: 'running' }).lean();
     if (existingRunning) return res.status(409).json({ error: 'run_in_progress' });
 
     const allowedModels = ['first_touch', 'last_touch', 'linear'];
     const model = allowedModels.includes(modelType) ? modelType : 'linear';
 
-    const dealMatch: any = { project_id: projectOid, closed_at: { $gte: dateFrom, $lte: dateTo } };
+    const dealMatch: any = { project_id: projectId, closed_at: { $gte: dateFrom, $lte: dateTo } };
     if (closedWonOnly) dealMatch.closed_won = true;
     if (minAmount !== undefined && !Number.isNaN(minAmount)) dealMatch.revenue = { $gte: minAmount };
-    if (!includeArchived) dealMatch.status = { $ne: 'archived' };
 
     const deals = await Deal.find(dealMatch).lean();
     if (!deals || deals.length === 0) return res.status(400).json({ error: 'no_deals_in_window' });
 
-    const campaigns = await Campaign.find({ project_id: projectOid }).lean();
+    const campaigns = await Campaign.find({ project_id: projectId }).lean();
     const campaignMap: Record<string, any> = {};
     const projectCampaignIds = new Set<string>();
     for (const campaign of campaigns) {
-      const id = String(campaign._id);
+      const id = String(campaign.campaign_id);
       campaignMap[id] = campaign;
       projectCampaignIds.add(id);
     }
@@ -2140,11 +2426,11 @@ export async function runAttribution(req: Request, res: Response) {
 
       if (model === 'first_touch') {
         const cid = sequence[0];
-        results.push({ run_id: runObjectId, project_id: projectOid, deal_id: deal._id, campaign_id: new mongoose.Types.ObjectId(cid), revenue_share: revenue });
+        results.push({ run_id: String(runObjectId), project_id: projectId, deal_id: deal.deal_id, campaign_id: cid, revenue_share: revenue });
         totalAttributed += revenue;
       } else if (model === 'last_touch') {
         const cid = sequence[sequence.length - 1];
-        results.push({ run_id: runObjectId, project_id: projectOid, deal_id: deal._id, campaign_id: new mongoose.Types.ObjectId(cid), revenue_share: revenue });
+        results.push({ run_id: String(runObjectId), project_id: projectId, deal_id: deal.deal_id, campaign_id: cid, revenue_share: revenue });
         totalAttributed += revenue;
       } else {
         const n = sequence.length;
@@ -2155,7 +2441,7 @@ export async function runAttribution(req: Request, res: Response) {
           const isLast = i === sequence.length - 1;
           const share = isLast ? Number((revenue - allocated).toFixed(2)) : Number(perShare.toFixed(2));
           allocated += share;
-          results.push({ run_id: runObjectId, project_id: projectOid, deal_id: deal._id, campaign_id: new mongoose.Types.ObjectId(cid), revenue_share: share });
+          results.push({ run_id: String(runObjectId), project_id: projectId, deal_id: deal.deal_id, campaign_id: cid, revenue_share: share });
           totalAttributed += share;
         }
       }
@@ -2183,7 +2469,7 @@ export async function runAttribution(req: Request, res: Response) {
     const runDoc = await AttributionRun.create({
       _id: runObjectId,
       run_id: `run-${Date.now()}`,
-      project_id: projectOid,
+      project_id: projectId,
       model_type: model as any,
       timestamp: new Date(),
       status: 'success',
@@ -2252,9 +2538,8 @@ export async function runAttribution(req: Request, res: Response) {
 export async function listAttributionRuns(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const runs = await AttributionRun.find({ project_id: projectOid })
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+    const runs = await AttributionRun.find({ project_id: projectId })
       .sort({ timestamp: -1 })
       .select('run_id model_type status timestamp date_from date_to deal_count deals_with_journeys deals_without_journeys total_revenue attributed_revenue unattributed_revenue campaign_count meta')
       .lean();
@@ -2270,16 +2555,15 @@ export async function getAttributionRunSummary(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     const runId = req.params.id;
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     if (!runId || !mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'runId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
     const runOid = new mongoose.Types.ObjectId(runId);
-    const run = await AttributionRun.findOne({ _id: runOid, project_id: projectOid }).lean();
+    const run = await AttributionRun.findOne({ _id: runOid, project_id: projectId }).lean();
     if (!run) return res.status(404).json({ error: 'run_not_found' });
 
     // aggregate campaign revenue table for this run
     const campaignAgg = await AttributionResult.aggregate([
-      { $match: { project_id: projectOid, run_id: runOid } },
+      { $match: { project_id: projectId, run_id: runId } },
       { $group: { _id: '$campaign_id', revenue: { $sum: '$revenue_share' }, deals: { $addToSet: '$deal_id' } } },
       { $project: { campaign_id: '$_id', revenue: 1, deal_count: { $size: '$deals' } } },
       { $sort: { revenue: -1 } },
@@ -2288,26 +2572,35 @@ export async function getAttributionRunSummary(req: Request, res: Response) {
 
     // touches used for this run
     const touchesUsedAgg = await AttributionResult.aggregate([
-      { $match: { project_id: projectOid, run_id: runOid } },
+      { $match: { project_id: projectId, run_id: runId } },
       { $count: 'count' }
     ]);
     const touches_used = touchesUsedAgg.length ? touchesUsedAgg[0].count : 0;
 
     // build sample allocations: pick up to 10 deals from this run (top by total), with allocation items and deal enrichment
     const sampleDeals = await AttributionResult.aggregate([
-      { $match: { project_id: projectOid, run_id: runOid } },
+      { $match: { project_id: projectId, run_id: runId } },
       { $group: { _id: '$deal_id', total: { $sum: '$revenue_share' }, items: { $push: { campaign_id: '$campaign_id', share: '$revenue_share' } } } },
       { $sort: { total: -1 } },
-      { $limit: 10 },
-      { $lookup: { from: 'deals', localField: '_id', foreignField: '_id', as: 'deal' } },
-      { $unwind: { path: '$deal', preserveNullAndEmptyArrays: true } },
-      { $project: { _id: 1, total: 1, items: 1, deal_amount: '$deal.revenue', lead_id: '$deal.lead_id' } }
+      { $limit: 10 }
     ]);
 
+    const sampleDealIds = sampleDeals.map((item: any) => String(item._id));
+    const sampleDealDocs = await Deal.find({ project_id: projectId, deal_id: { $in: sampleDealIds } }).select('deal_id revenue lead_id closed_at').lean();
+    const sampleDealMap: Record<string, any> = {};
+    for (const deal of sampleDealDocs) sampleDealMap[String(deal.deal_id)] = deal;
+    const sampleDealsOut = sampleDeals.map((item: any) => ({
+      _id: item._id,
+      total: item.total,
+      items: item.items,
+      deal_amount: sampleDealMap[String(item._id)]?.revenue ?? null,
+      lead_id: sampleDealMap[String(item._id)]?.lead_id ?? null,
+    }));
+
     // attempt unattributed example: find a deal in window with no result rows
-    const windowDeals = await Deal.find({ project_id: projectOid, closed_at: { $gte: run.date_from, $lte: run.date_to } }).select('_id revenue lead_id closed_at').lean();
-    const resultDealIds = new Set((await AttributionResult.find({ project_id: projectOid, run_id: runOid }).select('deal_id').lean()).map(r => String(r.deal_id)));
-    const unattributedExample = windowDeals.find(d => !resultDealIds.has(String(d._id)));
+    const windowDeals = await Deal.find({ project_id: projectId, closed_at: { $gte: run.date_from, $lte: run.date_to } }).select('deal_id revenue lead_id closed_at').lean();
+    const resultDealIds = new Set((await AttributionResult.find({ project_id: projectId, run_id: runId }).select('deal_id').lean()).map(r => String(r.deal_id)));
+    const unattributedExample = windowDeals.find(d => !resultDealIds.has(String(d.deal_id)));
 
     return res.json({
       ok: true,
@@ -2332,8 +2625,8 @@ export async function getAttributionRunSummary(req: Request, res: Response) {
         excluded_by_filters: (run as any)?.meta?.excludedByFilters || null
       },
       campaigns: campaignAgg,
-      samples: sampleDeals,
-      unattributed_sample: unattributedExample ? { deal_id: unattributedExample._id, revenue: unattributedExample.revenue, closed_at: unattributedExample.closed_at } : null
+      samples: sampleDealsOut,
+      unattributed_sample: unattributedExample ? { deal_id: unattributedExample.deal_id, revenue: unattributedExample.revenue, closed_at: unattributedExample.closed_at } : null
     });
   } catch (e) {
     console.error('[m06/getAttributionRunSummary]', e);
@@ -2347,17 +2640,13 @@ export async function roiByRun(req: Request, res: Response) {
     const projectId = getProjectId(req);
     const runId = req.query.runId as string | undefined;
 
-    if (!projectId || !mongoose.isValidObjectId(projectId)) {
+    if (!projectId) {
       return res.status(400).json({ error: 'projectId_required' });
     }
     if (!runId || !mongoose.isValidObjectId(runId)) {
       return res.status(400).json({ error: 'runId_required' });
     }
-
-    const projectOid = new mongoose.Types.ObjectId(projectId);
-    const runOid = new mongoose.Types.ObjectId(runId);
-
-    const match: any = { project_id: projectOid, run_id: runOid };
+    const match: any = { project_id: projectId, run_id: runId };
 
     const agg = await AttributionResult.aggregate([
       { $match: match },
@@ -2372,17 +2661,17 @@ export async function roiByRun(req: Request, res: Response) {
       });
     }
 
-    const campaignIds = agg.map(r => r._id);
+    const campaignIds = agg.map(r => String(r._id));
     const campaigns = await Campaign.find({
-      project_id: projectOid,
-      _id: { $in: campaignIds },
+      project_id: projectId,
+      campaign_id: { $in: campaignIds },
     })
       .lean()
       .exec();
 
     const campaignMap: Record<string, any> = {};
     for (const c of campaigns) {
-      campaignMap[String(c._id)] = c;
+      campaignMap[String(c.campaign_id)] = c;
     }
 
     const rows: Array<{
@@ -2456,8 +2745,7 @@ export async function roiByRun(req: Request, res: Response) {
 export async function previewDeals(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
 
     const toArray = (input: unknown): string[] => {
       if (Array.isArray(input)) return input.map(val => String(val));
@@ -2488,10 +2776,10 @@ export async function previewDeals(req: Request, res: Response) {
     const rawCampaignIds = new Set(
       toArray(campaignInput)
         .map(id => id.trim())
-        .filter(id => mongoose.isValidObjectId(id))
+        .filter(Boolean)
     );
 
-    const match: any = { project_id: projectOid };
+    const match: any = { project_id: projectId };
     if (from || to) {
       match.closed_at = {};
       if (from) match.closed_at.$gte = new Date(from);
@@ -2499,37 +2787,36 @@ export async function previewDeals(req: Request, res: Response) {
     }
     if (statusParam === 'closed_won') match.closed_won = true;
     else if (statusParam === 'closed_lost' || statusParam === 'open') match.closed_won = false;
-    if (!includeArchived) match.status = { $ne: 'archived' };
     if (minAmount !== undefined) match.revenue = { ...(match.revenue || {}), $gte: minAmount };
     if (maxAmount !== undefined) match.revenue = { ...(match.revenue || {}), $lte: maxAmount };
 
     let leadIdsFilter: string[] | null = null;
     if (leadQuery) {
       if (/^\d+$/.test(leadQuery)) {
-        const module6Lead = await Module6Lead.findOne({ project_id: projectOid, lead_id: leadQuery }).select('_id').lean();
+        const module6Lead = await Module6Lead.findOne({ project_id: projectId, lead_id: leadQuery }).select('lead_id').lean();
         const lead = await (await import('../m01/models/Lead.js')).default.findOne({ lead_id: Number(leadQuery) }).select('_id').lean();
-        leadIdsFilter = [module6Lead, lead].filter(Boolean).map((row: any) => String(row._id));
+        leadIdsFilter = [module6Lead?.lead_id, lead ? String(lead._id) : null].filter(Boolean) as string[];
       } else {
         const regex = new RegExp(sanitizeRegex(leadQuery), 'i');
         const module6Leads = await Module6Lead.find({
-          project_id: projectOid,
-          $or: [{ lead_id: regex }, { name: regex }, { email: regex }],
-        }).limit(200).select('_id').lean();
+          project_id: projectId,
+          $or: [{ lead_id: regex }, { full_name: regex }, { email: regex }],
+        }).limit(200).select('lead_id').lean();
         const LeadModel = (await import('../m01/models/Lead.js')).default as any;
         const leads = await LeadModel.find({ $or: [{ First_Name: regex }, { Last_Name: regex }, { Company: regex }, { Email: regex }] }).limit(200).select('_id').lean();
-        leadIdsFilter = [...module6Leads, ...leads].map((l: any) => String(l._id));
+        leadIdsFilter = [...module6Leads.map((l: any) => String(l.lead_id)), ...leads.map((l: any) => String(l._id))];
       }
-      if (leadIdsFilter) match.lead_id = { $in: leadIdsFilter.map(id => new mongoose.Types.ObjectId(id)) };
+      if (leadIdsFilter) match.lead_id = { $in: leadIdsFilter };
     }
 
     const deals = await Deal.find(match).sort({ closed_at: -1, createdAt: -1 }).lean();
     const leadIds = Array.from(new Set(deals.map(d => String(d.lead_id))));
 
-    const campaigns = await Campaign.find({ project_id: projectOid }).lean();
+    const campaigns = await Campaign.find({ project_id: projectId }).lean();
     const campaignMap: Record<string, any> = {};
     const projectCampaignIds = new Set<string>();
     for (const campaign of campaigns) {
-      const id = String(campaign._id);
+      const id = String(campaign.campaign_id);
       campaignMap[id] = campaign;
       projectCampaignIds.add(id);
     }
@@ -2607,11 +2894,11 @@ export async function previewDeals(req: Request, res: Response) {
       const leadInfo = leadSummaries[String(deal.lead_id)] || { name: null, email: null, company: null, lead_id: null };
       return {
         deal_id: String(deal._id),
-        deal_external_id: (deal as any).deal_id || null,
+        deal_external_id: deal.deal_id || null,
         lead_id: leadInfo.lead_id || String(deal.lead_id),
         lead_name: leadInfo.name,
         lead_email: leadInfo.email,
-        amount: deal.revenue,
+        revenue: deal.revenue,
         closed_at: deal.closed_at,
         status: deal.closed_won ? 'closed_won' : 'other',
         touchCount,
@@ -2643,16 +2930,15 @@ export async function journeyDetail(req: Request, res: Response) {
   try {
     const dealId = req.params.id;
     const projectId = getProjectId(req);
-    if (!dealId || !mongoose.isValidObjectId(dealId)) return res.status(400).json({ error: 'dealId_required' });
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const d = await Deal.findOne({ _id: dealId, project_id: projectId }).lean();
+    if (!dealId) return res.status(400).json({ error: 'dealId_required' });
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
+    const d = await Deal.findOne({ project_id: projectId, $or: [{ _id: dealId }, { deal_id: dealId }] }).lean();
     if (!d) return res.status(404).json({ error: 'deal_not_found' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
 
     // campaigns for project
-    const campaigns = await Campaign.find({ project_id: projectOid }).lean();
+    const campaigns = await Campaign.find({ project_id: projectId }).lean();
     const campaignMap: Record<string, any> = {};
-    for (const c of campaigns) campaignMap[String(c._id)] = c;
+    for (const c of campaigns) campaignMap[String(c.campaign_id)] = c;
 
     // touches for lead within project campaigns, up to closed_at
     const touchMatch: any = { lead_id: d.lead_id, campaign_id: { $in: Object.keys(campaignMap) } };
@@ -2683,7 +2969,7 @@ export async function journeyDetail(req: Request, res: Response) {
       }
     } catch {}
 
-    return res.json({ ok: true, deal: { id: String(d._id), external_id: (d as any).deal_id || null, amount: d.revenue, closed_at: d.closed_at, status: d.closed_won ? 'closed_won' : 'other' }, lead, journey });
+    return res.json({ ok: true, deal: { id: String(d._id), external_id: d.deal_id || null, revenue: d.revenue, closed_at: d.closed_at, status: d.closed_won ? 'closed_won' : 'other' }, lead, journey });
   } catch (e) {
     console.error('[m06/journeyDetail]', e);
     return res.status(500).json({ error: 'internal' });
@@ -2695,8 +2981,7 @@ export async function journeyDetail(req: Request, res: Response) {
 export async function roiDashboard(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
-    if (!projectId || !mongoose.isValidObjectId(projectId)) return res.status(400).json({ error: 'projectId_required' });
-    const projectOid = new mongoose.Types.ObjectId(projectId);
+    if (!projectId) return res.status(400).json({ error: 'projectId_required' });
 
     const runId = (req.query.runId as string) || null;
 
@@ -2708,17 +2993,17 @@ export async function roiDashboard(req: Request, res: Response) {
     const minROI = req.query.minROI ? Number(req.query.minROI) : null;
 
     // Precondition: ensure attribution results exist for this project (and run, if provided)
-    const attribMatch: any = { project_id: projectOid };
+    const attribMatch: any = { project_id: projectId };
     if (runId) {
       if (!mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'invalid_runId' });
-      attribMatch.run_id = new mongoose.Types.ObjectId(runId);
+      attribMatch.run_id = runId;
     }
 
     const hasAttrib = await AttributionResult.findOne(attribMatch).lean();
     if (!hasAttrib) return res.status(400).json({ error: 'no_attribution', message: 'No attribution results found. Please run attribution (Page 2) first.' });
 
     // Precondition: ensure there are campaigns with spend (required to compute ROI)
-    const campaignsWithSpend = await Campaign.find({ project_id: projectOid, spend: { $gt: 0 } }).lean();
+    const campaignsWithSpend = await Campaign.find({ project_id: projectId, spend: { $gt: 0 } }).lean();
     if (!campaignsWithSpend || campaignsWithSpend.length === 0) return res.status(400).json({ error: 'no_campaign_spend', message: 'No campaigns with spend found for this project. Add campaign spend to compute ROI.' });
 
     // Build attributed sums per campaign, optionally limited to a date range (by deal.closed_at)
@@ -2731,7 +3016,7 @@ export async function roiDashboard(req: Request, res: Response) {
       const endDate = endMonth ? new Date(new Date(endMonth + '-01').getFullYear(), new Date(endMonth + '-01').getMonth() + 1, 0, 23, 59, 59, 999) : new Date();
       attribByCampaign = await AttributionResult.aggregate([
         { $match: matchStage },
-        { $lookup: { from: 'deals', localField: 'deal_id', foreignField: '_id', as: 'deal' } },
+        { $lookup: { from: 'deals', localField: 'deal_id', foreignField: 'deal_id', as: 'deal' } },
         { $unwind: { path: '$deal', preserveNullAndEmptyArrays: false } },
         { $match: { 'deal.closed_at': { $gte: startDate, $lte: endDate } } },
         { $group: { _id: '$campaign_id', attributed: { $sum: '$revenue_share' } } }
@@ -2743,12 +3028,10 @@ export async function roiDashboard(req: Request, res: Response) {
       ]).exec();
     }
 
-    const campaignIds = attribByCampaign.map((r:any) => r._id).filter((id:any) => mongoose.isValidObjectId(id)).map((id:any) => new mongoose.Types.ObjectId(id));
-
     // 2) campaign details
-    const campaigns = await Campaign.find({ project_id: projectOid }).lean();
+    const campaigns = await Campaign.find({ project_id: projectId }).lean();
     const campaignMap: Record<string, any> = {};
-    for (const c of campaigns) campaignMap[String(c._id)] = c;
+    for (const c of campaigns) campaignMap[String(c.campaign_id)] = c;
 
     // Build campaign metrics array
     const campaignsMetrics = attribByCampaign.map((r:any) => {
@@ -2763,7 +3046,7 @@ export async function roiDashboard(req: Request, res: Response) {
 
     // Include campaigns with spend but zero attribution
     for (const c of campaigns) {
-      const cid = String(c._id);
+      const cid = String(c.campaign_id);
       if (!campaignsMetrics.find((m:any) => m.campaign_id === cid)) {
         const spend = Number(c.spend) || 0;
         campaignsMetrics.push({ campaign_id: cid, name: c.name, channel: c.channel || 'other', spend, attributed: 0, profit: -spend, roi: spend === 0 ? null : ((0 - spend) / spend) * 100 });
@@ -2788,7 +3071,7 @@ export async function roiDashboard(req: Request, res: Response) {
     // Monthly attributed revenue series (by deal.closed_at)
     const monthlyPipeline: any[] = [
       { $match: attribMatch },
-      { $lookup: { from: 'deals', localField: 'deal_id', foreignField: '_id', as: 'deal' } },
+      { $lookup: { from: 'deals', localField: 'deal_id', foreignField: 'deal_id', as: 'deal' } },
       { $unwind: { path: '$deal', preserveNullAndEmptyArrays: false } },
       { $project: { revenue_share: 1, ym: { $dateToString: { format: '%Y-%m', date: '$deal.closed_at' } }, closed_at: '$deal.closed_at', campaign_id: '$campaign_id' } }
     ];
@@ -2800,7 +3083,7 @@ export async function roiDashboard(req: Request, res: Response) {
     }
     // if channel filter provided, join campaigns and filter by channel
     if (channelFilter) {
-      monthlyPipeline.push({ $lookup: { from: 'campaigns', localField: 'campaign_id', foreignField: '_id', as: 'campaign' } });
+      monthlyPipeline.push({ $lookup: { from: 'campaigns', localField: 'campaign_id', foreignField: 'campaign_id', as: 'campaign' } });
       monthlyPipeline.push({ $unwind: { path: '$campaign', preserveNullAndEmptyArrays: false } });
       const chans = channelFilter.split(',').map((s:string) => s.trim().toLowerCase()).filter(Boolean);
       monthlyPipeline.push({ $match: { 'campaign.channel': { $in: chans } } });

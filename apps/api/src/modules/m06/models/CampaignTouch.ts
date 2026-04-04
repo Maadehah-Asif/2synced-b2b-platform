@@ -6,9 +6,9 @@ export type TouchStatus = 'active' | 'archived';
 
 export interface CampaignTouchDoc {
   _id: Types.ObjectId;
-  project_id?: Types.ObjectId | string; // optional for backward compatibility
-  lead_id: Types.ObjectId | string;
-  campaign_id: Types.ObjectId | string;
+  project_id?: string | null;
+  lead_id: string;
+  campaign_id: string;
   channel?: TouchChannel; // can be derived from campaign but stored for fast filtering
   touched_at: Date;
   type: TouchType;
@@ -20,16 +20,16 @@ export interface CampaignTouchDoc {
 
 const CampaignTouchSchema = new Schema<CampaignTouchDoc>(
   {
-    project_id: { type: Schema.Types.ObjectId, ref: 'Project', index: true },
-    lead_id: { type: Schema.Types.ObjectId, ref: 'Lead', required: true, index: true },
-    campaign_id: { type: Schema.Types.ObjectId, ref: 'Campaign', required: true, index: true },
+    project_id: { type: String, index: true, default: null },
+    lead_id: { type: String, required: true, index: true },
+    campaign_id: { type: String, required: true, index: true },
     channel: { type: String, enum: ['email', 'ads', 'linkedin', 'webinar', 'other'] },
     touched_at: { type: Date, required: true },
     type: { type: String, enum: ['email_open', 'ad_click', 'webinar', 'email_click', 'form_submit', 'other'], required: true },
     status: { type: String, enum: ['active', 'archived'], default: 'active' },
     metadata: { type: Schema.Types.Mixed },
   },
-  { timestamps: true }
+  { timestamps: true, collection: 'campaigntouches' }
 );
 
 CampaignTouchSchema.index({ campaign_id: 1, touched_at: -1 });

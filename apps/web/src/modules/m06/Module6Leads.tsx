@@ -2,108 +2,36 @@ import { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import './module6.css';
+import ImportPreviewStep from './components/ImportPreviewStep';
 import {
   archiveModule6Lead,
   createModule6Lead,
   fetchModule6Leads,
   importModule6LeadsCSV,
+  updateModule6Lead,
+  validateModule6LeadsCSV,
+  type LeadCsvValidationResult,
   type LeadImportSummary,
   type Module6Lead,
-  updateModule6Lead,
 } from './services/leads';
+import {
+  LEAD_HEADER_ALIASES,
+  LEAD_REQUIRED_FIELDS,
+  LEAD_SCHEMA_FIELDS,
+  defaultLeadMapping,
+  emptyLeadForm,
+  type LeadFieldKey,
+  type LeadFormState,
+  type LeadMapping,
+} from './leadInputSchema';
 
-const MAX_PREVIEW_ROWS = 200;
-const PREVIEW_PAGE_SIZE = 12;
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
-type LeadFormState = {
-  lead_id: string;
-  full_name: string;
-  first_name: string;
-  last_name: string;
-  company: string;
-  source: string;
-  owner: string;
-  industry: string;
-  region: string;
-  lead_score: string;
-  intent_score: string;
-  email: string;
-  job_title: string;
-  segment: string;
+type CsvRow = {
+  rowNumber: number;
+  original: Record<string, string>;
 };
-
-type LeadMapping = Record<
-  | 'lead_id'
-  | 'full_name'
-  | 'first_name'
-  | 'last_name'
-  | 'company'
-  | 'source'
-  | 'owner'
-  | 'industry'
-  | 'region'
-  | 'lead_score'
-  | 'intent_score'
-  | 'email'
-  | 'job_title'
-  | 'segment',
-  string
->;
-
-const FIELD_LABELS: Array<{ key: keyof LeadMapping; label: string; required?: boolean }> = [
-  { key: 'lead_id', label: 'Lead ID', required: true },
-  { key: 'full_name', label: 'Full name' },
-  { key: 'first_name', label: 'First name' },
-  { key: 'last_name', label: 'Last name' },
-  { key: 'company', label: 'Company' },
-  { key: 'source', label: 'Source' },
-  { key: 'owner', label: 'Owner' },
-  { key: 'industry', label: 'Industry' },
-  { key: 'region', label: 'Region' },
-  { key: 'lead_score', label: 'Lead score' },
-  { key: 'intent_score', label: 'Intent score' },
-  { key: 'email', label: 'Email' },
-  { key: 'job_title', label: 'Job title' },
-  { key: 'segment', label: 'Segment' },
-];
-
-function emptyLeadForm(): LeadFormState {
-  return {
-    lead_id: '',
-    full_name: '',
-    first_name: '',
-    last_name: '',
-    company: '',
-    source: '',
-    owner: '',
-    industry: '',
-    region: '',
-    lead_score: '',
-    intent_score: '',
-    email: '',
-    job_title: '',
-    segment: '',
-  };
-}
-
-function defaultMapping(): LeadMapping {
-  return {
-    lead_id: 'lead_id',
-    full_name: 'full_name',
-    first_name: 'first_name',
-    last_name: 'last_name',
-    company: 'company',
-    source: 'source',
-    owner: 'owner',
-    industry: 'industry',
-    region: 'region',
-    lead_score: 'lead_score',
-    intent_score: 'intent_score',
-    email: 'email',
-    job_title: 'job_title',
-    segment: 'segment',
-  };
-}
 
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
   return (
@@ -114,11 +42,75 @@ function Toast({ message, type, onClose }: { message: string; type: 'success' | 
   );
 }
 
+function parseCsvText(text: string): string[][] {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentValue = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        currentValue += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      currentRow.push(currentValue.trim());
+      currentValue = '';
+      continue;
+    }
+
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') index += 1;
+      currentRow.push(currentValue.trim());
+      rows.push(currentRow);
+      currentRow = [];
+      currentValue = '';
+      continue;
+    }
+
+    currentValue += char;
+  }
+
+  if (currentValue.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentValue.trim());
+    rows.push(currentRow);
+  }
+
+  return rows.filter((row) => row.some((cell) => cell.trim().length > 0));
+}
+
+function normalizeHeader(text: string) {
+  return text.toLowerCase().replace(/[\s_-]+/g, '').replace(/s$/, '');
+}
+
+function autoMapHeaders(headers: string[]): LeadMapping {
+  const mapping = defaultLeadMapping();
+  const usedHeaders = new Set<string>();
+
+  for (const field of LEAD_SCHEMA_FIELDS) {
+    const aliases = LEAD_HEADER_ALIASES[field.key].map(normalizeHeader);
+    const match = headers.find((header) => !usedHeaders.has(header) && aliases.includes(normalizeHeader(header)));
+    mapping[field.key] = match || '';
+    if (match) usedHeaders.add(match);
+  }
+
+  return mapping;
+}
+
 function toLeadForm(lead?: Module6Lead | null): LeadFormState {
   if (!lead) return emptyLeadForm();
   return {
     lead_id: lead.lead_id || '',
-    full_name: lead.full_name || lead.name || '',
+    full_name: lead.full_name || '',
     first_name: lead.first_name || '',
     last_name: lead.last_name || '',
     company: lead.company || '',
@@ -134,6 +126,24 @@ function toLeadForm(lead?: Module6Lead | null): LeadFormState {
   };
 }
 
+function buildLeadPayload(form: LeadFormState) {
+  return {
+    ...form,
+    lead_score: form.lead_score.trim() ? Number(form.lead_score) : null,
+    intent_score: form.intent_score.trim() ? Number(form.intent_score) : null,
+  };
+}
+
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function Module6Leads() {
   const [activeTab, setActiveTab] = useState<'list' | 'manual' | 'csv'>('list');
   const [loading, setLoading] = useState(false);
@@ -142,84 +152,127 @@ export default function Module6Leads() {
   const [leads, setLeads] = useState<Module6Lead[]>([]);
   const [editing, setEditing] = useState<Module6Lead | null>(null);
   const [leadForm, setLeadForm] = useState<LeadFormState>(emptyLeadForm);
+  const [formErrors, setFormErrors] = useState<Partial<Record<LeadFieldKey, string>>>({});
   const [savingLead, setSavingLead] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
+  const [csvFileName, setCsvFileName] = useState('');
   const [csvText, setCsvText] = useState('');
-  const [headersPreview, setHeadersPreview] = useState<string[]>([]);
-  const [rowsPreview, setRowsPreview] = useState<string[][]>([]);
-  const [totalPreviewRows, setTotalPreviewRows] = useState(0);
-  const [previewLimited, setPreviewLimited] = useState(false);
-  const [blankRowCount, setBlankRowCount] = useState(0);
-  const [previewPage, setPreviewPage] = useState(0);
-  const [headerError, setHeaderError] = useState<string | null>(null);
-  const [mapping, setMapping] = useState<LeadMapping>(defaultMapping);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
+  const [csvFileError, setCsvFileError] = useState<string | null>(null);
+  const [mapping, setMapping] = useState<LeadMapping>(defaultLeadMapping);
+  const [mappingErrors, setMappingErrors] = useState<string[]>([]);
   const [startRow, setStartRow] = useState(1);
-  const [endRow, setEndRow] = useState<number | undefined>(undefined);
-  const [mappingConfirmed, setMappingConfirmed] = useState(false);
-  const [importSummary, setImportSummary] = useState<LeadImportSummary | null>(null);
+  const [endRow, setEndRow] = useState<number | ''>('');
+  const [rangeError, setRangeError] = useState<string | null>(null);
+  const [validatingCsv, setValidatingCsv] = useState(false);
+  const [validationResult, setValidationResult] = useState<LeadCsvValidationResult | null>(null);
   const [submittingCsv, setSubmittingCsv] = useState(false);
+  const [importSummary, setImportSummary] = useState<LeadImportSummary | null>(null);
 
   async function reloadLeads() {
     setLoading(true);
-    const result = await fetchModule6Leads({ search, includeArchived, limit: 200 });
-    setLeads(result.leads || []);
-    setLoading(false);
+    try {
+      const result = await fetchModule6Leads({ search, includeArchived, limit: 200 });
+      setLeads(result.leads || []);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    let ignore = false;
-    async function run() {
-      setLoading(true);
-      const result = await fetchModule6Leads({ search, includeArchived, limit: 200 });
-      if (!ignore) {
-        setLeads(result.leads || []);
-        setLoading(false);
-      }
-    }
-    void run();
-    return () => {
-      ignore = true;
-    };
+    void reloadLeads();
   }, [search, includeArchived]);
 
-  useEffect(() => {
-    setPreviewPage(prev => {
-      if (!rowsPreview.length) return 0;
-      const maxIndex = Math.max(0, Math.ceil(rowsPreview.length / PREVIEW_PAGE_SIZE) - 1);
-      return Math.min(prev, maxIndex);
-    });
-  }, [rowsPreview]);
+  const duplicateLeadIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const lead of leads) {
+      if (editing?._id && lead._id === editing._id) continue;
+      set.add(lead.lead_id.toLowerCase());
+    }
+    return set;
+  }, [leads, editing]);
 
-  const previewPageCount = rowsPreview.length ? Math.ceil(rowsPreview.length / PREVIEW_PAGE_SIZE) : 1;
-  const currentPreviewPage = rowsPreview.length ? Math.min(previewPage, previewPageCount - 1) : 0;
-  const previewPageRows = rowsPreview.slice(currentPreviewPage * PREVIEW_PAGE_SIZE, (currentPreviewPage * PREVIEW_PAGE_SIZE) + PREVIEW_PAGE_SIZE);
-  const previewStartIndex = rowsPreview.length ? (currentPreviewPage * PREVIEW_PAGE_SIZE) + 1 : 0;
-  const previewEndIndex = rowsPreview.length ? Math.min(rowsPreview.length, previewStartIndex + PREVIEW_PAGE_SIZE - 1) : 0;
-  const headerOptions = useMemo(() => headersPreview.map(value => ({ value, label: value })), [headersPreview]);
+  const selectedCsvRows = useMemo(() => {
+    if (!csvRows.length) return [];
+    const safeStart = Math.max(1, startRow || 1);
+    const safeEnd = endRow === '' ? csvRows.length : Number(endRow);
+    return csvRows.filter((row) => row.rowNumber >= safeStart && row.rowNumber <= safeEnd);
+  }, [csvRows, startRow, endRow]);
+
+  function resetManualForm() {
+    setEditing(null);
+    setLeadForm(emptyLeadForm());
+    setFormErrors({});
+  }
 
   function resetCsvState() {
+    setCsvFileName('');
     setCsvText('');
-    setHeadersPreview([]);
-    setRowsPreview([]);
-    setTotalPreviewRows(0);
-    setPreviewLimited(false);
-    setBlankRowCount(0);
-    setPreviewPage(0);
-    setHeaderError(null);
-    setMapping(defaultMapping());
+    setCsvHeaders([]);
+    setCsvRows([]);
+    setCsvFileError(null);
+    setMapping(defaultLeadMapping());
+    setMappingErrors([]);
     setStartRow(1);
-    setEndRow(undefined);
-    setMappingConfirmed(false);
+    setEndRow('');
+    setRangeError(null);
+    setValidationResult(null);
     setImportSummary(null);
   }
 
-  function setMappingValue(key: keyof LeadMapping, value: string) {
-    setMapping(prev => ({ ...prev, [key]: value }));
+  function validateManualForm(form: LeadFormState) {
+    const nextErrors: Partial<Record<LeadFieldKey, string>> = {};
+    if (!form.lead_id.trim()) nextErrors.lead_id = 'This field is required.';
+    if (form.lead_id.trim() && duplicateLeadIds.has(form.lead_id.trim().toLowerCase())) nextErrors.lead_id = 'A record with this Lead ID already exists.';
+    if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) nextErrors.email = 'Invalid email format.';
+    if (form.lead_score.trim() && Number.isNaN(Number(form.lead_score))) nextErrors.lead_score = 'Lead score must be numeric.';
+    if (form.intent_score.trim() && Number.isNaN(Number(form.intent_score))) nextErrors.intent_score = 'Intent score must be numeric.';
+    return nextErrors;
   }
 
-  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const input = e.target;
+  function validateMappingState(nextMapping: LeadMapping) {
+    const issues: string[] = [];
+    const counts = new Map<string, number>();
+    for (const value of Object.values(nextMapping)) {
+      if (!value) continue;
+      counts.set(value, (counts.get(value) || 0) + 1);
+    }
+    for (const [header, count] of counts.entries()) {
+      if (count > 1) issues.push(`CSV column "${header}" is mapped more than once.`);
+    }
+    for (const field of LEAD_REQUIRED_FIELDS) {
+      if (!nextMapping[field]) issues.push(`Required field "${field}" is not mapped.`);
+    }
+    return issues;
+  }
+
+  function validateRangeState(totalRows: number, start: number, end: number | '') {
+    if (!totalRows) return 'Upload a CSV file first.';
+    if (!Number.isInteger(start) || start < 1) return 'Start row must be 1 or greater.';
+    const safeEnd = end === '' ? totalRows : Number(end);
+    if (!Number.isInteger(safeEnd)) return 'End row must be a whole number.';
+    if (safeEnd < start) return 'End row cannot be earlier than start row.';
+    if (safeEnd > totalRows) return `End row cannot exceed ${totalRows}.`;
+    return null;
+  }
+
+  function setFieldValue(key: LeadFieldKey, value: string) {
+    setLeadForm((prev) => ({ ...prev, [key]: value }));
+    setFormErrors((prev) => ({ ...prev, [key]: undefined }));
+  }
+
+  function setMappingValue(key: LeadFieldKey, value: string) {
+    const next = { ...mapping, [key]: value };
+    setMapping(next);
+    setMappingErrors(validateMappingState(next));
+    setValidationResult(null);
+    setImportSummary(null);
+  }
+
+  function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const input = event.target;
     const file = input.files?.[0];
     resetCsvState();
     if (!file) {
@@ -227,118 +280,79 @@ export default function Module6Leads() {
       return;
     }
     if (!file.name.toLowerCase().endsWith('.csv')) {
-      setToast({ msg: 'Please select a .csv file', type: 'error' });
+      setCsvFileError('Only CSV files are supported.');
       input.value = '';
       return;
     }
+    if (file.size <= 0) {
+      setCsvFileError('Uploaded file is empty.');
+      input.value = '';
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setCsvFileError('File exceeds the 5MB size limit.');
+      input.value = '';
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
-      const text = String(reader.result || '');
-      setCsvText(text);
-      const normalized = text.replace(/\r\n?/g, '\n');
-      const lines = normalized.split('\n');
-      const headerLine = lines[0] || '';
-      const cols = headerLine.split(',').map(s => s.trim());
-      setHeadersPreview(cols);
-      const dataLines = lines.slice(1);
-      const nonBlankLines = dataLines.filter(line => line.trim().length > 0);
-      const limitedRows = nonBlankLines.slice(0, MAX_PREVIEW_ROWS).map(line => line.split(',').map(s => s.trim()));
-      setRowsPreview(limitedRows);
-      setTotalPreviewRows(nonBlankLines.length);
-      setPreviewLimited(nonBlankLines.length > MAX_PREVIEW_ROWS);
-      setBlankRowCount(dataLines.length - nonBlankLines.length);
-      setPreviewPage(0);
-
-      const lowerCols = cols.map(c => c.toLowerCase());
-      const pickHeader = (candidates: string[], fallbackIndex?: number) => {
-        for (const candidate of candidates) {
-          const idx = lowerCols.indexOf(candidate);
-          if (idx !== -1) return cols[idx];
+      try {
+        const text = String(reader.result || '');
+        const parsedRows = parseCsvText(text);
+        if (parsedRows.length < 2) {
+          setCsvFileError('The uploaded file does not contain any data rows.');
+          return;
         }
-        if (fallbackIndex !== undefined && cols[fallbackIndex]) return cols[fallbackIndex];
-        return '';
-      };
+        const headers = parsedRows[0];
+        const dataRows = parsedRows.slice(1).map((row, rowIndex) => ({
+          rowNumber: rowIndex + 1,
+          original: Object.fromEntries(headers.map((header, columnIndex) => [header, row[columnIndex] ?? ''])),
+        }));
 
-      setMapping({
-        lead_id: pickHeader(['lead_id', 'lead id', 'leadid'], 0),
-        full_name: pickHeader(['full_name', 'full name', 'name', 'lead_name']),
-        first_name: pickHeader(['first_name', 'first name']),
-        last_name: pickHeader(['last_name', 'last name']),
-        company: pickHeader(['company', 'account', 'organization']),
-        source: pickHeader(['source', 'lead_source']),
-        owner: pickHeader(['owner', 'lead_owner']),
-        industry: pickHeader(['industry']),
-        region: pickHeader(['region', 'territory']),
-        lead_score: pickHeader(['lead_score', 'score']),
-        intent_score: pickHeader(['intent_score', 'intent']),
-        email: pickHeader(['email', 'email_address', 'email address']),
-        job_title: pickHeader(['job_title', 'job title', 'title']),
-        segment: pickHeader(['segment']),
-      });
-
-      if (cols.length < 2) setHeaderError('Could not detect valid headers. Ensure the first row contains column names.');
+        const nextMapping = autoMapHeaders(headers);
+        setCsvFileName(file.name);
+        setCsvText(text);
+        setCsvHeaders(headers);
+        setCsvRows(dataRows);
+        setStartRow(1);
+        setEndRow(dataRows.length);
+        setMapping(nextMapping);
+        setMappingErrors(validateMappingState(nextMapping));
+      } catch {
+        setCsvFileError('The uploaded file could not be parsed.');
+      }
     };
-    reader.onerror = () => {
-      setToast({ msg: 'Failed to read file', type: 'error' });
-    };
+    reader.onerror = () => setCsvFileError('The uploaded file could not be read.');
     reader.readAsText(file);
     input.value = '';
   }
 
-  async function submitCsv() {
-    if (!csvText.trim()) {
-      setToast({ msg: 'Upload a CSV file first', type: 'error' });
+  async function submitLeadForm(event: React.FormEvent) {
+    event.preventDefault();
+    const nextErrors = validateManualForm(leadForm);
+    setFormErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      setToast({ msg: 'Please fix the highlighted manual-entry errors.', type: 'error' });
       return;
     }
-    if (!mapping.lead_id) {
-      setToast({ msg: 'Lead ID mapping is required', type: 'error' });
-      return;
-    }
-    if (!mappingConfirmed) {
-      setToast({ msg: 'Confirm your mappings before importing', type: 'error' });
-      return;
-    }
-    setSubmittingCsv(true);
-    try {
-      const summary = await importModule6LeadsCSV({ csv: csvText, map: mapping, startRow, endRow });
-      setImportSummary(summary);
-      await reloadLeads();
-      setToast({ msg: `Import finished: ${summary.inserted || 0} inserted, ${summary.updated || 0} updated`, type: 'success' });
-      setActiveTab('list');
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Import failed';
-      setToast({ msg: message, type: 'error' });
-    } finally {
-      setSubmittingCsv(false);
-    }
-  }
+    if (!window.confirm(editing ? 'Are you sure you want to update this lead record?' : 'Are you sure you want to add this lead record?')) return;
 
-  async function submitLeadForm(e: React.FormEvent) {
-    e.preventDefault();
-    if (!leadForm.lead_id.trim()) {
-      setToast({ msg: 'Lead ID is required', type: 'error' });
-      return;
-    }
     setSavingLead(true);
     try {
-      const payload = {
-        ...leadForm,
-        lead_score: leadForm.lead_score ? Number(leadForm.lead_score) : null,
-        intent_score: leadForm.intent_score ? Number(leadForm.intent_score) : null,
-      };
+      const payload = buildLeadPayload(leadForm);
       if (editing?._id) {
         await updateModule6Lead(editing._id, payload);
-        setToast({ msg: 'Lead updated', type: 'success' });
+        setToast({ msg: 'Lead updated successfully.', type: 'success' });
       } else {
         await createModule6Lead(payload);
-        setToast({ msg: 'Lead created', type: 'success' });
+        setToast({ msg: 'Lead added successfully.', type: 'success' });
       }
-      setLeadForm(emptyLeadForm());
-      setEditing(null);
+      resetManualForm();
       setActiveTab('list');
       await reloadLeads();
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Failed to save lead';
+      const message = error instanceof Error ? error.message : 'Failed to save lead.';
       setToast({ msg: message, type: 'error' });
     } finally {
       setSavingLead(false);
@@ -349,13 +363,98 @@ export default function Module6Leads() {
     if (!window.confirm(`Archive lead ${lead.lead_id}?`)) return;
     try {
       await archiveModule6Lead(lead._id);
-      setToast({ msg: 'Lead archived', type: 'success' });
+      setToast({ msg: 'Lead archived.', type: 'success' });
       await reloadLeads();
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Failed to archive lead';
+      const message = error instanceof Error ? error.message : 'Failed to archive lead.';
       setToast({ msg: message, type: 'error' });
     }
   }
+
+  async function runCsvValidation() {
+    const nextMappingErrors = validateMappingState(mapping);
+    const nextRangeError = validateRangeState(csvRows.length, startRow, endRow);
+    setMappingErrors(nextMappingErrors);
+    setRangeError(nextRangeError);
+
+    if (!csvText.trim()) {
+      setCsvFileError('Upload a CSV file first.');
+      return;
+    }
+    if (nextMappingErrors.length > 0 || nextRangeError) {
+      setToast({ msg: 'Please fix the CSV mapping and row range errors first.', type: 'error' });
+      return;
+    }
+
+    setValidatingCsv(true);
+    try {
+      const result = await validateModule6LeadsCSV({
+        csv: csvText,
+        map: mapping,
+        startRow,
+        endRow: endRow === '' ? undefined : Number(endRow),
+      });
+      setValidationResult(result);
+      setImportSummary(null);
+      setToast({ msg: `Validation finished. ${result.summary.validRows} valid rows and ${result.summary.invalidRows} invalid rows found.`, type: 'success' });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'CSV validation failed.';
+      setToast({ msg: message, type: 'error' });
+    } finally {
+      setValidatingCsv(false);
+    }
+  }
+
+  function downloadInvalidRows() {
+    if (!validationResult || validationResult.summary.invalidRows === 0) return;
+    const invalidRows = validationResult.rowResults.filter((row) => !row.valid);
+    const csvHeader = ['row_number', 'error_fields', 'error_messages', ...csvHeaders];
+    const lines = [csvHeader.join(',')];
+    for (const row of invalidRows) {
+      const errorFields = row.errors.map((issue) => issue.field).join('; ');
+      const errorMessages = row.errors.map((issue) => issue.message).join('; ');
+      const values = csvHeaders.map((header) => JSON.stringify(row.original[header] ?? ''));
+      lines.push([row.rowNumber, JSON.stringify(errorFields), JSON.stringify(errorMessages), ...values].join(','));
+    }
+    downloadTextFile('lead-invalid-rows.csv', lines.join('\n'));
+  }
+
+  async function submitCsvImport(allowPartial: boolean) {
+    if (!validationResult) {
+      await runCsvValidation();
+      return;
+    }
+
+    const confirmMessage = validationResult.summary.invalidRows > 0 && allowPartial
+      ? `Some rows contain errors. ${validationResult.summary.invalidRows} rows will be skipped. Continue uploading ${validationResult.summary.validRows} valid rows only?`
+      : `Please confirm the field mapping and selected row range. You are about to upload ${validationResult.summary.validRows} valid rows. Continue?`;
+    if (!window.confirm(confirmMessage)) return;
+
+    setSubmittingCsv(true);
+    try {
+      const summary = await importModule6LeadsCSV({
+        csv: csvText,
+        map: mapping,
+        startRow,
+        endRow: endRow === '' ? undefined : Number(endRow),
+        allowPartial,
+      });
+      setImportSummary(summary);
+      setToast({ msg: `${summary.inserted || 0} rows inserted, ${summary.updated || 0} updated, ${summary.skipped || 0} skipped.`, type: 'success' });
+      await reloadLeads();
+      setActiveTab('list');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Import failed.';
+      setToast({ msg: message, type: 'error' });
+    } finally {
+      setSubmittingCsv(false);
+    }
+  }
+
+  const previewRows = useMemo(() => {
+    if (validationResult) return validationResult.rowResults;
+    return selectedCsvRows.map((row) => ({ ...row, valid: true, errors: [], warnings: [] }));
+  }, [selectedCsvRows, validationResult]);
 
   return (
     <Layout>
@@ -368,12 +467,10 @@ export default function Module6Leads() {
           <section className="m06-hero">
             <div className="m06-hero-inner m06-leads-hero-grid">
               <div className="m06-leads-hero-copy">
-                <div className="m06-pill">M06 Lead Workspace</div>
+                <div className="m06-pill">M06 + M07 Shared Leads</div>
                 <h1 style={{ fontSize: 38 }}>Unified Lead Intake</h1>
                 <div className="m06-hero-copy">
-                  Manage lead records for both revenue and funnel workflows from one place. Switch between viewing
-                  the shared lead table, creating or editing individual leads, and importing mapped CSV data without
-                  leaving the page.
+                  Manage the shared lead table used by the revenue and funnel flows. Manual entry and CSV upload now follow the same schema rules, confirmation steps, and validation behavior.
                 </div>
               </div>
               <div className="m06-leads-stat-grid">
@@ -384,7 +481,7 @@ export default function Module6Leads() {
                 <div className="m06-kpi-card">
                   <div className="label">Current mode</div>
                   <div className="value" style={{ fontSize: 22 }}>
-                    {activeTab === 'list' ? 'View' : activeTab === 'manual' ? 'Add lead' : 'CSV import'}
+                    {activeTab === 'list' ? 'View' : activeTab === 'manual' ? 'Manual' : 'CSV import'}
                   </div>
                 </div>
               </div>
@@ -393,10 +490,9 @@ export default function Module6Leads() {
 
           <section className="m06-panel soft">
             <div className="m06-section-label">Lead Actions</div>
-            <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Choose how you want to work with lead data</h3>
+            <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Choose how you want to work with shared lead data</h3>
             <div className="m06-helper" style={{ marginBottom: 14 }}>
-              All three actions live on the same screen so you can move between reviewing existing records, adding a single lead,
-              or importing a batch without losing context.
+              Review records, add or update a single lead manually, or validate and import a mapped CSV through a dedicated preview step.
             </div>
             <div className="m06-tab-row">
               <button className={`m06-tab-btn ${activeTab === 'list' ? 'active' : ''}`} onClick={() => setActiveTab('list')}>
@@ -406,18 +502,18 @@ export default function Module6Leads() {
                   <span>Search, review, and edit shared records</span>
                 </span>
               </button>
-              <button className={`m06-tab-btn ${activeTab === 'manual' ? 'active' : ''}`} onClick={() => { setEditing(null); setLeadForm(emptyLeadForm()); setActiveTab('manual'); }}>
+              <button className={`m06-tab-btn ${activeTab === 'manual' ? 'active' : ''}`} onClick={() => { resetManualForm(); setActiveTab('manual'); }}>
                 <span className="step">2</span>
                 <span className="meta">
-                  <strong>Add lead</strong>
-                  <span>Create or update one record directly</span>
+                  <strong>Add manually</strong>
+                  <span>Create one lead with full validation</span>
                 </span>
               </button>
               <button className={`m06-tab-btn ${activeTab === 'csv' ? 'active' : ''}`} onClick={() => setActiveTab('csv')}>
                 <span className="step">3</span>
                 <span className="meta">
-                  <strong>CSV import</strong>
-                  <span>Map columns and import lead batches</span>
+                  <strong>Upload CSV</strong>
+                  <span>Map, preview, validate, and import batches</span>
                 </span>
               </button>
             </div>
@@ -428,13 +524,12 @@ export default function Module6Leads() {
               <div className="m06-section-label">View</div>
               <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Lead Table</h3>
               <div className="m06-helper">
-                Review the shared lead records currently available to M06 and M07. Use search and archived filtering to narrow
-                the table before opening a row for editing.
+                Review the shared lead records available to both Module 6 and Module 7.
               </div>
               <div className="m06-leads-toolbar-grid" style={{ marginTop: 16 }}>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by lead id, name, company, email" />
+                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by lead id, name, company, email" />
                 <label className="toggle">
-                  <input type="checkbox" checked={includeArchived} onChange={e => setIncludeArchived(e.target.checked)} />
+                  <input type="checkbox" checked={includeArchived} onChange={(event) => setIncludeArchived(event.target.checked)} />
                   Show archived
                 </label>
                 <button className="btn-ghost" onClick={() => reloadLeads()}>Reload</button>
@@ -461,10 +556,10 @@ export default function Module6Leads() {
                         </tr>
                       </thead>
                       <tbody>
-                        {leads.map(lead => (
+                        {leads.map((lead) => (
                           <tr key={lead._id} style={{ opacity: lead.is_archived ? 0.65 : 1 }}>
                             <td>{lead.lead_id}</td>
-                            <td>{lead.full_name || lead.name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || '-'}</td>
+                            <td>{lead.full_name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || '-'}</td>
                             <td>{lead.company || '-'}</td>
                             <td>{lead.email || '-'}</td>
                             <td>{lead.source || '-'}</td>
@@ -473,7 +568,7 @@ export default function Module6Leads() {
                             <td>{lead.intent_score ?? '-'}</td>
                             <td>{lead.updatedAt ? new Date(lead.updatedAt).toLocaleString() : '-'}</td>
                             <td style={{ display: 'flex', gap: 8 }}>
-                              <button className="btn-ghost" onClick={() => { setEditing(lead); setLeadForm(toLeadForm(lead)); setActiveTab('manual'); }}>Edit</button>
+                              <button className="btn-ghost" onClick={() => { setEditing(lead); setLeadForm(toLeadForm(lead)); setFormErrors({}); setActiveTab('manual'); }}>Edit</button>
                               {!lead.is_archived && <button className="btn-ghost" onClick={() => archiveLeadRow(lead)}>Archive</button>}
                             </td>
                           </tr>
@@ -488,28 +583,39 @@ export default function Module6Leads() {
 
           {activeTab === 'manual' && (
             <section className="m06-panel">
-              <div className="m06-section-label">Add Lead</div>
-              <h3 className="m06-panel-title" style={{ marginTop: 14 }}>{editing ? `Edit ${editing.lead_id}` : 'Add Lead'}</h3>
+              <div className="m06-section-label">Manual Entry</div>
+              <h3 className="m06-panel-title" style={{ marginTop: 14 }}>{editing ? `Edit ${editing.lead_id}` : 'Add Lead Manually'}</h3>
               <div className="m06-helper" style={{ marginBottom: 12 }}>
-                Include the funnel fields M07 needs here so you do not have to maintain a separate lead upload path.
+                Required and optional fields follow the same schema used by CSV validation and backend ingestion.
               </div>
+              {Object.values(formErrors).filter(Boolean).length > 0 && (
+                <div className="m06-summary-box" style={{ marginBottom: 14, border: '1px solid rgba(195,51,51,0.18)', background: '#fff7f7' }}>
+                  <strong>Fix these issues before saving:</strong>
+                  <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+                    {Object.entries(formErrors).map(([field, message]) => message ? <div key={field}>{message}</div> : null)}
+                  </div>
+                </div>
+              )}
               <form onSubmit={submitLeadForm}>
                 <div className="m06-form-grid">
-                  {FIELD_LABELS.map(field => (
+                  {LEAD_SCHEMA_FIELDS.map((field) => (
                     <div key={field.key}>
-                      <label>{field.label}{field.required ? ' *' : ''}</label>
+                      <label>{field.label}{field.required ? ' *' : ' (optional)'}</label>
                       <input
+                        type={field.type === 'number' ? 'text' : field.type}
                         value={leadForm[field.key]}
-                        onChange={e => setLeadForm(prev => ({ ...prev, [field.key]: e.target.value }))}
+                        onChange={(event) => setFieldValue(field.key, event.target.value)}
                         placeholder={field.label}
                         style={{ width: '100%' }}
                       />
+                      {field.helperText && <div className="m06-inline-note" style={{ marginTop: 4 }}>{field.helperText}</div>}
+                      {formErrors[field.key] && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors[field.key]}</div>}
                     </div>
                   ))}
                 </div>
                 <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
                   <button className="btn-primary" type="submit" disabled={savingLead}>{savingLead ? 'Saving...' : 'Save Lead'}</button>
-                  <button className="btn-ghost" type="button" onClick={() => { setEditing(null); setLeadForm(emptyLeadForm()); }}>Clear</button>
+                  <button className="btn-ghost" type="button" onClick={resetManualForm}>Clear</button>
                 </div>
               </form>
             </section>
@@ -517,101 +623,132 @@ export default function Module6Leads() {
 
           {activeTab === 'csv' && (
             <section className="m06-panel">
-              <div className="m06-section-label">CSV Import</div>
-              <h3 className="m06-panel-title" style={{ marginTop: 14 }}>CSV Import</h3>
+              <div className="m06-section-label">CSV Upload</div>
+              <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Lead CSV Import</h3>
               <div className="m06-helper" style={{ marginBottom: 12 }}>
-                Map the extra funnel columns here. Existing lead IDs are updated instead of being skipped.
+                Upload a CSV, review auto-detected mappings, open the dedicated preview step, validate rows, inspect invalid rows, and confirm before import.
               </div>
 
               <div className="m06-file-drop">
                 <div className="m06-inline-note" style={{ marginBottom: 10 }}>
-                  Upload a lead CSV, review the detected header row, then confirm the field mappings before import.
+                  Only `.csv` files up to 5MB are accepted.
                 </div>
                 <input type="file" accept=".csv" onChange={onFileChange} />
+                {csvFileName && <div className="m06-inline-note" style={{ marginTop: 8 }}>Loaded file: {csvFileName}</div>}
               </div>
 
-              {headerError && <div style={{ marginTop: 8, color: '#c33', fontSize: 12 }}>{headerError}</div>}
-              {!headerError && headersPreview.length > 0 && (
-                <div className="m06-inline-note" style={{ marginTop: 8 }}>Detected headers: {headersPreview.join(', ')}</div>
-              )}
+              {csvFileError && <div style={{ marginTop: 8, color: '#c33', fontSize: 12 }}>{csvFileError}</div>}
 
-              {rowsPreview.length > 0 && (
-                <div style={{ marginTop: 16 }}>
-                  <div className="m06-preview-head">
-                    Previewing rows {previewStartIndex}-{previewEndIndex} of {rowsPreview.length}
-                    {previewLimited ? ` (showing first ${rowsPreview.length} of ${totalPreviewRows})` : totalPreviewRows ? ` (total rows: ${totalPreviewRows})` : ''}
-                    {blankRowCount > 0 ? ` | Blank lines skipped: ${blankRowCount}` : ''}
+              {csvHeaders.length > 0 && (
+                <>
+                  <div className="m06-summary-box">
+                    <strong>Detected headers</strong>
+                    <div style={{ marginTop: 6 }}>{csvHeaders.join(', ')}</div>
                   </div>
-                  <div className="m06-preview-shell">
-                    <div className="m06-preview-table-wrap">
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr>
-                            {headersPreview.map((header, idx) => (
-                              <th key={idx}>{header}</th>
+
+                  <div className="m06-mapping-grid" style={{ marginTop: 16 }}>
+                    {LEAD_SCHEMA_FIELDS.map((field) => {
+                      const usedElsewhere = new Set(
+                        Object.entries(mapping)
+                          .filter(([key, value]) => key !== field.key && value)
+                          .map(([, value]) => value),
+                      );
+                      return (
+                        <div key={field.key}>
+                          <label>{field.label}{field.required ? ' *' : ' (optional)'}</label>
+                          <select value={mapping[field.key]} onChange={(event) => setMappingValue(field.key, event.target.value)}>
+                            <option value="">{field.required ? 'Select CSV column' : 'Skip this field'}</option>
+                            {csvHeaders.filter((header) => !usedElsewhere.has(header) || header === mapping[field.key]).map((header) => (
+                              <option key={header} value={header}>{header}</option>
                             ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {previewPageRows.map((row, rowIndex) => (
-                            <tr key={rowIndex}>
-                              {headersPreview.map((_, colIndex) => (
-                                <td key={colIndex}>{row[colIndex] ?? ''}</td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </select>
+                        </div>
+                      );
+                    })}
+                    <div>
+                      <label>Start row *</label>
+                      <input type="number" min={1} value={startRow} onChange={(event) => { setStartRow(Number(event.target.value || 1)); setValidationResult(null); }} />
+                    </div>
+                    <div>
+                      <label>End row *</label>
+                      <input type="number" min={1} value={endRow} onChange={(event) => { setEndRow(event.target.value ? Number(event.target.value) : ''); setValidationResult(null); }} />
                     </div>
                   </div>
-                </div>
-              )}
 
-              <div className="m06-mapping-grid">
-                {FIELD_LABELS.map(field => (
-                  <div key={field.key}>
-                    <label>{field.label}{field.required ? ' *' : ''}</label>
-                    <input
-                      list="m06-lead-headers"
-                      value={mapping[field.key]}
-                      onChange={e => setMappingValue(field.key, e.target.value)}
-                      placeholder={field.required ? 'Column name' : 'Optional'}
-                      style={{ width: '100%' }}
-                    />
+                  {mappingErrors.length > 0 && (
+                    <div className="m06-summary-box" style={{ border: '1px solid rgba(195,51,51,0.18)', background: '#fff7f7' }}>
+                      <strong>Mapping issues</strong>
+                      <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+                        {mappingErrors.map((issue) => <div key={issue}>{issue}</div>)}
+                      </div>
+                    </div>
+                  )}
+                  {rangeError && (
+                    <div className="m06-summary-box" style={{ border: '1px solid rgba(195,51,51,0.18)', background: '#fff7f7' }}>
+                      <strong>Row range issue</strong>
+                      <div style={{ marginTop: 8 }}>{rangeError}</div>
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button className="btn-primary" onClick={runCsvValidation} disabled={validatingCsv}>
+                      {validatingCsv ? 'Validating...' : 'Validate and Open Preview'}
+                    </button>
+                    <button className="btn-ghost" onClick={resetCsvState}>Reset Upload</button>
                   </div>
-                ))}
-                <div>
-                  <label>Start row</label>
-                  <input type="number" min={1} value={String(startRow)} onChange={e => setStartRow(Number(e.target.value || 1))} style={{ width: '100%' }} />
-                </div>
-                <div>
-                  <label>End row</label>
-                  <input type="number" min={1} placeholder="auto" value={endRow !== undefined ? String(endRow) : ''} onChange={e => setEndRow(e.target.value ? Number(e.target.value) : undefined)} style={{ width: '100%' }} />
-                </div>
-              </div>
-              <datalist id="m06-lead-headers">
-                {headerOptions.map(option => <option key={option.value} value={option.value} />)}
-              </datalist>
 
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
-                <input type="checkbox" checked={mappingConfirmed} onChange={e => setMappingConfirmed(e.target.checked)} />
-                <span className="m06-inline-note">I have reviewed the mappings and understand this import updates existing lead IDs.</span>
-              </label>
+                  {selectedCsvRows.length > 0 && (
+                    <div style={{ marginTop: 18 }}>
+                      <ImportPreviewStep
+                        title="Lead CSV Preview"
+                        subtitle="This reusable Module 6 preview step is the shared import-review pattern for current and future data-ingestion screens."
+                        sourceHeaders={csvHeaders}
+                        rows={previewRows}
+                        currentStartRow={startRow}
+                        totalSelectedRows={selectedCsvRows.length}
+                      />
+                    </div>
+                  )}
 
-              <div style={{ marginTop: 12, display: 'flex', gap: 10 }}>
-                <button className="btn-primary" onClick={submitCsv} disabled={submittingCsv}>{submittingCsv ? 'Importing...' : 'Import CSV'}</button>
-                <button className="btn-ghost" onClick={resetCsvState}>Reset</button>
-              </div>
+                  {validationResult && (
+                    <div className="m06-summary-box" style={{ marginTop: 16 }}>
+                      <div style={{ fontWeight: 700, marginBottom: 6 }}>Validation Summary</div>
+                      <div>Total rows checked: {validationResult.summary.checkedRows}</div>
+                      <div>Valid rows: {validationResult.summary.validRows}</div>
+                      <div>Invalid rows: {validationResult.summary.invalidRows}</div>
+                      <div>Warning rows: {validationResult.summary.warningRows}</div>
+                      <div>Selected range: rows {validationResult.selectedRange.startRow} to {validationResult.selectedRange.endRow}</div>
+                      <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        {validationResult.summary.invalidRows > 0 && <button className="btn-ghost" onClick={downloadInvalidRows}>Download Invalid Rows</button>}
+                        {validationResult.summary.validRows > 0 && (
+                          <button
+                            className="btn-primary"
+                            onClick={() => submitCsvImport(validationResult.summary.invalidRows > 0)}
+                            disabled={submittingCsv}
+                          >
+                            {submittingCsv
+                              ? 'Importing...'
+                              : validationResult.summary.invalidRows > 0
+                                ? 'Proceed With Valid Rows Only'
+                                : 'Confirm and Import'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
-              {importSummary && (
-                <div className="m06-summary-box">
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Import Summary</div>
-                  <div>Selected rows: {importSummary.selected ?? 0}</div>
-                  <div>Inserted: {importSummary.inserted ?? 0}</div>
-                  <div>Updated: {importSummary.updated ?? 0}</div>
-                  <div>Failed: {importSummary.failed ?? 0}</div>
-                  <div>Duplicates touched: {importSummary.duplicates ?? 0}</div>
-                </div>
+                  {importSummary && (
+                    <div className="m06-summary-box">
+                      <div style={{ fontWeight: 600, marginBottom: 4 }}>Import Summary</div>
+                      <div>Selected rows: {importSummary.selected ?? 0}</div>
+                      <div>Inserted: {importSummary.inserted ?? 0}</div>
+                      <div>Updated: {importSummary.updated ?? 0}</div>
+                      <div>Skipped: {importSummary.skipped ?? 0}</div>
+                      <div>Warnings: {importSummary.warnings ?? 0}</div>
+                      <div>Failed: {importSummary.failed ?? 0}</div>
+                    </div>
+                  )}
+                </>
               )}
             </section>
           )}

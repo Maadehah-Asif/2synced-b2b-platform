@@ -4,8 +4,9 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 export interface Module6Lead {
   _id: string;
+  project_id?: string;
+  row_number?: number | null;
   lead_id: string;
-  name?: string | null;
   full_name?: string | null;
   first_name?: string | null;
   last_name?: string | null;
@@ -32,8 +33,44 @@ export interface LeadImportSummary {
   updated?: number;
   failed: number;
   duplicates: number;
+  skipped?: number;
+  warnings?: number;
   failedRows?: Array<{ row: number; error: string }>;
   selected?: number;
+}
+
+export interface LeadCsvValidationIssue {
+  field: string;
+  message: string;
+}
+
+export interface LeadCsvValidationRow {
+  rowNumber: number;
+  original: Record<string, string>;
+  mapped: Record<string, unknown>;
+  action: 'insert' | 'update';
+  errors: LeadCsvValidationIssue[];
+  warnings: LeadCsvValidationIssue[];
+  valid: boolean;
+}
+
+export interface LeadCsvValidationResult {
+  ok: true;
+  header: string[];
+  mapping: Record<string, number | null>;
+  selectedRange: {
+    startRow: number;
+    endRow: number;
+    totalRows: number;
+    selectedRows: number;
+  };
+  summary: {
+    checkedRows: number;
+    validRows: number;
+    invalidRows: number;
+    warningRows: number;
+  };
+  rowResults: LeadCsvValidationRow[];
 }
 
 export async function fetchModule6Leads(params: { search?: string; limit?: number; includeArchived?: boolean } = {}): Promise<{ leads: Module6Lead[] }> {
@@ -49,7 +86,7 @@ export async function fetchModule6Leads(params: { search?: string; limit?: numbe
   return { leads: json.leads || [] };
 }
 
-export async function importModule6LeadsCSV(payload: { csv: string; map: Record<string, string | null>; startRow?: number; endRow?: number; }): Promise<LeadImportSummary> {
+export async function importModule6LeadsCSV(payload: { csv: string; map: Record<string, string | null>; startRow?: number; endRow?: number; allowPartial?: boolean; }): Promise<LeadImportSummary> {
   const projectId = getWorkspaceIdFromHash();
   if (!projectId) {
     return { processed: 0, inserted: 0, failed: 0, duplicates: 0 };
@@ -76,6 +113,19 @@ export async function importModule6LeadsCSV(payload: { csv: string; map: Record<
     throw new Error(message);
   }
   return res.json();
+}
+
+export async function validateModule6LeadsCSV(payload: { csv: string; map: Record<string, string | null>; startRow?: number; endRow?: number; }): Promise<LeadCsvValidationResult> {
+  const projectId = getWorkspaceIdFromHash();
+  if (!projectId) throw new Error('workspace_required');
+  const res = await fetch(`${API_URL}/m06/leads/import/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, projectId }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error || 'validation_failed');
+  return json;
 }
 
 export async function searchModule6Leads(query: string): Promise<{ leads: Module6Lead[] }> {

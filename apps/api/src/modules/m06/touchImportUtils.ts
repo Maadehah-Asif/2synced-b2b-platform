@@ -1,4 +1,3 @@
-import mongoose from 'mongoose';
 import { Campaign } from './models/Campaign.js';
 import Lead from '../m01/models/Lead.js';
 import { Module6Lead } from './models/Module6Lead.js';
@@ -38,24 +37,24 @@ export interface FailedRow {
 export interface ImportSummary { processed: number; inserted: number; failed: number; failedRows: FailedRow[]; duplicates: number; }
 
 // Resolve campaign by name or campaign_id within project, with simple in-memory cache
-export async function resolveCampaignCached(value: string, projectOid: mongoose.Types.ObjectId, mode: 'name' | 'campaign_id', cache: Record<string, any>) {
+export async function resolveCampaignCached(value: string, projectId: string, mode: 'name' | 'campaign_id', cache: Record<string, any>) {
   const key = `${mode}:${value}`;
   if(cache[key]) return cache[key];
-  const q = mode === 'name' ? { project_id: projectOid, name: value } : { project_id: projectOid, campaign_id: value };
+  const q = mode === 'name' ? { project_id: projectId, name: value } : { project_id: projectId, campaign_id: value };
   const found = await Campaign.findOne(q).lean();
   if(found) { cache[key] = found; return found; }
   return null;
 }
 
 // Resolve lead by numeric id (from Lead.lead_id or _id fallback)
-export async function resolveLeadCached(value: string, projectOid: mongoose.Types.ObjectId, cache: Record<string, any>, leadIdentifier: 'id'|'email' = 'id') {
+export async function resolveLeadCached(value: string, projectId: string, cache: Record<string, any>, leadIdentifier: 'id'|'email' = 'id') {
   const key = `lead:${leadIdentifier}:${value}`;
   if(cache[key]) return cache[key];
   let found: any = null;
 
   const tryNumeric = async () => {
     // prefer module6 leads by lead_id string
-    found = await Module6Lead.findOne({ project_id: projectOid, lead_id: value }).lean();
+    found = await Module6Lead.findOne({ project_id: projectId, lead_id: value }).lean();
     if(found) return;
     // legacy numeric lead_id
     if(/^[0-9]+$/.test(value)) {
@@ -64,16 +63,15 @@ export async function resolveLeadCached(value: string, projectOid: mongoose.Type
   };
 
   const tryObjectId = async () => {
-    if(!mongoose.isValidObjectId(value)) return;
-    found = await Module6Lead.findOne({ _id: value, project_id: projectOid }).lean();
+    found = await Module6Lead.findOne({ _id: value, project_id: projectId }).lean();
     if(found) return;
-    found = await Lead.findById(value).lean();
+    if (/^[a-fA-F0-9]{24}$/.test(value)) found = await Lead.findById(value).lean();
   };
 
   const tryEmail = async () => {
     if(!value.includes('@')) return;
     const emailRegex = new RegExp(`^${value.replace(/[-/\\^$*+?.()|[\\]{}]/g,'\\$&')}$`, 'i');
-    found = await Module6Lead.findOne({ project_id: projectOid, email: emailRegex }).lean();
+    found = await Module6Lead.findOne({ project_id: projectId, email: emailRegex }).lean();
     if(found) return;
     found = await Lead.findOne({ Email: emailRegex }).lean();
   };
@@ -95,7 +93,6 @@ export async function resolveLeadCached(value: string, projectOid: mongoose.Type
 
 export async function importCampaignTouchesCSV(opts: ImportOptions): Promise<ImportSummary> {
   const { projectId, csv, map, startRow = 1, endRow, campaignIdentifier = 'name', leadIdentifier = 'id', duplicatePolicy = 'skip' } = opts;
-  const projectOid = new mongoose.Types.ObjectId(projectId);
   const lines = csv.split(/\r?\n/).filter(l => l.trim().length > 0);
   if(lines.length < 2) return { processed: 0, inserted: 0, failed: lines.length === 1 ? 1 : 0, failedRows: [{ row: 1, error: 'csv_no_rows'}], duplicates: 0 };
   const headerLine = lines[0] ?? '';
@@ -149,24 +146,24 @@ export async function importCampaignTouchesCSV(opts: ImportOptions): Promise<Imp
     const metadataObj: any = finalType === 'other' && rawType && rawType !== 'other' ? { original_type: rawType } : undefined;
 
     // resolve campaign
-    const campDoc = await resolveCampaignCached(campVal, projectOid, campaignIdentifier, cacheCampaign);
+    const campDoc = await resolveCampaignCached(campVal, projectId, campaignIdentifier, cacheCampaign);
     if(!campDoc) { failedRows.push({ row: rowNumber, error: 'campaign_not_found', raw, lead: leadVal, campaign: campVal, type: rawType, normalized_type: normalizedType }); continue; }
 
     // resolve lead (pass hint for id vs email)
-    const leadDoc = await resolveLeadCached(leadVal, projectOid, cacheLead, leadIdentifier);
+    const leadDoc = await resolveLeadCached(leadVal, projectId, cacheLead, leadIdentifier);
     if(!leadDoc) { failedRows.push({ row: rowNumber, error: 'lead_not_found', raw, lead: leadVal, campaign: campVal, type: rawType, normalized_type: normalizedType }); continue; }
 
     // duplicate check
     if(duplicatePolicy === 'skip') {
-      const dup = await CampaignTouch.findOne({ lead_id: leadDoc._id, campaign_id: campDoc._id, type: finalType, touched_at: dt }).lean();
+      const dup = await CampaignTouch.findOne({ lead_id: leadDoc.lead_id, campaign_id: campDoc.campaign_id, type: finalType, touched_at: dt }).lean();
       if(dup) { duplicates++; continue; }
     }
 
     try {
       await CampaignTouch.create({
-        project_id: projectOid,
-        lead_id: leadDoc._id,
-        campaign_id: campDoc._id,
+        project_id: projectId,
+        lead_id: leadDoc.lead_id,
+        campaign_id: campDoc.campaign_id,
         channel: finalChannel as any,
         type: finalType as any,
         touched_at: dt,

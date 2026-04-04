@@ -5,7 +5,7 @@ export type Channel = 'email' | 'ads' | 'linkedin' | 'webinar' | 'other';
 export interface CampaignDoc {
   _id: Types.ObjectId;
   campaign_id: string; // external/business id
-  project_id: Types.ObjectId | string;
+  project_id: string;
   channel: Channel;
   name: string;
   description?: string | null;
@@ -20,8 +20,8 @@ export interface CampaignDoc {
 
 const CampaignSchema = new Schema<CampaignDoc>(
   {
-    campaign_id: { type: String, required: true, unique: true, index: true },
-    project_id: { type: Schema.Types.ObjectId, required: true, index: true },
+    campaign_id: { type: String, required: true, index: true },
+    project_id: { type: String, required: true, index: true },
     channel: { type: String, enum: ['email', 'ads', 'linkedin', 'webinar', 'other'], required: true },
     name: { type: String, required: true, trim: true },
     description: { type: String },
@@ -31,7 +31,9 @@ const CampaignSchema = new Schema<CampaignDoc>(
     status: { type: String, enum: ['active', 'archived'], default: 'active' },
     spend: { type: Number, required: true, default: 0 },
   },
-  { timestamps: true }
+  { timestamps: true, collection: 'campaigns' }
 );
+
+CampaignSchema.index({ project_id: 1, campaign_id: 1 }, { unique: true });
 
 export const Campaign: Model<CampaignDoc> = (mongoose.models.Campaign as Model<CampaignDoc>) || mongoose.model<CampaignDoc>('Campaign', CampaignSchema);

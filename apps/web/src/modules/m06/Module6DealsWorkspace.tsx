@@ -34,9 +34,9 @@ type CsvRow = { rowNumber: number; original: Record<string, string> };
 
 function Toast({ message, type, onClose }:{ message:string, type:'success'|'error', onClose:()=>void }){
   return (
-    <div style={{ position:'fixed', right:16, bottom:16, background:type==='success'?'#0a7':'#c33', color:'#fff', padding:'10px 14px', borderRadius:8, zIndex:60 }}>
+    <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 10, background: type === 'success' ? '#e9fff3' : '#fff1f1', color: type === 'success' ? '#0a7' : '#a22', border: `1px solid ${type === 'success' ? '#a6e7c3' : '#f3b6b6'}` }}>
       <div>{message}</div>
-      <button className="btn-ghost" style={{ marginTop:6, background:'#fff', color:'#333' }} onClick={onClose}>Close</button>
+      <button className="btn-ghost" style={{ marginTop: 8 }} onClick={onClose}>Dismiss</button>
     </div>
   );
 }
@@ -100,6 +100,13 @@ function downloadTextFile(filename: string, content: string) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function formatLeadDisplay(lead: any) {
+  const name = String(lead?.full_name || lead?.name || '').trim();
+  const email = String(lead?.email || '').trim();
+  const leadId = String(lead?.lead_id || '').trim();
+  return [leadId ? `#${leadId}` : '', name, email].filter(Boolean).join(' | ') || 'Unknown lead';
 }
 
 function formatLeadOption(lead: any) {
@@ -426,6 +433,8 @@ export default function Module6DealsWorkspace(){
             </div>
           </section>
 
+          {toast && <Toast message={toast.msg} type={toast.type} onClose={()=>setToast(null)} />}
+
           {activeTab === 'list' && (
             <section className="m06-panel">
               <div className="m06-section-label">View</div>
@@ -434,7 +443,7 @@ export default function Module6DealsWorkspace(){
               <div className="m06-campaign-filter-grid" style={{ marginTop: 16 }}>
                 <div>
                   <label>Lead</label>
-                  <Autocomplete value={filterLeadQuery} placeholder="Lead id / name / email" fetchItems={async (query) => { const result = await searchLeads(query); return result.leads || []; }} formatItem={formatLeadOption} getValue={formatLeadOption} onChange={(value,item)=>{ setFilterLeadQuery(value); setFilterLeadId(item ? String(item.lead_id) : ''); }} />
+                  <Autocomplete value={filterLeadQuery} placeholder="Lead id / name / email" fetchItems={async (query) => { const result = await searchLeads(query); return result.leads || []; }} formatItem={formatLeadDisplay} getValue={formatLeadDisplay} onChange={(value,item)=>{ setFilterLeadQuery(value); setFilterLeadId(item ? String(item.lead_id) : ''); }} />
                 </div>
                 <div><label>Closed from</label><input type="date" value={from} onChange={(event)=>setFrom(event.target.value)} /></div>
                 <div><label>Closed to</label><input type="date" value={to} onChange={(event)=>setTo(event.target.value)} /></div>
@@ -493,10 +502,18 @@ export default function Module6DealsWorkspace(){
               <div className="m06-section-label">Manual Entry</div>
               <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Single Deal Form</h3>
               <div className="m06-helper" style={{ marginBottom: 12 }}>Add one revenue record with lead linkage, revenue, currency, win state, and close date.</div>
+              {Object.values(formErrors).filter(Boolean).length > 0 && (
+                <div className="m06-summary-box" style={{ marginBottom: 14, border: '1px solid rgba(195,51,51,0.18)', background: '#fff7f7' }}>
+                  <strong>Fix these issues before saving:</strong>
+                  <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+                    {Object.entries(formErrors).map(([field, message]) => message ? <div key={field}>{message}</div> : null)}
+                  </div>
+                </div>
+              )}
               <div className="m06-form-grid">
                 <div>
                   <label>Lead *</label>
-                  <Autocomplete value={leadQuery} placeholder="Lead id / name / email" fetchItems={async (query)=>{ const result = await searchLeads(query); return result.leads || []; }} formatItem={formatLeadOption} getValue={formatLeadOption} onChange={(value,item)=>{ setLeadQuery(value); setFormValue('lead_id', item ? String(item.lead_id) : ''); }} />
+                  <Autocomplete value={leadQuery} placeholder="Lead id / name / email" fetchItems={async (query)=>{ const result = await searchLeads(query); return result.leads || []; }} formatItem={formatLeadDisplay} getValue={formatLeadDisplay} onChange={(value,item)=>{ setLeadQuery(value); setFormValue('lead_id', item ? String(item.lead_id) : ''); }} />
                   {formErrors.lead_id && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.lead_id}</div>}
                 </div>
                 <div><label>Deal ID *</label><input value={form.deal_id} onChange={(event)=>setFormValue('deal_id', event.target.value)} />{formErrors.deal_id && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.deal_id}</div>}</div>
@@ -507,6 +524,7 @@ export default function Module6DealsWorkspace(){
               </div>
               <div style={{ marginTop:12, display:'flex', gap:8 }}>
                 <button className="btn-primary" disabled={saving} onClick={submitForm}>{saving ? 'Saving...' : 'Save Deal'}</button>
+                <button className="btn-ghost" onClick={() => { setForm(emptyDealForm()); setLeadQuery(''); setFormErrors({}); }}>Clear</button>
               </div>
             </section>
           )}
@@ -540,7 +558,7 @@ export default function Module6DealsWorkspace(){
                   </div>
                   {mappingErrors.length > 0 && <div className="m06-summary-box" style={{ border: '1px solid rgba(195,51,51,0.18)', background: '#fff7f7' }}><strong>Mapping issues</strong><div style={{ marginTop: 8, display:'grid', gap:4 }}>{mappingErrors.map((issue)=><div key={issue}>{issue}</div>)}</div></div>}
                   {rangeError && <div className="m06-summary-box" style={{ border: '1px solid rgba(195,51,51,0.18)', background: '#fff7f7' }}><strong>Row range issue</strong><div style={{ marginTop: 8 }}>{rangeError}</div></div>}
-                  <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}><button className="btn-primary" disabled={validatingCsv} onClick={runCsvValidation}>{validatingCsv ? 'Validating...' : 'Validate and Open Preview'}</button></div>
+                  <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}><button className="btn-primary" disabled={validatingCsv} onClick={runCsvValidation}>{validatingCsv ? 'Validating...' : 'Validate and Open Preview'}</button><button className="btn-ghost" onClick={() => { setCsvFileName(''); setCsvText(''); setCsvHeaders([]); setCsvRows([]); setCsvFileError(null); setMapping(defaultDealMapping()); setMappingErrors([]); setStartRow(1); setEndRow(''); setValidationResult(null); setUploadSummary(null); }}>Reset Upload</button></div>
                   {previewRows.length > 0 && <div style={{ marginTop: 18 }}><ImportPreviewStep title="Deal CSV Preview" subtitle="This reusable Module 6 preview step is shared across data-hub ingestion flows." sourceHeaders={csvHeaders} rows={previewRows} currentStartRow={startRow} totalSelectedRows={previewRows.length} /></div>}
                   {validationResult && (
                     <div className="m06-summary-box" style={{ marginTop:16 }}>
@@ -560,8 +578,6 @@ export default function Module6DealsWorkspace(){
               )}
             </section>
           )}
-
-          {toast && <Toast message={toast.msg} type={toast.type} onClose={()=>setToast(null)} />}
         </div>
       </main>
     </Layout>

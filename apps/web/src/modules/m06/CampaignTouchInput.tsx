@@ -39,9 +39,9 @@ type CsvRow = { rowNumber: number; original: Record<string, string> };
 
 function Toast({ message, type, onClose }:{ message:string, type:'success'|'error', onClose:()=>void }){
   return (
-    <div style={{ position:'fixed', right:16, bottom:16, background:type==='success'?'#0a7':'#c33', color:'#fff', padding:'10px 14px', borderRadius:8, zIndex:60 }}>
+    <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 10, background: type === 'success' ? '#e9fff3' : '#fff1f1', color: type === 'success' ? '#0a7' : '#a22', border: `1px solid ${type === 'success' ? '#a6e7c3' : '#f3b6b6'}` }}>
       <div>{message}</div>
-      <button className="btn-ghost" style={{ marginTop:6, background:'#fff', color:'#333' }} onClick={onClose}>Close</button>
+      <button className="btn-ghost" style={{ marginTop: 8 }} onClick={onClose}>Dismiss</button>
     </div>
   );
 }
@@ -109,6 +109,17 @@ function downloadTextFile(filename: string, content: string) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function formatLeadDisplay(lead: any) {
+  const name = String(lead?.full_name || '').trim();
+  const email = String(lead?.email || '').trim();
+  const leadId = String(lead?.lead_id || '').trim();
+  return [leadId ? `#${leadId}` : '', name, email].filter(Boolean).join(' | ') || 'Unknown lead';
+}
+
+function formatCampaignDisplay(campaign: any) {
+  return [campaign?.campaign_id, campaign?.name].filter(Boolean).join(' | ') || 'Unknown campaign';
 }
 
 function formatLeadOption(lead: any) {
@@ -476,6 +487,8 @@ export default function CampaignTouchInput(){
             </div>
           </section>
 
+          {toast && <Toast message={toast.msg} type={toast.type} onClose={()=>setToast(null)} />}
+
           {activeTab === 'list' && (
             <section className="m06-panel">
               <div className="m06-section-label">View</div>
@@ -487,8 +500,8 @@ export default function CampaignTouchInput(){
                 <select value={selectedEntityId} onChange={(event) => setSelectedEntityId(event.target.value)}>
                   <option value="">{mode === 'campaign' ? 'Choose a campaign' : 'Choose a lead'}</option>
                   {mode === 'campaign'
-                    ? campaignOptions.map((campaign) => <option key={campaign.id} value={String(campaign.campaign_id)}>{formatCampaignOption(campaign)}</option>)
-                    : leadOptions.map((lead) => <option key={lead._id} value={String(lead.lead_id)}>{formatLeadOption(lead)}</option>)}
+                    ? campaignOptions.map((campaign) => <option key={campaign.id} value={String(campaign.campaign_id)}>{formatCampaignDisplay(campaign)}</option>)
+                    : leadOptions.map((lead) => <option key={lead._id} value={String(lead.lead_id)}>{formatLeadDisplay(lead)}</option>)}
                 </select>
                 <select value={filterType} onChange={(event) => setFilterType(event.target.value)}>
                   <option value="">All types</option>
@@ -561,15 +574,23 @@ export default function CampaignTouchInput(){
               <div className="m06-section-label">Manual Entry</div>
               <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Single Touch Form</h3>
               <div className="m06-helper" style={{ marginBottom: 12 }}>Create one interaction event by linking a lead, a campaign, and the touch details used by attribution and journey analysis.</div>
+              {Object.values(formErrors).filter(Boolean).length > 0 && (
+                <div className="m06-summary-box" style={{ marginBottom: 14, border: '1px solid rgba(195,51,51,0.18)', background: '#fff7f7' }}>
+                  <strong>Fix these issues before saving:</strong>
+                  <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+                    {Object.entries(formErrors).map(([field, message]) => message ? <div key={field}>{message}</div> : null)}
+                  </div>
+                </div>
+              )}
               <div className="m06-form-grid">
                 <div>
                   <label>Lead *</label>
-                  <Autocomplete value={leadQuery} placeholder="Lead id / name / email" fetchItems={async (query) => { const result = await searchLeads(query); return result.leads || []; }} formatItem={formatLeadOption} getValue={formatLeadOption} onChange={(value, item) => { setLeadQuery(value); setFormValue('lead_id', item ? String(item.lead_id) : ''); }} />
+                  <Autocomplete value={leadQuery} placeholder="Lead id / name / email" fetchItems={async (query) => { const result = await searchLeads(query); return result.leads || []; }} formatItem={formatLeadDisplay} getValue={formatLeadDisplay} onChange={(value, item) => { setLeadQuery(value); setFormValue('lead_id', item ? String(item.lead_id) : ''); }} />
                   {formErrors.lead_id && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.lead_id}</div>}
                 </div>
                 <div>
                   <label>Campaign *</label>
-                  <Autocomplete value={campaignQuery} placeholder="Campaign id / name" fetchItems={async (query) => { const result = await searchCampaigns(query); return result.campaigns || []; }} formatItem={formatCampaignOption} getValue={formatCampaignOption} onChange={(value, item) => { setCampaignQuery(value); setFormValue('campaign_id', item ? String(item.campaign_id) : ''); }} />
+                  <Autocomplete value={campaignQuery} placeholder="Campaign id / name" fetchItems={async (query) => { const result = await searchCampaigns(query); return result.campaigns || []; }} formatItem={formatCampaignDisplay} getValue={formatCampaignDisplay} onChange={(value, item) => { setCampaignQuery(value); setFormValue('campaign_id', item ? String(item.campaign_id) : ''); }} />
                   {formErrors.campaign_id && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.campaign_id}</div>}
                 </div>
                 <div>
@@ -660,8 +681,6 @@ export default function CampaignTouchInput(){
               )}
             </section>
           )}
-
-          {toast && <Toast message={toast.msg} type={toast.type} onClose={()=>setToast(null)} />}
         </div>
       </main>
     </Layout>

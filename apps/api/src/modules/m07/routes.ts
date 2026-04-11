@@ -3,6 +3,7 @@ import multer from 'multer';
 import {
   createInteraction,
   previewInteractionUpload,
+  validateInteractionUpload,
   commitInteractionUpload,
   listInteractions,
   getInteraction,
@@ -42,6 +43,7 @@ router.delete('/stages/:id/permanent', deleteStagePermanent);
 // Interaction routes
 router.post('/interactions', createInteraction);
 router.post('/interactions/upload/preview', upload.single('file'), previewInteractionUpload);
+router.post('/interactions/upload/validate', validateInteractionUpload);
 router.post('/interactions/upload/commit', commitInteractionUpload);
 
 router.get('/interactions', listInteractions);

@@ -35,9 +35,9 @@ type CsvRow = {
 
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
   return (
-    <div style={{ position: 'fixed', right: 16, bottom: 16, background: type === 'success' ? '#0a7' : '#c33', color: '#fff', padding: '10px 14px', borderRadius: 8, zIndex: 60 }}>
+    <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 10, background: type === 'success' ? '#e9fff3' : '#fff1f1', color: type === 'success' ? '#0a7' : '#a22', border: `1px solid ${type === 'success' ? '#a6e7c3' : '#f3b6b6'}` }}>
       <div>{message}</div>
-      <button className="btn-ghost" style={{ marginTop: 6, background: '#fff', color: '#333' }} onClick={onClose}>Close</button>
+      <button className="btn-ghost" style={{ marginTop: 8 }} onClick={onClose}>Dismiss</button>
     </div>
   );
 }
@@ -519,6 +519,8 @@ export default function Module6Leads() {
             </div>
           </section>
 
+          {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+
           {activeTab === 'list' && (
             <section className="m06-panel">
               <div className="m06-section-label">View</div>
@@ -752,8 +754,6 @@ export default function Module6Leads() {
               )}
             </section>
           )}
-
-          {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>
       </main>
     </Layout>

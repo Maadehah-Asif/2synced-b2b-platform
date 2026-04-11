@@ -13,6 +13,16 @@ export type StageMapping = Record<StageFieldKey, string>;
 
 export const STAGE_STATUS_OPTIONS = ['active', 'completed', 'dropped'] as const;
 export const STAGE_REQUIRED_FIELDS: StageFieldKey[] = ['lead_id', 'stage_name', 'entered_at'];
+export const STAGE_FIELD_LABELS: Record<StageFieldKey, string> = {
+  lead_id: 'Lead ID',
+  stage_name: 'Stage Name',
+  entered_at: 'Entered At',
+  exited_at: 'Exited At',
+  stage_status: 'Stage Status',
+  next_stage: 'Next Stage',
+  exit_reason: 'Exit Reason',
+  notes: 'Notes',
+};
 
 export function emptyStageForm(): StageFormState {
   return {

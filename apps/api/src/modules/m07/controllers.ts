@@ -125,15 +125,186 @@ export async function previewInteractionUpload(req: Request, res: Response){
   }catch(e){ console.error('[m07.previewInteractionUpload]', e); return res.status(500).json({ error: 'internal' }); }
 }
 
+async function validateInteractionRows(params: {
+  workspaceId: string;
+  csv: string;
+  map: Record<string, string | null | undefined>;
+  startRow?: number;
+  endRow?: number;
+  duplicateMode?: 'skip_duplicates' | 'overwrite_existing';
+}) {
+  const records = parseCsvRecords(params.csv);
+  if (records.length === 0) {
+    return {
+      ok: true as const,
+      rowResults: [],
+      summary: { checkedRows: 0, validRows: 0, invalidRows: 0, warningRows: 0 },
+    };
+  }
+
+  const header = (records[0] || []).map((column) => String(column || '').trim());
+  const dataRows = records.slice(1);
+  const totalRows = dataRows.length;
+  const safeStart = Number.isInteger(params.startRow) ? Math.max(1, Number(params.startRow)) : 1;
+  const safeEnd = Number.isInteger(params.endRow) ? Number(params.endRow) : totalRows;
+  if (safeStart < 1) throw new Error('start_row_invalid');
+  if (safeEnd < safeStart) throw new Error('end_row_before_start');
+  if (safeEnd > totalRows) throw new Error('end_row_exceeds_total');
+
+  const headerIndex = new Map<string, number>();
+  header.forEach((column, index) => headerIndex.set(normalizeHeaderValue(column), index));
+
+  const rowResults: Array<{
+    rowNumber: number;
+    original: Record<string, string>;
+    valid: boolean;
+    errors: Array<{ field: string; message: string }>;
+    warnings: Array<{ field: string; message: string }>;
+    mappedRow?: Record<string, unknown>;
+  }> = [];
+
+  for (let offset = safeStart - 1; offset < safeEnd; offset += 1) {
+    const csvRow = dataRows[offset] || [];
+    const rowNumber = offset + 1;
+    const original = buildOriginalRow(header, csvRow);
+    const errors: Array<{ field: string; message: string }> = [];
+    const warnings: Array<{ field: string; message: string }> = [];
+    const mapped: Record<string, string | null> = {};
+    const usedHeaders = new Set<string>();
+
+    for (const field of ['lead_id', 'timestamp', 'interaction_type']) {
+      if (!sanitizeStringValue(params.map[field])) errors.push({ field, message: `${field} is missing from the mapping.` });
+    }
+
+    for (const [field, mappedHeaderRaw] of Object.entries(params.map || {})) {
+      const mappedHeader = sanitizeStringValue(mappedHeaderRaw);
+      if (!mappedHeader) continue;
+      const normalizedHeader = normalizeHeaderValue(mappedHeader);
+      if (usedHeaders.has(normalizedHeader)) {
+        errors.push({ field, message: `${mappedHeader} is mapped more than once.` });
+        continue;
+      }
+      usedHeaders.add(normalizedHeader);
+      const index = headerIndex.get(normalizedHeader);
+      if (index === undefined) {
+        errors.push({ field, message: `${mappedHeader} was not found in the uploaded CSV headers.` });
+        continue;
+      }
+      mapped[field] = String(csvRow[index] ?? '').trim();
+    }
+
+    const leadId = sanitizeStringValue(mapped.lead_id);
+    const timestamp = parseDateValue(mapped.timestamp);
+    const interactionType = normalizeInteractionType(mapped.interaction_type);
+    const campaignId = sanitizeStringValue(mapped.campaign_id);
+    const engagementScoreRaw = sanitizeStringValue(mapped.engagement_score);
+    const engagementScore = engagementScoreRaw ? normalizeEngagementScore(engagementScoreRaw) : null;
+
+    if (!leadId) errors.push({ field: 'lead_id', message: 'lead_id is missing.' });
+    if (!timestamp) errors.push({ field: 'timestamp', message: 'timestamp must be a valid date.' });
+    if (!interactionType) errors.push({ field: 'interaction_type', message: `interaction_type must be one of ${Array.from(INTERACTION_TYPES).join(', ')}.` });
+    if (engagementScoreRaw && engagementScore === null) errors.push({ field: 'engagement_score', message: 'engagement_score must be between 1 and 10.' });
+
+    if (leadId) {
+      const lead = await FunnelLead.findOne({ workspace_id: params.workspaceId, lead_id: leadId }).select('_id').lean();
+      if (!lead) errors.push({ field: 'lead_id', message: 'lead_id does not exist in funnel leads.' });
+    }
+    if (campaignId) {
+      const campaign = await Campaign.findOne({ project_id: params.workspaceId, campaign_id: campaignId }).select('_id').lean();
+      if (!campaign) errors.push({ field: 'campaign_id', message: 'campaign_id does not exist in campaigns.' });
+    }
+    if (leadId && timestamp && interactionType) {
+      const existing = await Interaction.findOne({ workspace_id: params.workspaceId, lead_id: leadId, timestamp, interaction_type: interactionType }).select('_id').lean();
+      if (existing && params.duplicateMode === 'skip_duplicates') warnings.push({ field: 'interaction_type', message: 'A matching interaction already exists and will be skipped.' });
+    }
+
+    const rowResult: {
+      rowNumber: number;
+      original: Record<string, string>;
+      valid: boolean;
+      errors: Array<{ field: string; message: string }>;
+      warnings: Array<{ field: string; message: string }>;
+      mappedRow?: Record<string, unknown>;
+    } = { rowNumber, original, valid: errors.length === 0, errors, warnings };
+    if (errors.length === 0) {
+      rowResult.mappedRow = {
+        interaction_id: sanitizeStringValue(mapped.interaction_id),
+        lead_id: leadId,
+        timestamp,
+        interaction_type: interactionType,
+        channel: sanitizeStringValue(mapped.channel),
+        campaign_id: campaignId,
+        outcome: sanitizeStringValue(mapped.outcome),
+        engagement_score: engagementScore,
+        notes: sanitizeStringValue(mapped.notes),
+      };
+    }
+    rowResults.push(rowResult);
+  }
+
+  return {
+    ok: true as const,
+    rowResults,
+    summary: {
+      checkedRows: rowResults.length,
+      validRows: rowResults.filter((row) => row.valid).length,
+      invalidRows: rowResults.filter((row) => !row.valid).length,
+      warningRows: rowResults.filter((row) => row.warnings.length > 0).length,
+    },
+  };
+}
+
+export async function validateInteractionUpload(req: Request, res: Response){
+  try{
+    const body: any = req.body || {};
+    const workspaceId = body.workspaceId || body.workspace || null;
+    if(!workspaceId) return res.status(400).json({ error: 'workspaceId required' });
+    if(!body.csv || typeof body.csv !== 'string') return res.status(400).json({ error: 'csv required' });
+    if(!body.map || typeof body.map !== 'object') return res.status(400).json({ error: 'map required' });
+    const validation = await validateInteractionRows({
+      workspaceId,
+      csv: body.csv,
+      map: body.map,
+      startRow: body.startRow,
+      endRow: body.endRow,
+      duplicateMode: body.duplicateMode,
+    });
+    return res.json(validation);
+  }catch(e){
+    if (e instanceof Error && ['start_row_invalid', 'end_row_before_start', 'end_row_exceeds_total'].includes(e.message)) {
+      return res.status(400).json({ error: e.message });
+    }
+    console.error('[m07.validateInteractionUpload]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
 // POST /m07/interactions/upload/commit
 export async function commitInteractionUpload(req: Request, res: Response){
   try{
     const body: any = req.body || {};
     const workspaceId = body.workspaceId || body.workspace || null;
-    const rows = body.rows || [];
     const duplicateMode = body.duplicateMode || 'skip_duplicates';
+    const allowPartial = body.allowPartial === true;
     if(!workspaceId) return res.status(400).json({ error: 'workspaceId required' });
-    if(!Array.isArray(rows)) return res.status(400).json({ error: 'rows required' });
+    let rows = Array.isArray(body.rows) ? body.rows : [];
+
+    if (rows.length === 0 && body.csv && body.map) {
+      const validation = await validateInteractionRows({
+        workspaceId,
+        csv: String(body.csv),
+        map: body.map,
+        startRow: body.startRow,
+        endRow: body.endRow,
+        duplicateMode,
+      });
+      if (validation.summary.invalidRows > 0 && !allowPartial) {
+        return res.status(400).json({ error: 'invalid_rows_present', summary: validation.summary, rowResults: validation.rowResults });
+      }
+      rows = validation.rowResults.filter((row) => row.valid).map((row) => row.mappedRow);
+    }
+
+    if(!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ error: 'rows required' });
 
     const warnings: string[] = [];
     let imported = 0; let skipped = 0; let updated = 0;
@@ -386,13 +557,22 @@ async function validateStageRows(params: {
       if (existing && params.overwriteMode === 'skip_duplicates') warnings.push({ field: 'stage_name', message: 'A matching record already exists and will be skipped.' });
     }
 
-    rowResults.push({
+    const rowResult: {
+      rowNumber: number;
+      original: Record<string, string>;
+      valid: boolean;
+      errors: Array<{ field: string; message: string }>;
+      warnings: Array<{ field: string; message: string }>;
+      mappedRow?: Record<string, unknown>;
+    } = {
       rowNumber,
       original,
       valid: errors.length === 0,
       errors,
       warnings,
-      mappedRow: errors.length === 0 ? {
+    };
+    if (errors.length === 0) {
+      rowResult.mappedRow = {
         lead_id: leadId,
         stage_name: stageName,
         entered_at: enteredAt,
@@ -401,8 +581,9 @@ async function validateStageRows(params: {
         next_stage: sanitizeStringValue(mapped.next_stage),
         exit_reason: sanitizeStringValue(mapped.exit_reason),
         notes: sanitizeStringValue(mapped.notes),
-      } : undefined,
-    });
+      };
+    }
+    rowResults.push(rowResult);
   }
 
   return {

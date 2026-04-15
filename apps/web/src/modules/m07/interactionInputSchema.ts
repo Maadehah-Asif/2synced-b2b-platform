@@ -13,6 +13,8 @@ export type InteractionFormState = Record<InteractionFieldKey, string>;
 export type InteractionMapping = Record<InteractionFieldKey, string>;
 
 export const INTERACTION_TYPE_OPTIONS = ['call', 'email', 'meeting', 'demo'] as const;
+export const INTERACTION_CHANNEL_OPTIONS = ['phone', 'email', 'zoom', 'linkedin'] as const;
+export const INTERACTION_OUTCOME_OPTIONS = ['positive', 'negative', 'no response', 'follow-up needed'] as const;
 export const INTERACTION_REQUIRED_FIELDS: InteractionFieldKey[] = ['lead_id', 'timestamp', 'interaction_type'];
 export const INTERACTION_FIELD_LABELS: Record<InteractionFieldKey, string> = {
   interaction_id: 'Interaction ID',

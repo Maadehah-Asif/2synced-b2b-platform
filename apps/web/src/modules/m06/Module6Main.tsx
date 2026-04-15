@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
+import { useWorkspaceId } from '../../utils/workspace'
+import { fetchFromApi, parseApiJson } from '../../utils/api'
 import './module6.css'
 import PieChart from './PieChart'
 import TimelineChart from './TimelineChart'
@@ -17,6 +19,7 @@ const MODEL_OPTIONS = ['first-touch', 'last-touch', 'linear']
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
 export default function Module6Main() {
+  const workspaceId = useWorkspaceId({ redirectToWorkspaces: true })
   const [dateRange, setDateRange] = useState<DateRangeKey>('90d')
   const [channels] = useState<string[]>(['email', 'ads', 'linkedin', 'webinar'])
   const [model, setModel] = useState<string>('linear')
@@ -25,19 +28,24 @@ export default function Module6Main() {
   const [stats, setStats] = useState<any | null>(null)
 
   async function fetchStats() {
+    if (!workspaceId) {
+      setStats(null)
+      setError('Open a workspace to view Module 6 stats')
+      return
+    }
     setLoading(true)
     setError(null)
     try {
       const params = new URLSearchParams()
+      params.set('projectId', workspaceId)
       params.set('dateRange', dateRange)
       if (channels.length) params.set('channels', channels.join(','))
       if (model) params.set('model', model)
-      const res = await fetch(`${API_BASE}/m06/stats?${params.toString()}`)
-      const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || 'failed')
+      const res = await fetchFromApi(`${API_BASE}/m06/stats?${params.toString()}`, undefined, API_BASE)
+      const json = await parseApiJson<any>(res, 'Could not load Module 6 stats')
       setStats(json)
-    } catch {
-      setError('Could not load Module 6 stats')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load Module 6 stats')
       setStats(null)
     } finally {
       setLoading(false)
@@ -46,12 +54,25 @@ export default function Module6Main() {
 
   useEffect(() => {
     fetchStats()
-  }, [])
+  }, [workspaceId])
 
   const revenueByChannel = useMemo(() => {
     const list = stats?.revenueByChannel || []
-    return list.filter((c: any) => channels.includes(c.channel))
+    return list
+      .filter((c: any) => channels.includes(String(c.channel || '').toLowerCase()))
+      .map((c: any) => ({
+        label: c.channel,
+        value: Number(c.attributedRevenue ?? c.revenue ?? 0),
+      }))
   }, [stats, channels])
+
+  const timelineData = useMemo(() => {
+    const list = stats?.revenueOverTime || []
+    return list.map((point: any) => ({
+      month: point.month || point.period || 'Unknown',
+      total: Number(point.total ?? point.revenue ?? 0),
+    }))
+  }, [stats])
 
   return (
     <Layout>
@@ -72,6 +93,7 @@ export default function Module6Main() {
         </section>
 
         <section className="m06-panel">
+          {!workspaceId && <div style={{ color: '#c33', marginBottom: 12 }}>Open a workspace to load this dashboard.</div>}
           <div className="m06-toolbar">
             <div>
               <div className="m06-section-label">Filters</div>
@@ -97,6 +119,7 @@ export default function Module6Main() {
           </div>
           {loading && <div style={{ marginTop: 12 }}>Loading...</div>}
           {error && <div style={{ color: '#c33', marginTop: 12 }}>{error}</div>}
+          {!error && stats?.message && <div style={{ color: '#6a4b00', marginTop: 12 }}>{stats.message}</div>}
         </section>
 
         <section className="m06-grid-2">
@@ -105,7 +128,7 @@ export default function Module6Main() {
             <h3 className="m06-panel-title" style={{ marginTop: 12 }}>Revenue timeline</h3>
             <div className="m06-helper">Track how revenue changes across the current selection window.</div>
             <div style={{ height: 220, marginTop: 14 }}>
-              <TimelineChart data={stats?.revenueOverTime || []} />
+              <TimelineChart data={timelineData} />
             </div>
           </div>
           <div className="m06-panel soft">

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
+import { CSV_UPLOAD_LIMIT_BYTES, CSV_UPLOAD_LIMIT_LABEL } from '../../utils/csvUpload';
 import './module6.css';
 import ImportPreviewStep from './components/ImportPreviewStep';
 import {
@@ -27,8 +28,6 @@ import {
   type CampaignFormState,
   type CampaignMapping,
 } from './campaignInputSchema';
-
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 
 type CampaignTab = 'list' | 'manual' | 'csv';
 type CsvRow = { rowNumber: number; original: Record<string, string> };
@@ -307,8 +306,8 @@ export default function Module6Campaigns(){
       input.value = '';
       return;
     }
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      setCsvFileError('File exceeds the 5MB size limit.');
+    if (file.size > CSV_UPLOAD_LIMIT_BYTES) {
+      setCsvFileError(`File exceeds the ${CSV_UPLOAD_LIMIT_LABEL} size limit.`);
       input.value = '';
       return;
     }
@@ -349,20 +348,20 @@ export default function Module6Campaigns(){
     const errors = validateForm(form);
     setFormErrors(errors);
     if (Object.keys(errors).length > 0) {
-      setToast({ msg: 'Please fix the highlighted campaign form errors.', type: 'error' });
+      setToast({ msg: 'Please fix the highlighted form errors.', type: 'error' });
       return;
     }
-    if (!window.confirm(selected ? 'Are you sure you want to update this campaign?' : 'Are you sure you want to add this campaign?')) return;
+    if (!window.confirm('Are you sure you want to save this record?')) return;
 
     setSaving(true);
     try {
       const payload = buildPayload(form);
       if (selected) {
         await updateCampaign(selected.id, payload);
-        setToast({ msg: 'Campaign updated successfully.', type: 'success' });
+        setToast({ msg: 'Campaign record saved successfully.', type: 'success' });
       } else {
         await createCampaign(payload);
-        setToast({ msg: 'Campaign created successfully.', type: 'success' });
+        setToast({ msg: 'Campaign record saved successfully.', type: 'success' });
       }
       resetForm();
       setActiveTab('list');
@@ -673,7 +672,7 @@ export default function Module6Campaigns(){
 
               <div className="m06-file-drop">
                 <div className="m06-inline-note" style={{ marginBottom: 10 }}>
-                  Only `.csv` files up to 5MB are accepted.
+                  Only `.csv` files up to {CSV_UPLOAD_LIMIT_LABEL} are accepted.
                 </div>
                 <input type="file" accept=".csv" onChange={onFileChange} />
                 {csvFileName && <div className="m06-inline-note" style={{ marginTop: 8 }}>Loaded file: {csvFileName}</div>}

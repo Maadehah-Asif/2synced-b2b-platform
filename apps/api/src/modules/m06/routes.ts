@@ -57,7 +57,7 @@ const router = Router();
 // Basic module routes
 router.get('/', (_req, res) => res.json({ ok: true, module: 'm06' }));
 // GET /m06/stats?projectId=...  (projectId may be workspaceId)
- // stats already declared earlier; keep route as is
+router.get('/stats', stats);
 // POST /m06/seed  -> run demo seeder (safe, non-destructive by default)
 router.post('/seed', seedHttp);
 // GET /m06/demo-projects -> list projects with demo data

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import Autocomplete from '../../components/Autocomplete';
+import { CSV_UPLOAD_LIMIT_BYTES, CSV_UPLOAD_LIMIT_LABEL } from '../../utils/csvUpload';
+import { getWorkspaceIdFromHash } from '../../utils/workspace';
 import ImportPreviewStep from '../m06/components/ImportPreviewStep';
 import {
   archiveInteraction,
@@ -17,10 +19,12 @@ import {
   type InteractionValidationResult,
 } from './services/interactions';
 import {
+  INTERACTION_CHANNEL_OPTIONS,
   defaultInteractionMapping,
   emptyInteractionForm,
   INTERACTION_FIELD_LABELS,
   INTERACTION_HEADER_ALIASES,
+  INTERACTION_OUTCOME_OPTIONS,
   INTERACTION_REQUIRED_FIELDS,
   INTERACTION_TYPE_OPTIONS,
   type InteractionFieldKey,
@@ -29,7 +33,6 @@ import {
 } from './interactionInputSchema';
 import './module7.css';
 
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 type InteractionTab = 'list' | 'manual' | 'csv';
 type CsvRow = { rowNumber: number; original: Record<string, string> };
 
@@ -116,6 +119,7 @@ function downloadTextFile(filename: string, content: string) {
 }
 
 export default function Module7InteractionWorkspace() {
+  const workspaceId = getWorkspaceIdFromHash();
   const [activeTab, setActiveTab] = useState<InteractionTab>('list');
   const [banner, setBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [rows, setRows] = useState<InteractionRecord[]>([]);
@@ -161,6 +165,8 @@ export default function Module7InteractionWorkspace() {
     if (!nextForm.timestamp.trim()) errors.timestamp = 'Timestamp is required.';
     else if (Number.isNaN(new Date(nextForm.timestamp).getTime())) errors.timestamp = 'Timestamp must be a valid datetime.';
     if (!INTERACTION_TYPE_OPTIONS.includes(nextForm.interaction_type as typeof INTERACTION_TYPE_OPTIONS[number])) errors.interaction_type = 'Select a valid interaction type.';
+    if (nextForm.channel.trim() && !INTERACTION_CHANNEL_OPTIONS.includes(nextForm.channel.trim() as typeof INTERACTION_CHANNEL_OPTIONS[number])) errors.channel = 'Select a valid channel.';
+    if (nextForm.outcome.trim() && !INTERACTION_OUTCOME_OPTIONS.includes(nextForm.outcome.trim() as typeof INTERACTION_OUTCOME_OPTIONS[number])) errors.outcome = 'Select a valid outcome.';
     if (nextForm.engagement_score.trim()) {
       const score = Number(nextForm.engagement_score);
       if (!Number.isFinite(score) || score < 1 || score > 10) errors.engagement_score = 'Engagement score must be between 1 and 10.';
@@ -219,8 +225,8 @@ export default function Module7InteractionWorkspace() {
   async function submitForm() {
     const errors = validateForm(form);
     setFormErrors(errors);
-    if (Object.keys(errors).length > 0) return setError('Please fix the highlighted interaction form errors.');
-    if (!window.confirm('Are you sure you want to add this interaction record?')) return;
+    if (Object.keys(errors).length > 0) return setError('Please fix the highlighted form errors.');
+    if (!window.confirm('Are you sure you want to save this record?')) return;
     setSaving(true);
     try {
       await createInteraction({
@@ -234,7 +240,7 @@ export default function Module7InteractionWorkspace() {
         engagement_score: form.engagement_score ? Number(form.engagement_score) : undefined,
         notes: form.notes || undefined,
       });
-      setSuccess('Interaction record created successfully.');
+      setSuccess('Interaction record saved successfully.');
       setForm(emptyInteractionForm());
       setLeadQuery('');
       setCampaignQuery('');
@@ -292,7 +298,7 @@ export default function Module7InteractionWorkspace() {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.csv')) return setCsvFileError('Only CSV files are supported.');
     if (file.size <= 0) return setCsvFileError('Uploaded file is empty.');
-    if (file.size > MAX_FILE_SIZE_BYTES) return setCsvFileError('File exceeds the 5MB size limit.');
+    if (file.size > CSV_UPLOAD_LIMIT_BYTES) return setCsvFileError(`File exceeds the ${CSV_UPLOAD_LIMIT_LABEL} size limit.`);
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -484,7 +490,7 @@ export default function Module7InteractionWorkspace() {
                             <td style={{ padding: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                               {!isEditing ? (
                                 <>
-                                  <button className="btn-ghost" onClick={() => { if (row._id) window.location.hash = `#/m07/interactions/${row._id}`; }}>View</button>
+                                  <button className="btn-ghost" onClick={() => { if (!row._id) return; window.location.hash = workspaceId ? `#/workspace/${workspaceId}/m07/interactions/${row._id}` : `#/m07/interactions/${row._id}`; }}>View</button>
                                   <button className="btn-ghost" onClick={() => startEdit(row)}>Edit</button>
                                   <button className="btn-ghost" onClick={async () => { if (!row._id || !window.confirm('Archive this interaction record?')) return; try { await archiveInteraction(row._id); setSuccess('Archived'); await load(); } catch (error) { setError(error instanceof Error ? error.message : 'Archive failed'); } }}>Archive</button>
                                 </>
@@ -525,12 +531,12 @@ export default function Module7InteractionWorkspace() {
               <div><label style={{ fontSize: 12, fontWeight: 600 }}>Interaction ID (optional)</label><input value={form.interaction_id} onChange={(event) => setFormValue('interaction_id', event.target.value)} style={{ width: '100%' }} /></div>
               <div><label style={{ fontSize: 12, fontWeight: 600 }}>Timestamp *</label><input type="datetime-local" value={form.timestamp} onChange={(event) => setFormValue('timestamp', event.target.value)} style={{ width: '100%' }} />{formErrors.timestamp && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.timestamp}</div>}</div>
               <div><label style={{ fontSize: 12, fontWeight: 600 }}>Interaction Type *</label><select value={form.interaction_type} onChange={(event) => setFormValue('interaction_type', event.target.value)} style={{ width: '100%' }}>{INTERACTION_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}</select>{formErrors.interaction_type && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.interaction_type}</div>}</div>
-              <div><label style={{ fontSize: 12, fontWeight: 600 }}>Channel (optional)</label><input value={form.channel} onChange={(event) => setFormValue('channel', event.target.value)} style={{ width: '100%' }} /></div>
+              <div><label style={{ fontSize: 12, fontWeight: 600 }}>Channel (optional)</label><select value={form.channel} onChange={(event) => setFormValue('channel', event.target.value)} style={{ width: '100%' }}><option value="">Select channel</option>{INTERACTION_CHANNEL_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}</select>{formErrors.channel && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.channel}</div>}</div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600 }}>Campaign (optional)</label>
                 <Autocomplete value={campaignQuery} placeholder="Campaign id / name / channel" fetchItems={async (query) => await searchCampaigns(query)} formatItem={formatCampaignDisplay} getValue={formatCampaignDisplay} onChange={(value, item) => { setCampaignQuery(value); setFormValue('campaign_id', item ? String(item.campaign_id || item.id || '') : ''); }} />
               </div>
-              <div><label style={{ fontSize: 12, fontWeight: 600 }}>Outcome (optional)</label><input value={form.outcome} onChange={(event) => setFormValue('outcome', event.target.value)} style={{ width: '100%' }} /></div>
+              <div><label style={{ fontSize: 12, fontWeight: 600 }}>Outcome (optional)</label><select value={form.outcome} onChange={(event) => setFormValue('outcome', event.target.value)} style={{ width: '100%' }}><option value="">Select outcome</option>{INTERACTION_OUTCOME_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}</select>{formErrors.outcome && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.outcome}</div>}</div>
               <div><label style={{ fontSize: 12, fontWeight: 600 }}>Engagement Score (optional)</label><input value={form.engagement_score} onChange={(event) => setFormValue('engagement_score', event.target.value)} style={{ width: '100%' }} />{formErrors.engagement_score && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.engagement_score}</div>}</div>
               <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 12, fontWeight: 600 }}>Notes (optional)</label><textarea value={form.notes} onChange={(event) => setFormValue('notes', event.target.value)} rows={3} style={{ width: '100%' }} /></div>
             </div>
@@ -546,6 +552,7 @@ export default function Module7InteractionWorkspace() {
             <div className="m07-workspace-copy m07-workspace-copy-tight">Upload a CSV, review auto-detected mappings, open the shared preview step, validate rows, inspect invalid rows, and confirm before import.</div>
             <div style={{ marginTop: 12 }}>
               <div className="m07-workspace-uploaderow"><input type="file" accept=".csv" onChange={onFileChange} /></div>
+              <div className="m07-workspace-inlinehint" style={{ marginTop: 8 }}>Only `.csv` files up to {CSV_UPLOAD_LIMIT_LABEL} are accepted.</div>
               {csvFileName && <div className="m07-workspace-inlinehint" style={{ marginTop: 8 }}>Loaded file: {csvFileName}</div>}
               {csvFileError && <div style={{ marginTop: 8, fontSize: 12, color: '#c33' }}>{csvFileError}</div>}
             </div>

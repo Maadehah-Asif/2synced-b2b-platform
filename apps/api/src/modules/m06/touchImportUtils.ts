@@ -54,20 +54,113 @@ export interface ValidationSummary {
   invalidRows: ValidationRowResult[];
 }
 
+function uniqueNonEmpty(values: string[]) {
+  return Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean)));
+}
+
+async function preloadCampaignLookup(projectId: string, values: string[], mode: 'name' | 'campaign_id') {
+  const lookup = new Map<string, any>();
+  const uniqueValues = uniqueNonEmpty(values);
+  if (uniqueValues.length === 0) return lookup;
+
+  const query = mode === 'name'
+    ? { project_id: projectId, name: { $in: uniqueValues } }
+    : { project_id: projectId, campaign_id: { $in: uniqueValues } };
+
+  const docs = await Campaign.find(query).lean();
+  for (const doc of docs) {
+    const key = String(mode === 'name' ? doc.name : doc.campaign_id);
+    if (!lookup.has(key)) lookup.set(key, doc);
+  }
+  return lookup;
+}
+
+async function preloadLeadLookup(projectId: string, values: string[], leadIdentifier: 'id' | 'email') {
+  const lookup = new Map<string, any>();
+  const uniqueValues = uniqueNonEmpty(values);
+  if (uniqueValues.length === 0) return lookup;
+
+  const normalizedValues = uniqueValues.map((value) => value.toLowerCase());
+
+  if (leadIdentifier === 'email') {
+    const module6Docs = await Module6Lead.find({
+      project_id: projectId,
+      email: { $in: uniqueValues },
+    }).lean();
+
+    for (const doc of module6Docs) {
+      const key = String(doc.email || '').toLowerCase();
+      if (key && !lookup.has(key)) lookup.set(key, doc);
+    }
+
+    const missingEmails = normalizedValues.filter((value) => !lookup.has(value));
+    if (missingEmails.length > 0) {
+      const legacyDocs = await Lead.find({
+        Email: { $in: missingEmails },
+      }).lean();
+      for (const doc of legacyDocs) {
+        const key = String((doc as any).Email || '').toLowerCase();
+        if (key && !lookup.has(key)) lookup.set(key, doc);
+      }
+    }
+
+    return lookup;
+  }
+
+  const moduleLeadIds = uniqueValues.filter((value) => !/^[a-fA-F0-9]{24}$/.test(value));
+  const moduleObjectIds = uniqueValues.filter((value) => /^[a-fA-F0-9]{24}$/.test(value));
+  const numericLeadIds = uniqueValues.filter((value) => /^[0-9]+$/.test(value)).map((value) => Number(value));
+
+  const moduleLeadDocs = await Module6Lead.find({
+    project_id: projectId,
+    $or: [
+      ...(moduleLeadIds.length > 0 ? [{ lead_id: { $in: moduleLeadIds } }] : []),
+      ...(moduleObjectIds.length > 0 ? [{ _id: { $in: moduleObjectIds } }] : []),
+    ],
+  }).lean();
+
+  for (const doc of moduleLeadDocs) {
+    const leadKey = String(doc.lead_id || '');
+    const objectIdKey = String(doc._id || '');
+    if (leadKey && !lookup.has(leadKey)) lookup.set(leadKey, doc);
+    if (objectIdKey && !lookup.has(objectIdKey)) lookup.set(objectIdKey, doc);
+  }
+
+  const unresolvedNumericIds = numericLeadIds.filter((value) => !lookup.has(String(value)));
+  if (unresolvedNumericIds.length > 0) {
+    const legacyNumericDocs = await Lead.find({ lead_id: { $in: unresolvedNumericIds } }).lean();
+    for (const doc of legacyNumericDocs) {
+      const key = String((doc as any).lead_id || '');
+      if (key && !lookup.has(key)) lookup.set(key, doc);
+    }
+  }
+
+  const unresolvedObjectIds = moduleObjectIds.filter((value) => !lookup.has(value));
+  if (unresolvedObjectIds.length > 0) {
+    const legacyObjectDocs = await Lead.find({ _id: { $in: unresolvedObjectIds } }).lean();
+    for (const doc of legacyObjectDocs) {
+      const key = String((doc as any)._id || '');
+      if (key && !lookup.has(key)) lookup.set(key, doc);
+    }
+  }
+
+  return lookup;
+}
+
 // Resolve campaign by name or campaign_id within project, with simple in-memory cache
 export async function resolveCampaignCached(value: string, projectId: string, mode: 'name' | 'campaign_id', cache: Record<string, any>) {
   const key = `${mode}:${value}`;
-  if(cache[key]) return cache[key];
+  if (Object.prototype.hasOwnProperty.call(cache, key)) return cache[key];
   const q = mode === 'name' ? { project_id: projectId, name: value } : { project_id: projectId, campaign_id: value };
   const found = await Campaign.findOne(q).lean();
-  if(found) { cache[key] = found; return found; }
-  return null;
+  cache[key] = found || null;
+  return cache[key];
 }
 
 // Resolve lead by numeric id (from Lead.lead_id or _id fallback)
 export async function resolveLeadCached(value: string, projectId: string, cache: Record<string, any>, leadIdentifier: 'id'|'email' = 'id') {
   const key = `lead:${leadIdentifier}:${value}`;
-  if(cache[key]) return cache[key];
+  if (Object.prototype.hasOwnProperty.call(cache, key)) return cache[key];
   let found: any = null;
 
   const tryNumeric = async () => {
@@ -105,8 +198,8 @@ export async function resolveLeadCached(value: string, projectId: string, cache:
     if(!found) await tryEmail();
   }
 
-  if(found) { cache[key] = found; return found; }
-  return null;
+  cache[key] = found || null;
+  return cache[key];
 }
 
 export async function importCampaignTouchesCSV(opts: ImportOptions): Promise<ImportSummary> {
@@ -199,11 +292,17 @@ export async function validateCampaignTouchesCSV(opts: ImportOptions): Promise<V
   }
 
   const lastDataRow = typeof endRow === 'number' ? Math.min(endRow, lines.length - 1) : lines.length - 1;
+  const selectedLines = lines.slice(startRow, lastDataRow + 1);
+  const selectedColumns = selectedLines.map((raw) => raw.split(',').map(c => c.trim()));
+  const preloadCampaignValues = selectedColumns.map((cols) => cols[campIdx] || '');
+  const preloadLeadValues = selectedColumns.map((cols) => cols[leadIdx] || '');
+  const campaignLookup = await preloadCampaignLookup(projectId, preloadCampaignValues, campaignIdentifier);
+  const leadLookup = await preloadLeadLookup(projectId, preloadLeadValues, leadIdentifier);
   const rowResults: ValidationRowResult[] = [];
   for(let i = startRow; i <= lastDataRow; i++) {
     const rowNumber = i; 
     const raw = lines[i] ?? '';
-    const cols = raw.split(',').map(c => c.trim());
+    const cols = selectedColumns[i - startRow] || raw.split(',').map(c => c.trim());
     const leadVal = cols[leadIdx];
     const campVal = cols[campIdx];
     const channelValRaw = channelIdx >= 0 ? (cols[channelIdx] || '').toLowerCase() : '';
@@ -226,9 +325,11 @@ export async function validateCampaignTouchesCSV(opts: ImportOptions): Promise<V
     const finalType = TOUCH_TYPE_SET.has(normalizedType as any) ? normalizedType as any : 'other';
     const metadataObj: any = finalType === 'other' && rawType && rawType !== 'other' ? { original_type: rawType } : undefined;
     if(!TOUCH_TYPE_SET.has(finalType as any) && finalType === 'other') warnings.push({ field: 'type', message: `Unknown type "${rawType}" will be imported as other` });
-    const campDoc = campVal ? await resolveCampaignCached(campVal, projectId, campaignIdentifier, {}) : null;
+    const campaignLookupKey = String(campVal || '').trim();
+    const leadLookupKey = leadIdentifier === 'email' ? String(leadVal || '').trim().toLowerCase() : String(leadVal || '').trim();
+    const campDoc = campaignLookupKey ? campaignLookup.get(campaignLookupKey) || null : null;
     if(campVal && !campDoc) errors.push({ field: 'campaign_id', message: 'campaign_id does not exist' });
-    const leadDoc = leadVal ? await resolveLeadCached(leadVal, projectId, {}, leadIdentifier) : null;
+    const leadDoc = leadLookupKey ? leadLookup.get(leadLookupKey) || null : null;
     if(leadVal && !leadDoc) errors.push({ field: 'lead_id', message: 'lead_id does not exist' });
 
     rowResults.push({

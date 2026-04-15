@@ -22,9 +22,16 @@ export type LeadSchemaField = {
   key: LeadFieldKey;
   label: string;
   required?: boolean;
-  type: 'text' | 'number' | 'email';
+  type: 'text' | 'number' | 'email' | 'select';
   helperText?: string;
+  options?: readonly string[];
 };
+
+export const LEAD_SOURCE_OPTIONS = ['ads', 'linkedin', 'email', 'referral', 'webinar'] as const;
+export const LEAD_OWNER_OPTIONS = ['Rep A', 'Rep B', 'Rep C'] as const;
+export const LEAD_INDUSTRY_OPTIONS = ['IT', 'Finance', 'Healthcare', 'Retail', 'Education'] as const;
+export const LEAD_REGION_OPTIONS = ['US', 'UK', 'UAE', 'PK', 'CA'] as const;
+export const LEAD_SEGMENT_OPTIONS = ['SMB', 'Mid-Market', 'Enterprise'] as const;
 
 export const LEAD_SCHEMA_FIELDS: LeadSchemaField[] = [
   { key: 'lead_id', label: 'Lead ID', required: true, type: 'text', helperText: 'Unique identifier for the lead record.' },
@@ -32,15 +39,15 @@ export const LEAD_SCHEMA_FIELDS: LeadSchemaField[] = [
   { key: 'first_name', label: 'First name', type: 'text' },
   { key: 'last_name', label: 'Last name', type: 'text' },
   { key: 'company', label: 'Company', type: 'text' },
-  { key: 'source', label: 'Source', type: 'text' },
-  { key: 'owner', label: 'Owner', type: 'text' },
-  { key: 'industry', label: 'Industry', type: 'text' },
-  { key: 'region', label: 'Region', type: 'text' },
+  { key: 'source', label: 'Source', type: 'select', options: LEAD_SOURCE_OPTIONS, helperText: 'Use a supported source so dashboards group correctly.' },
+  { key: 'owner', label: 'Owner', type: 'select', options: LEAD_OWNER_OPTIONS },
+  { key: 'industry', label: 'Industry', type: 'select', options: LEAD_INDUSTRY_OPTIONS },
+  { key: 'region', label: 'Region', type: 'select', options: LEAD_REGION_OPTIONS },
   { key: 'lead_score', label: 'Lead score', type: 'number', helperText: 'Numeric score only.' },
   { key: 'intent_score', label: 'Intent score', type: 'number', helperText: 'Numeric score only.' },
   { key: 'email', label: 'Email', type: 'email' },
   { key: 'job_title', label: 'Job title', type: 'text' },
-  { key: 'segment', label: 'Segment', type: 'text' },
+  { key: 'segment', label: 'Segment', type: 'select', options: LEAD_SEGMENT_OPTIONS },
 ];
 
 export const LEAD_REQUIRED_FIELDS = LEAD_SCHEMA_FIELDS.filter((field) => field.required).map((field) => field.key);

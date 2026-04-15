@@ -1,4 +1,5 @@
 import { getWorkspaceIdFromHash } from '../../../utils/workspace';
+import { fetchFromApi, parseApiJson } from '../../../utils/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -80,7 +81,7 @@ export async function fetchModule6Leads(params: { search?: string; limit?: numbe
   if (params.search) qs.set('search', params.search);
   if (params.limit) qs.set('limit', String(params.limit));
   if (params.includeArchived) qs.set('includeArchived', 'true');
-  const res = await fetch(`${API_URL}/m06/leads?${qs.toString()}`);
+  const res = await fetchFromApi(`${API_URL}/m06/leads?${qs.toString()}`, undefined, API_URL);
   if (!res.ok) return { leads: [] };
   const json = await res.json();
   return { leads: json.leads || [] };
@@ -91,41 +92,23 @@ export async function importModule6LeadsCSV(payload: { csv: string; map: Record<
   if (!projectId) {
     return { processed: 0, inserted: 0, failed: 0, duplicates: 0 };
   }
-  const res = await fetch(`${API_URL}/m06/leads/import/csv`, {
+  const res = await fetchFromApi(`${API_URL}/m06/leads/import/csv`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...payload, projectId }),
-  });
-  if (!res.ok) {
-    let message = 'Import failed';
-    try {
-      const err = await res.json();
-      if (err && (err.error || err.message)) message = `${res.status} ${err.error || err.message}`;
-      else message = `${res.status} Import failed`;
-    } catch {
-      try {
-        const text = await res.text();
-        if (text) message = `${res.status} ${text}`;
-      } catch {
-        // ignore body parsing fallback errors
-      }
-    }
-    throw new Error(message);
-  }
-  return res.json();
+  }, API_URL);
+  return parseApiJson<LeadImportSummary>(res, 'Import failed');
 }
 
 export async function validateModule6LeadsCSV(payload: { csv: string; map: Record<string, string | null>; startRow?: number; endRow?: number; }): Promise<LeadCsvValidationResult> {
   const projectId = getWorkspaceIdFromHash();
   if (!projectId) throw new Error('workspace_required');
-  const res = await fetch(`${API_URL}/m06/leads/import/validate`, {
+  const res = await fetchFromApi(`${API_URL}/m06/leads/import/validate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...payload, projectId }),
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json?.error || 'validation_failed');
-  return json;
+  }, API_URL);
+  return parseApiJson<LeadCsvValidationResult>(res, 'validation_failed');
 }
 
 export async function searchModule6Leads(query: string): Promise<{ leads: Module6Lead[] }> {
@@ -133,7 +116,7 @@ export async function searchModule6Leads(query: string): Promise<{ leads: Module
   const qs = new URLSearchParams();
   if (projectId) qs.set('projectId', projectId);
   if (query) qs.set('q', query);
-  const res = await fetch(`${API_URL}/m06/leads/search?${qs.toString()}`);
+  const res = await fetchFromApi(`${API_URL}/m06/leads/search?${qs.toString()}`, undefined, API_URL);
   if (!res.ok) return { leads: [] };
   const json = await res.json();
   return { leads: json.leads || [] };
@@ -142,37 +125,34 @@ export async function searchModule6Leads(query: string): Promise<{ leads: Module
 export async function createModule6Lead(payload: Partial<Module6Lead> & { lead_id: string }): Promise<Module6Lead> {
   const projectId = getWorkspaceIdFromHash();
   if (!projectId) throw new Error('workspace_required');
-  const res = await fetch(`${API_URL}/m06/leads`, {
+  const res = await fetchFromApi(`${API_URL}/m06/leads`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...payload, projectId }),
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json?.error || 'create_failed');
+  }, API_URL);
+  const json = await parseApiJson<{ lead: Module6Lead }>(res, 'create_failed');
   return json.lead;
 }
 
 export async function updateModule6Lead(id: string, payload: Partial<Module6Lead>): Promise<Module6Lead> {
   const projectId = getWorkspaceIdFromHash();
   if (!projectId) throw new Error('workspace_required');
-  const res = await fetch(`${API_URL}/m06/leads/${id}`, {
+  const res = await fetchFromApi(`${API_URL}/m06/leads/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...payload, projectId }),
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json?.error || 'update_failed');
+  }, API_URL);
+  const json = await parseApiJson<{ lead: Module6Lead }>(res, 'update_failed');
   return json.lead;
 }
 
 export async function archiveModule6Lead(id: string): Promise<void> {
   const projectId = getWorkspaceIdFromHash();
   if (!projectId) throw new Error('workspace_required');
-  const res = await fetch(`${API_URL}/m06/leads/${id}/archive`, {
+  const res = await fetchFromApi(`${API_URL}/m06/leads/${id}/archive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ projectId }),
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json?.error || 'archive_failed');
+  }, API_URL);
+  await parseApiJson(res, 'archive_failed');
 }

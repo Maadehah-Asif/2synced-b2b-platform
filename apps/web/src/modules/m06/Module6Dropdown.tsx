@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import './module6.css'
 import RoundedButton from './RoundedButton.tsx'
-import Page1Stats from './Page1Stats'
+import Module6StatsPanel from './Module6StatsPanel'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'
 
 export default function Module6Dropdown() {
@@ -39,7 +39,7 @@ export default function Module6Dropdown() {
         </div>
         <div style={{ marginTop: 8 }}>
           {/* Compact summary version for dropdown */}
-          <Page1Stats compact />
+          <Module6StatsPanel compact />
         </div>
         <div style={{ marginTop: 12, display:'grid', gap:6 }}>
           <button className="m7-link" style={{ textAlign:'left' }} onClick={()=>go('/m06/campaigns')}>Campaign Workspace</button>

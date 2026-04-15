@@ -1,4 +1,5 @@
 import { getWorkspaceIdFromHash } from '../../../utils/workspace';
+import { fetchFromApi, parseApiJson } from '../../../utils/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -55,16 +56,25 @@ export interface TouchImportSummary {
   failedRows?: Array<{ row: number; error: string }>;
 }
 
+function toTouchApiMapping(map: Record<string, string | null>) {
+  return {
+    lead: map.lead_id || '',
+    campaign: map.campaign_id || '',
+    channel: map.channel || '',
+    type: map.type || '',
+    touched_at: map.touched_at || '',
+  };
+}
+
 export async function createTouch(payload: { lead_id: string; campaign_id: string; type: string; channel?: string; touched_at: string; metadata?: any; status?: string; }) {
   const projectId = getWorkspaceIdFromHash();
   if(!projectId) throw new Error('workspace_required');
-  const res = await fetch(`${API_URL}/m06/campaign-touches`, {
+  const res = await fetchFromApi(`${API_URL}/m06/campaign-touches`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...payload, projectId })
-  });
-  const json = await res.json().catch(() => ({}));
-  if(!res.ok) throw new Error(json?.error || 'touch_create_failed');
+  }, API_URL);
+  const json = await parseApiJson<{ touch: TouchRecord }>(res, 'touch_create_failed');
   return json.touch;
 }
 
@@ -77,9 +87,8 @@ export async function listTouchesByCampaign(params: { campaignId: string; channe
   if(params.channel) qs.set('channel', params.channel);
   if(params.type) qs.set('type', params.type);
   if(params.includeArchived) qs.set('includeArchived', 'true');
-  const res = await fetch(`${API_URL}/m06/campaign-touches/by-campaign?${qs.toString()}`);
-  const json = await res.json().catch(() => ({}));
-  if(!res.ok) throw new Error(json?.error || 'touch_list_failed');
+  const res = await fetchFromApi(`${API_URL}/m06/campaign-touches/by-campaign?${qs.toString()}`, undefined, API_URL);
+  const json = await parseApiJson<{ touches: TouchRecord[] }>(res, 'touch_list_failed');
   return json.touches || [];
 }
 
@@ -92,59 +101,48 @@ export async function listTouchesByLead(params: { leadId: string; channel?: stri
   if(params.channel) qs.set('channel', params.channel);
   if(params.type) qs.set('type', params.type);
   if(params.includeArchived) qs.set('includeArchived', 'true');
-  const res = await fetch(`${API_URL}/m06/campaign-touches/by-lead?${qs.toString()}`);
-  const json = await res.json().catch(() => ({}));
-  if(!res.ok) throw new Error(json?.error || 'touch_list_failed');
+  const res = await fetchFromApi(`${API_URL}/m06/campaign-touches/by-lead?${qs.toString()}`, undefined, API_URL);
+  const json = await parseApiJson<{ touches: TouchRecord[] }>(res, 'touch_list_failed');
   return json.touches || [];
 }
 
 export async function updateTouch(id: string, payload: { channel?: string; type?: string; touched_at?: string; metadata?: any; status?: string; }) {
-  const res = await fetch(`${API_URL}/m06/campaign-touches/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  const json = await res.json().catch(() => ({}));
-  if(!res.ok) throw new Error(json?.error || 'touch_update_failed');
-  return json;
+  const res = await fetchFromApi(`${API_URL}/m06/campaign-touches/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, API_URL);
+  return parseApiJson(res, 'touch_update_failed');
 }
 
 export async function archiveTouch(id: string){
-  const res = await fetch(`${API_URL}/m06/campaign-touches/${id}/archive`, { method: 'POST' });
-  const json = await res.json().catch(() => ({}));
-  if(!res.ok) throw new Error(json?.error || 'touch_archive_failed');
-  return json;
+  const res = await fetchFromApi(`${API_URL}/m06/campaign-touches/${id}/archive`, { method: 'POST' }, API_URL);
+  return parseApiJson(res, 'touch_archive_failed');
 }
 
 export async function deleteTouchPermanent(id: string){
-  const res = await fetch(`${API_URL}/m06/campaign-touches/${id}/permanent`, { method: 'DELETE' });
-  const json = await res.json().catch(() => ({}));
-  if(!res.ok) throw new Error(json?.error || 'touch_delete_failed');
-  return json;
+  const res = await fetchFromApi(`${API_URL}/m06/campaign-touches/${id}/permanent`, { method: 'DELETE' }, API_URL);
+  return parseApiJson(res, 'touch_delete_failed');
 }
 
 export async function validateTouchesCSV(payload: { csv: string; map: Record<string, string | null>; startRow?: number; endRow?: number; campaignIdentifier?: 'name'|'campaign_id'; leadIdentifier?: 'id'|'email'; duplicatePolicy?: 'skip'|'allow'; }) {
   const projectId = getWorkspaceIdFromHash();
   if(!projectId) throw new Error('workspace_required');
-  const res = await fetch(`${API_URL}/m06/campaign-touches/import/validate`, {
+  const res = await fetchFromApi(`${API_URL}/m06/campaign-touches/import/validate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...payload, projectId })
-  });
-  const json = await res.json().catch(() => ({}));
-  if(!res.ok) throw new Error(json?.error || 'touch_validation_failed');
-  return json as TouchValidationResult;
+    body: JSON.stringify({ ...payload, map: toTouchApiMapping(payload.map), projectId })
+  }, API_URL);
+  return parseApiJson<TouchValidationResult>(res, 'touch_validation_failed');
 }
 
 export async function importTouchesCSV(payload: { csv: string; map: Record<string, string | null>; startRow?: number; endRow?: number; campaignIdentifier?: 'name'|'campaign_id'; leadIdentifier?: 'id'|'email'; duplicatePolicy?: 'skip'|'allow'; allowPartial?: boolean; }) {
   const projectId = getWorkspaceIdFromHash();
   if(!projectId) throw new Error('workspace_required');
-  const res = await fetch(`${API_URL}/m06/campaign-touches/import/csv`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, projectId }) });
-  const json = await res.json().catch(() => ({}));
-  if(!res.ok) throw new Error(json?.error || 'touch_import_failed');
-  return json as TouchImportSummary;
+  const res = await fetchFromApi(`${API_URL}/m06/campaign-touches/import/csv`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, map: toTouchApiMapping(payload.map), projectId }) }, API_URL);
+  return parseApiJson<TouchImportSummary>(res, 'touch_import_failed');
 }
 
 export async function searchCampaigns(query: string){
   const projectId = getWorkspaceIdFromHash();
   const qs = new URLSearchParams({ projectId: projectId || '', search: query });
-  const res = await fetch(`${API_URL}/m06/campaigns?${qs.toString()}`);
+  const res = await fetchFromApi(`${API_URL}/m06/campaigns?${qs.toString()}`, undefined, API_URL);
   if(!res.ok) return { campaigns: [] };
   const json = await res.json();
   return { campaigns: json.campaigns || [] };
@@ -153,7 +151,7 @@ export async function searchCampaigns(query: string){
 export async function searchLeads(query: string){
   const projectId = getWorkspaceIdFromHash();
   const qs = new URLSearchParams({ projectId: projectId || '', q: query });
-  const res = await fetch(`${API_URL}/m06/leads/search?${qs.toString()}`);
+  const res = await fetchFromApi(`${API_URL}/m06/leads/search?${qs.toString()}`, undefined, API_URL);
   if(!res.ok) return { leads: [] };
   const json = await res.json();
   return { leads: json.leads || [] };

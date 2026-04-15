@@ -69,6 +69,18 @@ export default function Module7Home(){
                 action="Open Overview"
                 onClick={() => go(`#/workspace/:workspaceId/m07/overview`)}
               />
+              <ActionCard
+                title="Stage History"
+                desc="Review, validate, and correct stage progression records when funnel drop-offs need record-level inspection."
+                action="Open Stages"
+                onClick={() => go(`#/workspace/:workspaceId/m07/stages`)}
+              />
+              <ActionCard
+                title="Interactions"
+                desc="Inspect interaction activity, import CSV updates, and verify whether engagement events support funnel movement."
+                action="Open Interactions"
+                onClick={() => go(`#/workspace/:workspaceId/m07/interactions`)}
+              />
               <InfoCard title="Where drop-offs happen" body="Use M07 to understand where leads stop progressing and which funnel stages create the most friction." />
               <InfoCard title="How interactions affect movement" body="Stage history and interaction records should explain whether momentum is improving, stalling, or degrading over time." />
             </div>

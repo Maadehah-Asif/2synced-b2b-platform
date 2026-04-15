@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import Autocomplete from '../../components/Autocomplete';
+import { CSV_UPLOAD_LIMIT_BYTES, CSV_UPLOAD_LIMIT_LABEL } from '../../utils/csvUpload';
+import { getWorkspaceIdFromHash } from '../../utils/workspace';
 import ImportPreviewStep from '../m06/components/ImportPreviewStep';
 import {
   archiveStage,
@@ -21,6 +23,7 @@ import {
   emptyStageForm,
   STAGE_HEADER_ALIASES,
   STAGE_FIELD_LABELS,
+  STAGE_NAME_OPTIONS,
   STAGE_REQUIRED_FIELDS,
   STAGE_STATUS_OPTIONS,
   type StageFieldKey,
@@ -29,7 +32,6 @@ import {
 } from './stageInputSchema';
 import './module7.css';
 
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 type StageTab = 'list' | 'manual' | 'csv';
 type CsvRow = { rowNumber: number; original: Record<string, string> };
 
@@ -123,6 +125,7 @@ function formatLeadDisplay(lead: any) {
 }
 
 export default function Module7StageWorkspace() {
+  const workspaceId = getWorkspaceIdFromHash();
   const [activeTab, setActiveTab] = useState<StageTab>('list');
   const [banner, setBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [rows, setRows] = useState<StageRecord[]>([]);
@@ -171,11 +174,18 @@ export default function Module7StageWorkspace() {
     const errors: Partial<Record<StageFieldKey, string>> = {};
     if (!nextForm.lead_id.trim()) errors.lead_id = 'Lead is required.';
     if (!nextForm.stage_name.trim()) errors.stage_name = 'Stage name is required.';
+    else if (!STAGE_NAME_OPTIONS.includes(nextForm.stage_name.trim() as typeof STAGE_NAME_OPTIONS[number])) errors.stage_name = 'Select a valid stage name.';
     if (!nextForm.entered_at.trim()) errors.entered_at = 'Entered at is required.';
     else if (Number.isNaN(new Date(nextForm.entered_at).getTime())) errors.entered_at = 'Entered at must be a valid datetime.';
     if (nextForm.exited_at && Number.isNaN(new Date(nextForm.exited_at).getTime())) errors.exited_at = 'Exited at must be a valid datetime.';
     if (nextForm.entered_at && nextForm.exited_at && new Date(nextForm.exited_at).getTime() < new Date(nextForm.entered_at).getTime()) errors.exited_at = 'Exited at cannot be earlier than entered at.';
     if (!STAGE_STATUS_OPTIONS.includes(nextForm.stage_status as typeof STAGE_STATUS_OPTIONS[number])) errors.stage_status = 'Select a valid stage status.';
+    if (nextForm.next_stage.trim() && !STAGE_NAME_OPTIONS.includes(nextForm.next_stage.trim() as typeof STAGE_NAME_OPTIONS[number])) errors.next_stage = 'Select a valid next stage.';
+    if (nextForm.stage_status === 'active' && nextForm.exited_at.trim()) errors.exited_at = 'Active stages cannot have exited at.';
+    if (nextForm.stage_status === 'completed' && !nextForm.exited_at.trim()) errors.exited_at = 'Completed stages require exited at.';
+    if (nextForm.stage_status === 'completed' && nextForm.stage_name !== 'Closed' && !nextForm.next_stage.trim()) errors.next_stage = 'Completed stages require next stage unless stage is Closed.';
+    if (nextForm.stage_status === 'dropped' && !nextForm.exit_reason.trim()) errors.exit_reason = 'Dropped stages require exit reason.';
+    if (nextForm.stage_status === 'dropped' && nextForm.next_stage.trim()) errors.next_stage = 'Dropped stages cannot have next stage.';
     return errors;
   }
 
@@ -230,12 +240,12 @@ export default function Module7StageWorkspace() {
   async function submitForm() {
     const errors = validateForm(form);
     setFormErrors(errors);
-    if (Object.keys(errors).length > 0) return setError('Please fix the highlighted stage form errors.');
-    if (!window.confirm('Are you sure you want to add this stage record?')) return;
+    if (Object.keys(errors).length > 0) return setError('Please fix the highlighted form errors.');
+    if (!window.confirm('Are you sure you want to save this record?')) return;
     setSaving(true);
     try {
       await createStage({ lead_id: form.lead_id.trim(), stage_name: form.stage_name.trim(), entered_at: form.entered_at, exited_at: form.exited_at || undefined, stage_status: form.stage_status, next_stage: form.next_stage || undefined, exit_reason: form.exit_reason || undefined, notes: form.notes || undefined });
-      setSuccess('Stage record created successfully.');
+      setSuccess('Stage record saved successfully.');
       setForm(emptyStageForm());
       setLeadQuery('');
       setActiveTab('list');
@@ -280,7 +290,7 @@ export default function Module7StageWorkspace() {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.csv')) return setCsvFileError('Only CSV files are supported.');
     if (file.size <= 0) return setCsvFileError('Uploaded file is empty.');
-    if (file.size > MAX_FILE_SIZE_BYTES) return setCsvFileError('File exceeds the 5MB size limit.');
+    if (file.size > CSV_UPLOAD_LIMIT_BYTES) return setCsvFileError(`File exceeds the ${CSV_UPLOAD_LIMIT_LABEL} size limit.`);
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -503,7 +513,7 @@ export default function Module7StageWorkspace() {
                             <td style={{ padding: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                               {!isEditing ? (
                                 <>
-                                  <button className="btn-ghost" onClick={() => { if (row._id) window.location.hash = `#/m07/stages/${row._id}`; }}>View</button>
+                                  <button className="btn-ghost" onClick={() => { if (!row._id) return; window.location.hash = workspaceId ? `#/workspace/${workspaceId}/m07/stages/${row._id}` : `#/m07/stages/${row._id}`; }}>View</button>
                                   <button className="btn-ghost" onClick={() => startEdit(row)}>Edit</button>
                                   <button className="btn-ghost" onClick={async () => { if (!row._id || !window.confirm('Archive this stage record?')) return; try { await archiveStage(row._id); setSuccess('Archived'); await load(); } catch (error) { setError(error instanceof Error ? error.message : 'Archive failed'); } }}>Archive</button>
                                   <button className="btn-danger" onClick={async () => { if (!row._id) return; const confirmation = prompt(`Type the stage name (${row.stage_name}) to confirm permanent deletion:`, ''); if (confirmation !== row.stage_name) return; try { await deleteStagePermanent(row._id); setSuccess('Deleted'); await load(); } catch (error) { setError(error instanceof Error ? error.message : 'Delete failed'); } }}>Delete</button>
@@ -559,7 +569,10 @@ export default function Module7StageWorkspace() {
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600 }}>Stage Name *</label>
-                <input value={form.stage_name} onChange={(event) => setFormValue('stage_name', event.target.value)} style={{ width: '100%' }} />
+                <select value={form.stage_name} onChange={(event) => setFormValue('stage_name', event.target.value)} style={{ width: '100%' }}>
+                  <option value="">Select stage</option>
+                  {STAGE_NAME_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
                 {formErrors.stage_name && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.stage_name}</div>}
               </div>
               <div>
@@ -581,11 +594,16 @@ export default function Module7StageWorkspace() {
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600 }}>Next Stage (optional)</label>
-                <input value={form.next_stage} onChange={(event) => setFormValue('next_stage', event.target.value)} style={{ width: '100%' }} />
+                <select value={form.next_stage} onChange={(event) => setFormValue('next_stage', event.target.value)} style={{ width: '100%' }}>
+                  <option value="">Select next stage</option>
+                  {STAGE_NAME_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+                {formErrors.next_stage && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.next_stage}</div>}
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600 }}>Exit Reason (optional)</label>
                 <input value={form.exit_reason} onChange={(event) => setFormValue('exit_reason', event.target.value)} style={{ width: '100%' }} />
+                {formErrors.exit_reason && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.exit_reason}</div>}
               </div>
               <div style={{ gridColumn: '1 / -1' }}>
                 <label style={{ fontSize: 12, fontWeight: 600 }}>Notes (optional)</label>
@@ -606,6 +624,7 @@ export default function Module7StageWorkspace() {
               <div className="m07-workspace-uploaderow">
                 <input type="file" accept=".csv" onChange={onFileChange} />
               </div>
+              <div className="m07-workspace-inlinehint" style={{ marginTop: 8 }}>Only `.csv` files up to {CSV_UPLOAD_LIMIT_LABEL} are accepted.</div>
               {csvFileName && <div className="m07-workspace-inlinehint" style={{ marginTop: 8 }}>Loaded file: {csvFileName}</div>}
               {csvFileError && <div style={{ marginTop: 8, fontSize: 12, color: '#c33' }}>{csvFileError}</div>}
             </div>

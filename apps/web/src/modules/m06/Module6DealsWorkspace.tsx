@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import Autocomplete from '../../components/Autocomplete';
+import { CSV_UPLOAD_LIMIT_BYTES, CSV_UPLOAD_LIMIT_LABEL } from '../../utils/csvUpload';
 import ImportPreviewStep from './components/ImportPreviewStep';
 import {
   archiveDeal,
@@ -28,7 +29,6 @@ import {
 } from './dealInputSchema';
 import './module6.css';
 
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 type DealTab = 'list' | 'form' | 'csv';
 type CsvRow = { rowNumber: number; original: Record<string, string> };
 
@@ -234,8 +234,8 @@ export default function Module6DealsWorkspace(){
   async function submitForm() {
     const errors = validateForm(form);
     setFormErrors(errors);
-    if (Object.keys(errors).length > 0) { setToast({ msg:'Please fix the highlighted deal form errors.', type:'error' }); return; }
-    if (!window.confirm('Are you sure you want to add this deal record?')) return;
+    if (Object.keys(errors).length > 0) { setToast({ msg:'Please fix the highlighted form errors.', type:'error' }); return; }
+    if (!window.confirm('Are you sure you want to save this record?')) return;
     setSaving(true);
     try {
       await createDeal({
@@ -246,7 +246,7 @@ export default function Module6DealsWorkspace(){
         closed_won: form.closed_won === 'true',
         closed_at: form.closed_at || undefined,
       });
-      setToast({ msg:'Deal created successfully.', type:'success' });
+      setToast({ msg:'Deal record saved successfully.', type:'success' });
       setForm(emptyDealForm());
       setLeadQuery('');
       setActiveTab('list');
@@ -302,7 +302,7 @@ export default function Module6DealsWorkspace(){
     if (!file) { input.value = ''; return; }
     if (!file.name.toLowerCase().endsWith('.csv')) { setCsvFileError('Only CSV files are supported.'); input.value = ''; return; }
     if (file.size <= 0) { setCsvFileError('Uploaded file is empty.'); input.value = ''; return; }
-    if (file.size > MAX_FILE_SIZE_BYTES) { setCsvFileError('File exceeds the 5MB size limit.'); input.value = ''; return; }
+    if (file.size > CSV_UPLOAD_LIMIT_BYTES) { setCsvFileError(`File exceeds the ${CSV_UPLOAD_LIMIT_LABEL} size limit.`); input.value = ''; return; }
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -534,7 +534,7 @@ export default function Module6DealsWorkspace(){
               <div className="m06-section-label">CSV Upload</div>
               <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Deal CSV Import</h3>
               <div className="m06-helper" style={{ marginBottom: 12 }}>Upload a CSV, review auto-detected mappings, open the shared preview step, validate rows, inspect invalid rows, and confirm before import.</div>
-              <div className="m06-file-drop"><div className="m06-inline-note" style={{ marginBottom: 10 }}>Only `.csv` files up to 5MB are accepted.</div><input type="file" accept=".csv" onChange={onFileChange} />{csvFileName && <div className="m06-inline-note" style={{ marginTop: 8 }}>Loaded file: {csvFileName}</div>}</div>
+              <div className="m06-file-drop"><div className="m06-inline-note" style={{ marginBottom: 10 }}>Only `.csv` files up to {CSV_UPLOAD_LIMIT_LABEL} are accepted.</div><input type="file" accept=".csv" onChange={onFileChange} />{csvFileName && <div className="m06-inline-note" style={{ marginTop: 8 }}>Loaded file: {csvFileName}</div>}</div>
               {csvFileError && <div style={{ marginTop:8, fontSize:12, color:'#c33' }}>{csvFileError}</div>}
               {csvHeaders.length > 0 && (
                 <>

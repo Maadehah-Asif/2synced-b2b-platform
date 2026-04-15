@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
+import { CSV_UPLOAD_LIMIT_BYTES, CSV_UPLOAD_LIMIT_LABEL } from '../../utils/csvUpload';
 import './module6.css';
 import ImportPreviewStep from './components/ImportPreviewStep';
 import {
@@ -16,8 +17,13 @@ import {
 } from './services/leads';
 import {
   LEAD_HEADER_ALIASES,
+  LEAD_INDUSTRY_OPTIONS,
+  LEAD_OWNER_OPTIONS,
   LEAD_REQUIRED_FIELDS,
+  LEAD_REGION_OPTIONS,
   LEAD_SCHEMA_FIELDS,
+  LEAD_SEGMENT_OPTIONS,
+  LEAD_SOURCE_OPTIONS,
   defaultLeadMapping,
   emptyLeadForm,
   type LeadFieldKey,
@@ -25,8 +31,14 @@ import {
   type LeadMapping,
 } from './leadInputSchema';
 
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+const LEAD_ALLOWED_VALUES: Partial<Record<LeadFieldKey, readonly string[]>> = {
+  source: LEAD_SOURCE_OPTIONS,
+  owner: LEAD_OWNER_OPTIONS,
+  industry: LEAD_INDUSTRY_OPTIONS,
+  region: LEAD_REGION_OPTIONS,
+  segment: LEAD_SEGMENT_OPTIONS,
+};
 
 type CsvRow = {
   rowNumber: number;
@@ -229,6 +241,14 @@ export default function Module6Leads() {
     if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) nextErrors.email = 'Invalid email format.';
     if (form.lead_score.trim() && Number.isNaN(Number(form.lead_score))) nextErrors.lead_score = 'Lead score must be numeric.';
     if (form.intent_score.trim() && Number.isNaN(Number(form.intent_score))) nextErrors.intent_score = 'Intent score must be numeric.';
+    (Object.keys(LEAD_ALLOWED_VALUES) as LeadFieldKey[]).forEach((field) => {
+      const value = form[field]?.trim();
+      const options = LEAD_ALLOWED_VALUES[field];
+      if (!value || !options) return;
+      if (!options.some((option) => option.toLowerCase() === value.toLowerCase())) {
+        nextErrors[field] = `Select a valid ${field.replace('_', ' ')}.`;
+      }
+    });
     return nextErrors;
   }
 
@@ -289,8 +309,8 @@ export default function Module6Leads() {
       input.value = '';
       return;
     }
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      setCsvFileError('File exceeds the 5MB size limit.');
+    if (file.size > CSV_UPLOAD_LIMIT_BYTES) {
+      setCsvFileError(`File exceeds the ${CSV_UPLOAD_LIMIT_LABEL} size limit.`);
       input.value = '';
       return;
     }
@@ -333,20 +353,20 @@ export default function Module6Leads() {
     const nextErrors = validateManualForm(leadForm);
     setFormErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
-      setToast({ msg: 'Please fix the highlighted manual-entry errors.', type: 'error' });
+      setToast({ msg: 'Please fix the highlighted form errors.', type: 'error' });
       return;
     }
-    if (!window.confirm(editing ? 'Are you sure you want to update this lead record?' : 'Are you sure you want to add this lead record?')) return;
+    if (!window.confirm('Are you sure you want to save this record?')) return;
 
     setSavingLead(true);
     try {
       const payload = buildLeadPayload(leadForm);
       if (editing?._id) {
         await updateModule6Lead(editing._id, payload);
-        setToast({ msg: 'Lead updated successfully.', type: 'success' });
+        setToast({ msg: 'Lead record saved successfully.', type: 'success' });
       } else {
         await createModule6Lead(payload);
-        setToast({ msg: 'Lead added successfully.', type: 'success' });
+        setToast({ msg: 'Lead record saved successfully.', type: 'success' });
       }
       resetManualForm();
       setActiveTab('list');
@@ -603,13 +623,20 @@ export default function Module6Leads() {
                   {LEAD_SCHEMA_FIELDS.map((field) => (
                     <div key={field.key}>
                       <label>{field.label}{field.required ? ' *' : ' (optional)'}</label>
-                      <input
-                        type={field.type === 'number' ? 'text' : field.type}
-                        value={leadForm[field.key]}
-                        onChange={(event) => setFieldValue(field.key, event.target.value)}
-                        placeholder={field.label}
-                        style={{ width: '100%' }}
-                      />
+                      {field.type === 'select' ? (
+                        <select value={leadForm[field.key]} onChange={(event) => setFieldValue(field.key, event.target.value)} style={{ width: '100%' }}>
+                          <option value="">Select {field.label}</option>
+                          {field.options?.map((option) => <option key={option} value={option}>{option}</option>)}
+                        </select>
+                      ) : (
+                        <input
+                          type={field.type === 'number' ? 'text' : field.type}
+                          value={leadForm[field.key]}
+                          onChange={(event) => setFieldValue(field.key, event.target.value)}
+                          placeholder={field.label}
+                          style={{ width: '100%' }}
+                        />
+                      )}
                       {field.helperText && <div className="m06-inline-note" style={{ marginTop: 4 }}>{field.helperText}</div>}
                       {formErrors[field.key] && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors[field.key]}</div>}
                     </div>
@@ -633,7 +660,7 @@ export default function Module6Leads() {
 
               <div className="m06-file-drop">
                 <div className="m06-inline-note" style={{ marginBottom: 10 }}>
-                  Only `.csv` files up to 5MB are accepted.
+                  Only `.csv` files up to {CSV_UPLOAD_LIMIT_LABEL} are accepted.
                 </div>
                 <input type="file" accept=".csv" onChange={onFileChange} />
                 {csvFileName && <div className="m06-inline-note" style={{ marginTop: 8 }}>Loaded file: {csvFileName}</div>}

@@ -1,4 +1,5 @@
 import { getWorkspaceIdFromHash } from '../../../utils/workspace';
+import { fetchFromApi, parseApiJson } from '../../../utils/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -53,10 +54,8 @@ function getWorkspaceId() {
   return workspaceId;
 }
 
-async function parseJson(res: Response) {
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok || json?.ok === false) throw new Error(json?.error || `Request failed with HTTP ${res.status}`);
-  return json;
+async function parseJson<T>(res: Response): Promise<T> {
+  return parseApiJson<T>(res, `Request failed with HTTP ${res.status}`);
 }
 
 export async function listInteractions(params: {
@@ -70,36 +69,36 @@ export async function listInteractions(params: {
   if (params.interactionType) qs.set('interactionType', params.interactionType);
   if (params.campaignId) qs.set('campaignId', params.campaignId);
   if (params.includeArchived) qs.set('includeArchived', 'true');
-  const res = await fetch(`${API_URL}/m07/interactions?${qs.toString()}`);
-  const json = await parseJson(res);
+  const res = await fetchFromApi(`${API_URL}/m07/interactions?${qs.toString()}`, undefined, API_URL);
+  const json = await parseJson<{ items?: InteractionRecord[] }>(res);
   return (json.items || []) as InteractionRecord[];
 }
 
 export async function createInteraction(payload: Omit<InteractionRecord, '_id' | 'workspace_id' | 'created_at' | 'updated_at' | 'is_archived'>) {
-  const res = await fetch(`${API_URL}/m07/interactions`, {
+  const res = await fetchFromApi(`${API_URL}/m07/interactions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId: getWorkspaceId(), ...payload }),
-  });
+  }, API_URL);
   return parseJson(res);
 }
 
 export async function updateInteraction(id: string, payload: Partial<InteractionRecord>) {
-  const res = await fetch(`${API_URL}/m07/interactions/${encodeURIComponent(id)}`, {
+  const res = await fetchFromApi(`${API_URL}/m07/interactions/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-  });
+  }, API_URL);
   return parseJson(res);
 }
 
 export async function archiveInteraction(id: string) {
-  const res = await fetch(`${API_URL}/m07/interactions/${encodeURIComponent(id)}/archive`, { method: 'POST' });
+  const res = await fetchFromApi(`${API_URL}/m07/interactions/${encodeURIComponent(id)}/archive`, { method: 'POST' }, API_URL);
   return parseJson(res);
 }
 
 export async function deleteInteractionPermanent(id: string) {
-  const res = await fetch(`${API_URL}/m07/interactions/${encodeURIComponent(id)}/permanent`, { method: 'DELETE' });
+  const res = await fetchFromApi(`${API_URL}/m07/interactions/${encodeURIComponent(id)}/permanent`, { method: 'DELETE' }, API_URL);
   return parseJson(res);
 }
 
@@ -110,11 +109,11 @@ export async function validateInteractionsCSV(payload: {
   endRow?: number;
   duplicateMode?: 'skip_duplicates' | 'overwrite_existing';
 }) {
-  const res = await fetch(`${API_URL}/m07/interactions/upload/validate`, {
+  const res = await fetchFromApi(`${API_URL}/m07/interactions/upload/validate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId: getWorkspaceId(), ...payload }),
-  });
+  }, API_URL);
   return (await parseJson(res)) as InteractionValidationResult;
 }
 
@@ -126,11 +125,11 @@ export async function importInteractionsCSV(payload: {
   duplicateMode?: 'skip_duplicates' | 'overwrite_existing';
   allowPartial?: boolean;
 }) {
-  const res = await fetch(`${API_URL}/m07/interactions/upload/commit`, {
+  const res = await fetchFromApi(`${API_URL}/m07/interactions/upload/commit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId: getWorkspaceId(), ...payload }),
-  });
+  }, API_URL);
   return (await parseJson(res)) as InteractionImportSummary;
 }
 
@@ -138,14 +137,14 @@ export async function searchLeads(query: string) {
   const workspaceId = getWorkspaceId();
   const qs = new URLSearchParams({ projectId: workspaceId });
   if (query.trim()) qs.set('q', query.trim());
-  const res = await fetch(`${API_URL}/m06/leads/search?${qs.toString()}`);
-  return parseJson(res);
+  const res = await fetchFromApi(`${API_URL}/m06/leads/search?${qs.toString()}`, undefined, API_URL);
+  return parseJson<{ leads?: Array<{ lead_id?: string; full_name?: string; email?: string }> }>(res);
 }
 
 export async function searchCampaigns(query: string) {
   const workspaceId = getWorkspaceId();
   const qs = new URLSearchParams({ projectId: workspaceId, search: query.trim() });
-  const res = await fetch(`${API_URL}/m06/campaigns?${qs.toString()}`);
-  const json = await parseJson(res);
+  const res = await fetchFromApi(`${API_URL}/m06/campaigns?${qs.toString()}`, undefined, API_URL);
+  const json = await parseJson<{ campaigns?: Array<{ id?: string; campaign_id?: string; name?: string; channel?: string }> }>(res);
   return (json.campaigns || []) as Array<{ id?: string; campaign_id?: string; name?: string; channel?: string }>;
 }

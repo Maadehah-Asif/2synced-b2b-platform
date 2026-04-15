@@ -76,6 +76,8 @@ function sanitizeStringArray(value: unknown): string[] {
   return value.map(item => sanitizeStringValue(item)).filter(Boolean) as string[];
 }
 
+type BusinessIdEntity = 'lead' | 'campaign' | 'deal';
+
 function isObjectRecord(value: unknown): value is Record<string, any> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -86,6 +88,11 @@ const TOUCH_CHANNELS = new Set(['email', 'ads', 'linkedin', 'webinar', 'other'])
 const TOUCH_TYPES = new Set(['email_open', 'ad_click', 'webinar', 'email_click', 'form_submit', 'other']);
 const TOUCH_STATUSES = new Set(['active', 'archived']);
 const DEAL_CURRENCIES = new Set(['USD', 'PKR', 'EUR']);
+const LEAD_SOURCES = new Set(['ads', 'linkedin', 'email', 'referral', 'webinar']);
+const LEAD_OWNERS = new Set(['rep a', 'rep b', 'rep c']);
+const LEAD_INDUSTRIES = new Set(['it', 'finance', 'healthcare', 'retail', 'education']);
+const LEAD_REGIONS = new Set(['us', 'uk', 'uae', 'pk', 'ca']);
+const LEAD_SEGMENTS = new Set(['smb', 'mid-market', 'enterprise']);
 const LEAD_IMPORT_FIELDS = ['lead_id', 'full_name', 'first_name', 'last_name', 'company', 'source', 'owner', 'industry', 'region', 'lead_score', 'intent_score', 'email', 'job_title', 'segment'] as const;
 const LEAD_REQUIRED_FIELDS = ['lead_id'] as const;
 const CAMPAIGN_IMPORT_FIELDS = ['campaign_id', 'name', 'channel', 'description', 'tags', 'start_date', 'end_date', 'status', 'spend'] as const;
@@ -121,6 +128,73 @@ function normalizeMappingHeader(value: unknown) {
   const text = sanitizeStringValue(value);
   if (!text) return null;
   return text.toLowerCase().replace(/[\s_-]+/g, '');
+}
+
+function getDateRangeBounds(value: unknown) {
+  const key = sanitizeStringValue(value)?.toLowerCase();
+  if (!key || key === 'all') return null;
+
+  const now = new Date();
+  const end = new Date(now);
+  let start: Date | null = null;
+
+  if (key === '30d') {
+    start = new Date(now);
+    start.setDate(start.getDate() - 30);
+  } else if (key === '90d') {
+    start = new Date(now);
+    start.setDate(start.getDate() - 90);
+  } else if (key === 'year') {
+    start = new Date(now.getFullYear(), 0, 1);
+  }
+
+  return start ? { start, end } : null;
+}
+
+function getRequestedChannels(value: unknown) {
+  const raw = sanitizeStringValue(value);
+  if (!raw) return null;
+  const channels = raw.split(',').map((part) => part.trim().toLowerCase()).filter(Boolean);
+  return channels.length > 0 ? new Set(channels) : null;
+}
+
+async function findCrossEntityBusinessIdConflicts(projectId: string, entity: BusinessIdEntity, value: string) {
+  const businessId = sanitizeStringValue(value);
+  if (!businessId) return [] as BusinessIdEntity[];
+
+  const checks: Array<Promise<BusinessIdEntity | null>> = [];
+  if (entity !== 'lead') {
+    checks.push(
+      Module6Lead.findOne({ project_id: projectId, lead_id: businessId }).select('_id').lean()
+        .then((doc) => (doc ? 'lead' : null))
+    );
+  }
+  if (entity !== 'campaign') {
+    checks.push(
+      Campaign.findOne({ project_id: projectId, campaign_id: businessId }).select('_id').lean()
+        .then((doc) => (doc ? 'campaign' : null))
+    );
+  }
+  if (entity !== 'deal') {
+    checks.push(
+      Deal.findOne({ project_id: projectId, deal_id: businessId }).select('_id').lean()
+        .then((doc) => (doc ? 'deal' : null))
+    );
+  }
+
+  const results = await Promise.all(checks);
+  return results.filter((result): result is BusinessIdEntity => result !== null);
+}
+
+function appendCrossEntityConflictError(
+  errors: Array<{ field: string; message: string }>,
+  field: string,
+  value: string | null | undefined,
+  conflicts: BusinessIdEntity[],
+) {
+  if (!value || conflicts.length === 0) return;
+  const labels = conflicts.map((conflict) => `${conflict}_id`).join(', ');
+  errors.push({ field, message: `${field} must be unique across leads, campaigns, and deals; value is already used as ${labels}` });
 }
 
 function parseLeadCsvText(csv: string) {
@@ -322,6 +396,14 @@ async function validateDealsCsvImport(options: {
   const existingDealIds = new Set(existingDeals.map((deal) => String(deal.deal_id).toLowerCase()));
   const existingLeads = await Module6Lead.find({ project_id: projectId, lead_id: { $in: Array.from(candidateLeadIds) } }).select('lead_id').lean();
   const existingLeadIds = new Set(existingLeads.map((lead) => String(lead.lead_id).toLowerCase()));
+  const conflictingLeadIds = new Set(
+    (await Module6Lead.find({ project_id: projectId, lead_id: { $in: Array.from(candidateDealIds) } }).select('lead_id').lean())
+      .map((lead) => String(lead.lead_id).toLowerCase())
+  );
+  const conflictingCampaignIds = new Set(
+    (await Campaign.find({ project_id: projectId, campaign_id: { $in: Array.from(candidateDealIds) } }).select('campaign_id').lean())
+      .map((campaign) => String(campaign.campaign_id).toLowerCase())
+  );
 
   const rowResults = selectedRows.map((row, index) => {
     const rowNumber = requestedStart + index;
@@ -340,6 +422,17 @@ async function validateDealsCsvImport(options: {
     const leadKey = validation.payload.lead_id?.toLowerCase() || null;
     if (dealKey && (duplicateSelection.get(dealKey)?.length || 0) > 1) {
       errors.push({ field: 'deal_id', message: 'deal_id appears multiple times in this upload selection' });
+    }
+    if (dealKey) {
+      appendCrossEntityConflictError(
+        errors,
+        'deal_id',
+        validation.payload.deal_id,
+        [
+          ...(conflictingLeadIds.has(dealKey) ? ['lead' as const] : []),
+          ...(conflictingCampaignIds.has(dealKey) ? ['campaign' as const] : []),
+        ],
+      );
     }
     if (leadKey && !existingLeadIds.has(leadKey)) {
       errors.push({ field: 'lead_id', message: 'lead_id does not exist' });
@@ -434,6 +527,14 @@ async function validateCampaignsCsvImport(options: {
 
   const existingCampaigns = await Campaign.find({ project_id: projectId, campaign_id: { $in: Array.from(candidateIds) } }).select('campaign_id').lean();
   const existingIds = new Set(existingCampaigns.map((campaign) => String(campaign.campaign_id).toLowerCase()));
+  const conflictingLeadIds = new Set(
+    (await Module6Lead.find({ project_id: projectId, lead_id: { $in: Array.from(candidateIds) } }).select('lead_id').lean())
+      .map((lead) => String(lead.lead_id).toLowerCase())
+  );
+  const conflictingDealIds = new Set(
+    (await Deal.find({ project_id: projectId, deal_id: { $in: Array.from(candidateIds) } }).select('deal_id').lean())
+      .map((deal) => String(deal.deal_id).toLowerCase())
+  );
 
   const rowResults = selectedRows.map((row, index) => {
     const rowNumber = requestedStart + index;
@@ -455,6 +556,17 @@ async function validateCampaignsCsvImport(options: {
     const campaignKey = validation.payload.campaign_id?.toLowerCase() || null;
     if (campaignKey && (selectedIds.get(campaignKey)?.length || 0) > 1) {
       errors.push({ field: 'campaign_id', message: 'campaign_id appears multiple times in this upload selection' });
+    }
+    if (campaignKey) {
+      appendCrossEntityConflictError(
+        errors,
+        'campaign_id',
+        validation.payload.campaign_id,
+        [
+          ...(conflictingLeadIds.has(campaignKey) ? ['lead' as const] : []),
+          ...(conflictingDealIds.has(campaignKey) ? ['deal' as const] : []),
+        ],
+      );
     }
     const action = campaignKey && existingIds.has(campaignKey) ? 'update' : 'insert';
     if (action === 'update' && validation.payload.campaign_id) {
@@ -549,6 +661,26 @@ function validateLeadValueFields(input: Record<string, unknown>) {
     errors.push({ field: 'email', message: 'email must be a valid email address' });
   }
 
+  const categoricalRules: Array<{
+    field: 'source' | 'owner' | 'industry' | 'region' | 'segment';
+    allowed: Set<string>;
+    message: string;
+  }> = [
+    { field: 'source', allowed: LEAD_SOURCES, message: `source must be one of ${Array.from(LEAD_SOURCES).join(', ')}` },
+    { field: 'owner', allowed: LEAD_OWNERS, message: `owner must be one of ${Array.from(LEAD_OWNERS).join(', ')}` },
+    { field: 'industry', allowed: LEAD_INDUSTRIES, message: `industry must be one of ${Array.from(LEAD_INDUSTRIES).join(', ')}` },
+    { field: 'region', allowed: LEAD_REGIONS, message: `region must be one of ${Array.from(LEAD_REGIONS).join(', ')}` },
+    { field: 'segment', allowed: LEAD_SEGMENTS, message: `segment must be one of ${Array.from(LEAD_SEGMENTS).join(', ')}` },
+  ];
+
+  for (const rule of categoricalRules) {
+    const value = sanitizeStringValue(input[rule.field]);
+    if (!value) continue;
+    if (!rule.allowed.has(value.toLowerCase())) {
+      errors.push({ field: rule.field, message: rule.message });
+    }
+  }
+
   return {
     errors,
     leadId,
@@ -607,6 +739,14 @@ async function validateModule6LeadCsvImport(options: {
 
   const existingLeads = await Module6Lead.find({ project_id: projectId, lead_id: { $in: Array.from(candidateIds) } }).select('lead_id').lean();
   const existingLeadIds = new Set(existingLeads.map((lead) => String(lead.lead_id).toLowerCase()));
+  const conflictingCampaignIds = new Set(
+    (await Campaign.find({ project_id: projectId, campaign_id: { $in: Array.from(candidateIds) } }).select('campaign_id').lean())
+      .map((campaign) => String(campaign.campaign_id).toLowerCase())
+  );
+  const conflictingDealIds = new Set(
+    (await Deal.find({ project_id: projectId, deal_id: { $in: Array.from(candidateIds) } }).select('deal_id').lean())
+      .map((deal) => String(deal.deal_id).toLowerCase())
+  );
 
   const rowResults = selectedRows.map((row, idx) => {
     const rowNumber = requestedStart + idx;
@@ -636,6 +776,17 @@ async function validateModule6LeadCsvImport(options: {
     const leadIdKey = validation.leadId ? validation.leadId.toLowerCase() : null;
     if (leadIdKey && (selectedLeadIds.get(leadIdKey)?.length || 0) > 1) {
       errors.push({ field: 'lead_id', message: 'lead_id appears multiple times in this upload selection' });
+    }
+    if (leadIdKey) {
+      appendCrossEntityConflictError(
+        errors,
+        'lead_id',
+        validation.leadId,
+        [
+          ...(conflictingCampaignIds.has(leadIdKey) ? ['campaign' as const] : []),
+          ...(conflictingDealIds.has(leadIdKey) ? ['deal' as const] : []),
+        ],
+      );
     }
 
     const action = leadIdKey && existingLeadIds.has(leadIdKey) ? 'update' : 'insert';
@@ -1016,15 +1167,84 @@ export async function stats(req: Request, res: Response) {
   try {
     const projectId = getProjectId(req);
     if (!projectId) return res.status(400).json({ error: 'projectId_required' });
-    // Require runId for stats
-    const runId = (req.query.runId as string) || '';
-    if (!runId || !mongoose.isValidObjectId(runId)) return res.status(400).json({ ok: false, error: 'runId_required' });
+    const requestedRunId = (req.query.runId as string) || '';
+    const requestedModel = sanitizeStringValue(req.query.model)?.replace('-', '_') || null;
+    const dateRangeBounds = getDateRangeBounds(req.query.dateRange);
+    const requestedChannels = getRequestedChannels(req.query.channels);
+    let runDoc: any = null;
 
-    const runDoc = await AttributionRun.findOne({ _id: runId, project_id: projectId }).lean();
-    if (!runDoc || runDoc.status === 'error') return res.status(400).json({ ok: false, error: 'invalid_run' });
+    if (requestedRunId) {
+      if (!mongoose.isValidObjectId(requestedRunId)) return res.status(400).json({ ok: false, error: 'runId_required' });
+      runDoc = await AttributionRun.findOne({ _id: requestedRunId, project_id: projectId }).lean();
+      if (!runDoc || runDoc.status === 'error') return res.status(400).json({ ok: false, error: 'invalid_run' });
+    } else {
+      const runQuery: Record<string, unknown> = { project_id: projectId, status: 'success' };
+      if (requestedModel) runQuery.model_type = requestedModel;
+      runDoc = await AttributionRun.findOne(runQuery).sort({ createdAt: -1 }).lean();
+      if (!runDoc) {
+        const [deals, campaigns] = await Promise.all([
+          Deal.find({ project_id: projectId }).lean(),
+          Campaign.find({ project_id: projectId }).lean(),
+        ]);
+
+        const filteredDeals = deals.filter((deal) => {
+          const closedAt = deal.closed_at ? new Date(deal.closed_at) : null;
+          if (dateRangeBounds && (!closedAt || Number.isNaN(closedAt.getTime()) || closedAt < dateRangeBounds.start || closedAt > dateRangeBounds.end)) {
+            return false;
+          }
+          return true;
+        });
+        const filteredCampaigns = campaigns.filter((campaign) => {
+          const channel = String(campaign.channel || 'other').toLowerCase();
+          return !requestedChannels || requestedChannels.has(channel);
+        });
+
+        const totalRevenue = filteredDeals.reduce((sum, deal) => sum + (Number(deal.revenue) || 0), 0);
+        const totalSpend = filteredCampaigns.reduce((sum, campaign) => sum + (Number(campaign.spend) || 0), 0);
+
+        const revenueOverTimeMap: Record<string, { period: string; revenue: number; spend: number; roi: number }> = {};
+        for (const deal of filteredDeals) {
+          const closedAt = deal.closed_at ? new Date(deal.closed_at) : null;
+          if (!closedAt || Number.isNaN(closedAt.getTime())) continue;
+          const label = closedAt.toISOString().slice(0, 7);
+          if (!revenueOverTimeMap[label]) {
+            revenueOverTimeMap[label] = { period: label, revenue: 0, spend: 0, roi: 0 };
+          }
+          revenueOverTimeMap[label].revenue += Number(deal.revenue) || 0;
+        }
+
+        const spendByChannelMap: Record<string, { channel: string; revenue: number; spend: number; attributedRevenue: number; roi: number }> = {};
+        for (const campaign of filteredCampaigns) {
+          const channel = String(campaign.channel || 'other').toLowerCase();
+          if (!spendByChannelMap[channel]) {
+            spendByChannelMap[channel] = { channel, revenue: 0, spend: 0, attributedRevenue: 0, roi: 0 };
+          }
+          spendByChannelMap[channel].spend += Number(campaign.spend) || 0;
+        }
+
+        return res.json({
+          ok: true,
+          totalRevenue,
+          attributedRevenue: 0,
+          totalSpend,
+          campaignCount: filteredCampaigns.length,
+          modelName: requestedModel,
+          lastRun: null,
+          runId: null,
+          status: 'no_attribution',
+          message: 'No successful attribution run found yet. Upload data and run attribution to unlock ROI-based dashboard metrics.',
+          revenueByChannel: Object.values(spendByChannelMap),
+          revenueOverTime: Object.values(revenueOverTimeMap).sort((a, b) => a.period.localeCompare(b.period)),
+          topCampaigns: [],
+          bottomCampaigns: [],
+        });
+      }
+    }
+
+    const runId = String(runDoc._id);
 
     // Attribution rows for the run
-    const rows = await AttributionResult.aggregate([
+    let rows = await AttributionResult.aggregate([
       { $match: { run_id: runId, project_id: projectId } },
       { $lookup: { from: 'deals', localField: 'deal_id', foreignField: 'deal_id', as: 'deal' } },
       { $unwind: { path: '$deal', preserveNullAndEmptyArrays: true } },
@@ -1040,6 +1260,19 @@ export async function stats(req: Request, res: Response) {
         }
       }
     ]).exec();
+
+    rows = rows.filter((row: any) => {
+      const channel = String(row.channel || 'other').toLowerCase();
+      if (requestedChannels && !requestedChannels.has(channel)) return false;
+
+      if (dateRangeBounds) {
+        const closedAt = row.deal?.closed_at ? new Date(row.deal.closed_at) : null;
+        if (!closedAt || Number.isNaN(closedAt.getTime()) || closedAt < dateRangeBounds.start || closedAt > dateRangeBounds.end) {
+          return false;
+        }
+      }
+      return true;
+    });
 
     const totalRevenue = rows.reduce((s: number, r: any) => s + (Number(r.revenue) || 0), 0);
     const totalSpend = rows.reduce((s: number, r: any) => s + (Number(r.spend) || 0), 0);
@@ -1088,6 +1321,7 @@ export async function stats(req: Request, res: Response) {
       campaignCount: campaignIds.size,
       modelName: (runDoc as any).model_type || 'linear',
       lastRun: runDoc.createdAt || runDoc.timestamp || new Date(),
+      runId,
       status: runDoc.status || 'success',
       revenueByChannel,
       revenueOverTime,
@@ -1644,6 +1878,10 @@ export async function createCampaign(req: Request, res: Response) {
     if (validation.errors.length > 0) return res.status(400).json({ error: 'validation_failed', fieldErrors: validation.errors });
     const payload = validation.payload;
     if (!payload.campaign_id) return res.status(400).json({ error: 'campaign_id_required' });
+    const crossEntityConflicts = await findCrossEntityBusinessIdConflicts(projectId, 'campaign', payload.campaign_id);
+    if (crossEntityConflicts.length > 0) {
+      return res.status(409).json({ error: 'business_id_conflict', field: 'campaign_id', conflicts: crossEntityConflicts });
+    }
     const dup = await Campaign.findOne({ project_id: projectId, campaign_id: payload.campaign_id }).select('_id').lean();
     if (dup) return res.status(409).json({ error: 'duplicate_campaign_id' });
     const campaign = await Campaign.create({
@@ -1674,6 +1912,10 @@ export async function updateCampaign(req: Request, res: Response) {
     if (!camp) return res.status(404).json({ error: 'not_found' });
     const nextCampaignId = requireStringId(campaign_id ?? campaignId);
     if (nextCampaignId && nextCampaignId !== camp.campaign_id) {
+      const crossEntityConflicts = await findCrossEntityBusinessIdConflicts(String(camp.project_id), 'campaign', nextCampaignId);
+      if (crossEntityConflicts.length > 0) {
+        return res.status(409).json({ error: 'business_id_conflict', field: 'campaign_id', conflicts: crossEntityConflicts });
+      }
       const dup = await Campaign.findOne({ project_id: camp.project_id, campaign_id: nextCampaignId, _id: { $ne: camp._id } }).select('_id').lean();
       if (dup) return res.status(409).json({ error: 'duplicate_campaign_id' });
       camp.campaign_id = nextCampaignId;
@@ -1920,6 +2162,10 @@ export async function createModule6Lead(req: Request, res: Response) {
     if (validation.errors.length > 0) return res.status(400).json({ error: 'validation_failed', fieldErrors: validation.errors });
     const leadId = validation.leadId;
     if (!leadId) return res.status(400).json({ error: 'lead_id_required' });
+    const crossEntityConflicts = await findCrossEntityBusinessIdConflicts(projectId, 'lead', leadId);
+    if (crossEntityConflicts.length > 0) {
+      return res.status(409).json({ error: 'business_id_conflict', field: 'lead_id', conflicts: crossEntityConflicts });
+    }
 
     const exists = await Module6Lead.findOne({ project_id: projectId, lead_id: leadId }).select('_id').lean();
     if (exists) return res.status(409).json({ error: 'duplicate_lead_id' });
@@ -1945,6 +2191,10 @@ export async function updateModule6Lead(req: Request, res: Response) {
 
     const nextLeadId = sanitizeStringValue(req.body?.lead_id ?? req.body?.leadId);
     if (nextLeadId && nextLeadId !== doc.lead_id) {
+      const crossEntityConflicts = await findCrossEntityBusinessIdConflicts(projectId, 'lead', nextLeadId);
+      if (crossEntityConflicts.length > 0) {
+        return res.status(409).json({ error: 'business_id_conflict', field: 'lead_id', conflicts: crossEntityConflicts });
+      }
       const dup = await Module6Lead.findOne({ project_id: projectId, lead_id: nextLeadId, _id: { $ne: doc._id } }).select('_id').lean();
       if (dup) return res.status(409).json({ error: 'duplicate_lead_id' });
       doc.lead_id = nextLeadId;
@@ -2311,6 +2561,10 @@ export async function createDeal(req: Request, res: Response) {
     if (!payload.lead_id) return res.status(400).json({ error: 'lead_id_required' });
     const lead = await Module6Lead.findOne({ project_id: projectId, lead_id: payload.lead_id }).select('_id').lean();
     if (!lead) return res.status(400).json({ error: 'lead_not_found' });
+    const crossEntityConflicts = await findCrossEntityBusinessIdConflicts(projectId, 'deal', payload.deal_id);
+    if (crossEntityConflicts.length > 0) {
+      return res.status(409).json({ error: 'business_id_conflict', field: 'deal_id', conflicts: crossEntityConflicts });
+    }
     const dup = await Deal.findOne({ project_id: projectId, deal_id: payload.deal_id }).lean();
     if (dup) return res.status(409).json({ error: 'duplicate_deal_id' });
 
@@ -2386,6 +2640,10 @@ export async function updateDeal(req: Request, res: Response) {
       const nextDealId = requireStringId(deal_id);
       if (!nextDealId) return res.status(400).json({ error: 'deal_id_required' });
       if (nextDealId !== d.deal_id) {
+        const crossEntityConflicts = await findCrossEntityBusinessIdConflicts(String(d.project_id), 'deal', nextDealId);
+        if (crossEntityConflicts.length > 0) {
+          return res.status(409).json({ error: 'business_id_conflict', field: 'deal_id', conflicts: crossEntityConflicts });
+        }
         const dup = await Deal.findOne({ project_id: d.project_id, deal_id: nextDealId, _id: { $ne: d._id } }).select('_id').lean();
         if (dup) return res.status(409).json({ error: 'duplicate_deal_id' });
       }
@@ -3245,7 +3503,8 @@ export async function roiDashboard(req: Request, res: Response) {
     const projectId = getProjectId(req);
     if (!projectId) return res.status(400).json({ error: 'projectId_required' });
 
-    const runId = (req.query.runId as string) || null;
+    const requestedRunId = (req.query.runId as string) || null;
+    let runId = requestedRunId;
 
     // parse filters
     const channelFilter = (req.query.channel as string) || null; // single channel or comma-separated
@@ -3259,6 +3518,12 @@ export async function roiDashboard(req: Request, res: Response) {
     if (runId) {
       if (!mongoose.isValidObjectId(runId)) return res.status(400).json({ error: 'invalid_runId' });
       attribMatch.run_id = runId;
+    } else {
+      const latestRun = await AttributionRun.findOne({ project_id: projectId, status: 'success' }).sort({ createdAt: -1 }).lean();
+      if (latestRun) {
+        runId = String(latestRun._id);
+        attribMatch.run_id = runId;
+      }
     }
 
     const hasAttrib = await AttributionResult.findOne(attribMatch).lean();
@@ -3372,7 +3637,7 @@ export async function roiDashboard(req: Request, res: Response) {
     const top5 = sortedByROI.slice(0,5);
     const bottom5 = sortedByROI.slice(-5).reverse();
 
-    return res.json({ ok: true, totalAttributed, totalSpend, netProfit, overallROI, campaigns: filteredCampaigns, monthlySeries, channelContribution, top5, bottom5 });
+    return res.json({ ok: true, runId: runId || null, totalAttributed, totalSpend, netProfit, overallROI, campaigns: filteredCampaigns, monthlySeries, channelContribution, top5, bottom5 });
   } catch (e) {
     console.error('[m06/roiDashboard]', e);
     return res.status(500).json({ error: 'internal' });

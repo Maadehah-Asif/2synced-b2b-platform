@@ -12,6 +12,7 @@ export type StageFormState = Record<StageFieldKey, string>;
 export type StageMapping = Record<StageFieldKey, string>;
 
 export const STAGE_STATUS_OPTIONS = ['active', 'completed', 'dropped'] as const;
+export const STAGE_NAME_OPTIONS = ['MQL', 'SQL', 'Proposal', 'Negotiation', 'Closed'] as const;
 export const STAGE_REQUIRED_FIELDS: StageFieldKey[] = ['lead_id', 'stage_name', 'entered_at'];
 export const STAGE_FIELD_LABELS: Record<StageFieldKey, string> = {
   lead_id: 'Lead ID',

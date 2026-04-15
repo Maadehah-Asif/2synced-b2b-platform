@@ -4,15 +4,16 @@ import PieChart from './PieChart';
 import TimelineChart from './TimelineChart';
 import type { TimelinePoint } from './TimelineChart';
 import { useWorkspaceId } from '../../utils/workspace';
+import { fetchFromApi, parseApiJson } from '../../utils/api';
 
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-type Page1StatsProps = {
+type Module6StatsPanelProps = {
   compact?: boolean;
 };
 
-export default function Page1Stats({ compact = false }: Page1StatsProps) {
+export default function Module6StatsPanel({ compact = false }: Module6StatsPanelProps) {
   const workspaceId = useWorkspaceId({ redirectToWorkspaces: !compact });
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any>(null);
@@ -26,28 +27,24 @@ export default function Page1Stats({ compact = false }: Page1StatsProps) {
       setLoading(true);
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch(
+        const res = await fetchFromApi(
           `${API_URL}/m06/stats?projectId=${encodeURIComponent(workspaceId)}`,
           {
             headers: {
               Authorization: token ? `Bearer ${token}` : '',
             },
-          }
+          },
+          API_URL
         );
-        const json = await res.json();
-        if (res.ok) {
+        const json = await parseApiJson<any>(res, 'Could not load Module 6 stats');
+        if (json) {
           setData(json);
           setFetchError(null);
-        } else {
-          setData(null);
-          setFetchError(
-            `API ${res.status} ${res.statusText}: ${JSON.stringify(json)}`
-          );
-          console.error('m06/stats error', res.status, json);
         }
       } catch (e: any) {
         console.error('m06/stats fetch failed', e);
         setData(null);
+        setFetchError(e?.message || 'Could not load Module 6 stats');
       }
       setLoading(false);
     })();
@@ -65,12 +62,13 @@ export default function Page1Stats({ compact = false }: Page1StatsProps) {
             const p = json.projects[0];
             setAutoProject(p);
             const token = localStorage.getItem('token');
-            const r2 = await fetch(
+            const r2 = await fetchFromApi(
               `${API_URL}/m06/stats?projectId=${encodeURIComponent(p)}`,
-              { headers: { Authorization: token ? `Bearer ${token}` : '' } }
+              { headers: { Authorization: token ? `Bearer ${token}` : '' } },
+              API_URL
             );
-            const j2 = await r2.json();
-            if (r2.ok) setData(j2);
+            const j2 = await parseApiJson<any>(r2, 'Could not load Module 6 stats');
+            if (j2) setData(j2);
           }
         } catch {
           // ignore, we already show error UI

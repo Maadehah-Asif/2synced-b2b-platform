@@ -157,6 +157,16 @@ const dataHubCards: HubCard[] = [
     usedIn: ["M07"],
     path: (id) => `#/workspace/${id}/m07/interactions`,
   },
+  {
+    module: "M05",
+    title: "Web Engagement Data",
+    desc: "Upload, preview, archive, and manage web engagement CSV datasets used by the Module 5 alignment workspace.",
+    cta: "Manage",
+    kind: "Input",
+    entity: "Web Engagement",
+    usedIn: ["M05"],
+    path: (id) => `#/workspace/${id}/m05?view=web-engagement`,
+  },
 ];
 
 const insightCards: InsightCard[] = [

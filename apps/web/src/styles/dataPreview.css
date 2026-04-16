@@ -4,7 +4,7 @@
   padding: 28px 24px 44px;
   display: grid;
   gap: 20px;
-  background: linear-gradient(180deg, #eef5fb 0%, #f7fbfe 24%, #fcfdff 100%);
+  background: linear-gradient(180deg, #f3f8fb 0%, #f8fbfd 24%, #fcfdff 100%);
   min-width: 0;
   overflow-x: hidden;
 }
@@ -79,7 +79,7 @@
 .data-preview-stat-label {
   display: block;
   margin-bottom: 6px;
-  color: #5f708f;
+  color: #4d6276;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -124,7 +124,7 @@
 
 .data-preview-label {
   display: block;
-  color: #5f708f;
+  color: #4d6276;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -138,8 +138,8 @@
 .data-preview-message {
   border-radius: 14px;
   padding: 12px 14px;
-  background: rgba(72,177,217,0.1);
-  border: 1px solid rgba(72,177,217,0.18);
+  background: rgba(15,66,88,0.08);
+  border: 1px solid rgba(15,66,88,0.14);
   color: #0f4258;
   font-size: 13px;
   font-weight: 700;
@@ -162,7 +162,7 @@
 
 .data-preview-table-caption {
   max-width: 620px;
-  color: #5f708f;
+  color: #4d6276;
   font-size: 13px;
   font-weight: 700;
   line-height: 1.7;
@@ -191,24 +191,24 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #edf6fb;
+  background: #eef5f8;
   color: #0b2540;
   font-weight: 800;
 }
 
 .data-preview-scroll-hint {
   margin-top: 12px;
-  color: #5f708f;
+  color: #4d6276;
   font-size: 12px;
   font-weight: 700;
 }
 
 .data-preview-table-shell .preview-table tbody tr:nth-child(even) td {
-  background: rgba(237, 246, 251, 0.42);
+  background: rgba(238, 245, 248, 0.7);
 }
 
 .data-preview-table-shell .preview-table tbody tr:hover td {
-  background: rgba(72, 177, 217, 0.08);
+  background: rgba(15, 66, 88, 0.08);
 }
 
 .data-preview-table-shell .preview-table tr.row-selected td {
@@ -227,7 +227,7 @@
 
 .data-preview-table-shell .preview-table thead th:nth-child(2) {
   z-index: 4;
-  background: #edf6fb;
+  background: #eef5f8;
 }
 
 .data-preview-table-shell .preview-table tr.row-selected td:nth-child(2),
@@ -265,7 +265,7 @@
 
 .data-preview-fullscreen .fullscreen-body {
   padding: 20px;
-  background: linear-gradient(180deg, #eef5fb 0%, #f7fbfe 100%);
+  background: linear-gradient(180deg, #f3f8fb 0%, #f8fbfd 100%);
 }
 
 .data-preview-fullscreen .preview-table-container {

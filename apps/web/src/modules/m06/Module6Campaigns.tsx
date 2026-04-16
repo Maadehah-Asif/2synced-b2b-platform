@@ -170,6 +170,7 @@ export default function Module6Campaigns(){
   const [validationResult, setValidationResult] = useState<CampaignCsvValidationResult | null>(null);
   const [submittingCsv, setSubmittingCsv] = useState(false);
   const [importSummary, setImportSummary] = useState<CampaignImportSummary | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   async function reloadCampaigns() {
     setLoading(true);
@@ -232,6 +233,7 @@ export default function Module6Campaigns(){
     setRangeError(null);
     setValidationResult(null);
     setImportSummary(null);
+    setShowPreview(false);
   }
 
   function validateForm(nextForm: CampaignFormState) {
@@ -286,6 +288,7 @@ export default function Module6Campaigns(){
     setMappingErrors(validateMappingState(next));
     setValidationResult(null);
     setImportSummary(null);
+    setShowPreview(false);
   }
 
   function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -397,6 +400,7 @@ export default function Module6Campaigns(){
       });
       setValidationResult(result);
       setImportSummary(null);
+      setShowPreview(false);
       setToast({ msg: `Validation finished. ${result.summary.validRows} valid rows and ${result.summary.invalidRows} invalid rows found.`, type: 'success' });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'CSV validation failed.';
@@ -708,11 +712,11 @@ export default function Module6Campaigns(){
                     })}
                     <div>
                       <label>Start row *</label>
-                      <input type="number" min={1} value={startRow} onChange={(event) => { setStartRow(Number(event.target.value || 1)); setValidationResult(null); }} />
+                      <input type="number" min={1} value={startRow} onChange={(event) => { setStartRow(Number(event.target.value || 1)); setValidationResult(null); setShowPreview(false); }} />
                     </div>
                     <div>
                       <label>End row *</label>
-                      <input type="number" min={1} value={endRow} onChange={(event) => { setEndRow(event.target.value ? Number(event.target.value) : ''); setValidationResult(null); }} />
+                      <input type="number" min={1} value={endRow} onChange={(event) => { setEndRow(event.target.value ? Number(event.target.value) : ''); setValidationResult(null); setShowPreview(false); }} />
                     </div>
                   </div>
 
@@ -732,11 +736,19 @@ export default function Module6Campaigns(){
                   )}
 
                   <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                    <button className="btn-primary" onClick={runCsvValidation} disabled={validatingCsv}>{validatingCsv ? 'Validating...' : 'Validate and Open Preview'}</button>
+                    <button className="btn-primary" onClick={runCsvValidation} disabled={validatingCsv}>{validatingCsv ? 'Validating...' : 'Validate CSV'}</button>
                     <button className="btn-ghost" onClick={resetCsvState}>Reset Upload</button>
                   </div>
 
-                  {selectedCsvRows.length > 0 && (
+                  {validationResult && (
+                    <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <button className="btn-ghost" onClick={() => setShowPreview((prev) => !prev)}>
+                        {showPreview ? 'Hide Preview' : 'Open Preview'}
+                      </button>
+                    </div>
+                  )}
+
+                  {showPreview && selectedCsvRows.length > 0 && (
                     <div style={{ marginTop: 18 }}>
                       <ImportPreviewStep
                         title="Campaign CSV Preview"

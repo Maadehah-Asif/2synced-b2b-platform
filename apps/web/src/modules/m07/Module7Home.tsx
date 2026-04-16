@@ -32,7 +32,7 @@ export default function Module7Home(){
         >
           <div style={{ padding: 28 }}>
             <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Funnel Insight
+              Diagnostic Workspace
             </div>
             <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>Funnel Insight & Leakage Review</h1>
             <div style={{ maxWidth: 780, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
@@ -76,12 +76,6 @@ export default function Module7Home(){
                 onClick={() => go(`#/workspace/:workspaceId/m07/leakage`)}
               />
               <ActionCard
-                title="Lead Journey Explorer"
-                desc="Follow one lead through stage changes and interaction history to understand why it converted, stalled, or dropped."
-                action="Open Journey"
-                onClick={() => go(`#/workspace/:workspaceId/m07/journey/L-1001`)}
-              />
-              <ActionCard
                 title="Fatigue Analysis"
                 desc="Spot over-contacted leads, weakening engagement, and interaction pressure that could damage conversion."
                 action="Open Fatigue"
@@ -94,10 +88,22 @@ export default function Module7Home(){
                 onClick={() => go(`#/workspace/:workspaceId/m07/recommendations`)}
               />
               <ActionCard
+                title="Lead Journey Explorer"
+                desc="Follow one lead through stage changes and interaction history to understand why it converted, stalled, or dropped."
+                action="Open Journey"
+                onClick={() => go(`#/workspace/:workspaceId/m07/journey/L-1001`)}
+              />
+              <ActionCard
                 title="Funnel Trends"
                 desc="Track conversion movement, pipeline growth, and drop patterns over time."
                 action="Open Trends"
                 onClick={() => go(`#/workspace/:workspaceId/m07/trends`)}
+              />
+              <ActionCard
+                title="Report Center"
+                desc="Open the written funnel report with leakage summaries and downloadable supporting exports."
+                action="Open Report"
+                onClick={() => go(`#/workspace/:workspaceId/m08/m07`)}
               />
               <ActionCard
                 title="Funnel Forecast"
@@ -105,14 +111,6 @@ export default function Module7Home(){
                 action="Open Forecast"
                 onClick={() => go(`#/workspace/:workspaceId/m07/forecast`)}
               />
-              <ActionCard
-                title="Report Center"
-                desc="Open funnel health, leakage, and interaction reporting with downloadable operational exports."
-                action="Open Report"
-                onClick={() => go(`#/workspace/:workspaceId/m08/m07`)}
-              />
-              <InfoCard title="Input screens stay in Data Hub" body="For Funnel Insight, only leads, stage history, and interactions should be treated as inputs, and those belong in workspace Data Hub rather than here." />
-              <InfoCard title="Use this area for analysis only" body="This home now focuses on overview, leakage, fatigue, journey, recommendations, and trends instead of operational maintenance screens." />
             </div>
           </div>
 
@@ -130,23 +128,14 @@ export default function Module7Home(){
             </div>
             <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>How to use Funnel Insight now</h3>
             <div style={{ display: 'grid', gap: 12 }}>
-              <StepCard step="1" title="Start from funnel overview" text="Use the overview first to understand current stage occupancy, conversion flow, and which leads need drilldown." />
-              <StepCard step="2" title="Move into the right analysis screen" text="Open leakage, journey, fatigue, recommendations, or trends depending on whether the issue is stage loss, lead-level friction, or time-based performance." />
-              <StepCard step="3" title="Keep inputs outside this module home" text="If a record needs correction, return to Data Hub for leads, stage history, or interactions, then come back here to validate the impact." />
+              <StepCard step="1" title="Prepare leads, stages, and interactions first" text="Use the Data Hub lead, stage, and interaction workspaces first whenever funnel records still need import, correction, or enrichment." />
+              <StepCard step="2" title="Start with overview, then diagnose the issue" text="Open Funnel Overview first for the overall funnel picture, then move into Leakage Analysis, Fatigue Analysis, or Lead Journey Explorer depending on whether the issue is drop-off, over-contact, or one-lead drilldown." />
+              <StepCard step="3" title="Finish with action and forward-looking views" text="Open Recommendations when you need next actions, Funnel Trends when you need time-based movement, and Funnel Forecast when the question is what stage pressure or conversion change is likely next." />
             </div>
           </div>
         </section>
       </main>
     </Layout>
-  )
-}
-
-function InfoCard({ title, body }: { title: string; body: string }) {
-  return (
-    <div style={{ borderRadius: 16, padding: 16, border: '1px solid rgba(15,66,88,0.08)', background: 'linear-gradient(180deg, rgba(255,255,255,1), rgba(245,249,253,0.98))' }}>
-      <div style={{ fontSize: 16, fontWeight: 800, color: '#0B2540', marginBottom: 6 }}>{title}</div>
-      <div style={{ fontSize: 13, color: '#415274', lineHeight: 1.7 }}>{body}</div>
-    </div>
   )
 }
 

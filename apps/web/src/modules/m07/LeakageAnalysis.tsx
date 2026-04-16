@@ -1,35 +1,28 @@
-import { useMemo, useState } from 'react';
-import Layout from '../../components/Layout';
-import ModuleBackButton from '../../components/ModuleBackButton';
-import './module7.css';
-import { getFilterOptions, getLeakageAnalysis, sampleLeads, type M07Filters } from './funnelInsightsData';
+import { useMemo, useState } from 'react'
+import Layout from '../../components/Layout'
+import ModuleBackButton from '../../components/ModuleBackButton'
+import { InsightHero, InsightKpiCard, InsightKpiGrid, InsightNoteCard, InsightPanel } from '../../components/InsightChrome'
+import { insightBarWidth, insightTokens } from '../../components/insightChromeTokens'
+import './module7.css'
+import { getFilterOptions, getLeakageAnalysis, sampleLeads, type M07Filters } from './funnelInsightsData'
 
 export default function LeakageAnalysis() {
-  const [filters, setFilters] = useState<M07Filters>({});
-  const [selectedStage, setSelectedStage] = useState<string | null>(null);
-  const options = useMemo(() => getFilterOptions(), []);
-  const leakage = useMemo(() => getLeakageAnalysis(filters), [filters]);
-  const stageRow = leakage.rows.find((row) => row.stage === selectedStage) || null;
-  const droppedLeads = stageRow ? sampleLeads.filter((lead) => stageRow.droppedLeadIds.includes(lead.lead_id)) : [];
+  const [filters, setFilters] = useState<M07Filters>({})
+  const [selectedStage, setSelectedStage] = useState<string | null>(null)
+  const options = useMemo(() => getFilterOptions(), [])
+  const leakage = useMemo(() => getLeakageAnalysis(filters), [filters])
+  const stageRow = leakage.rows.find((row) => row.stage === selectedStage) || null
+  const droppedLeads = stageRow ? sampleLeads.filter((lead) => stageRow.droppedLeadIds.includes(lead.lead_id)) : []
+  const maxDrop = Math.max(1, ...leakage.rows.map((row) => row.dropRate))
+  const maxTime = Math.max(1, ...leakage.rows.map((row) => row.avgTime))
 
   return (
     <Layout>
       <main className="page-root m07-workspace-page" style={{ padding: 20 }}>
-        <div className="m07-workspace-toprow">
-          <ModuleBackButton toSuffix="/m07" />
-        </div>
+        <div className="m07-workspace-toprow"><ModuleBackButton toSuffix="/m07" /></div>
+        <InsightHero eyebrow="Funnel Insight Leakage" title="Leakage Analysis" subtitle="Detect bottlenecks, heavy-drop stages, and delay pressure before they turn into sustained conversion loss." />
 
-        <section className="m07-insight-hero">
-          <div style={{ padding: 28 }}>
-            <div className="m07-insight-badge">M07 Leakage</div>
-            <h1 className="m07-insight-title">Leakage Analysis</h1>
-            <div className="m07-insight-subtitle">
-              Detect bottlenecks, high-drop stages, and delay-heavy parts of the funnel before they turn into conversion loss.
-            </div>
-          </div>
-        </section>
-
-        <section className="m07-workspace-panel m07-workspace-panel-soft">
+        <InsightPanel eyebrow="Filters" title="Focus the leakage diagnosis" soft>
           <div className="m07-workspace-formgrid">
             <select value={filters.source || ''} onChange={(e) => setFilters((p) => ({ ...p, source: e.target.value || undefined }))}>
               <option value="">All sources</option>
@@ -48,20 +41,17 @@ export default function LeakageAnalysis() {
               {options.segments.map((item) => <option key={item}>{item}</option>)}
             </select>
           </div>
-        </section>
+        </InsightPanel>
 
-        <section className="m07-workspace-panel">
-          <div className="m07-analytics-kpis">
-            <Kpi label="Highest Leakage Stage" value={leakage.highestLeak?.stage || 'None'} />
-            <Kpi label="Total Dropped Leads" value={leakage.totalDropped} />
-            <Kpi label="Avg Drop-off Rate" value={`${leakage.avgDropRate}%`} />
-            <Kpi label="Stage with Longest Delay" value={leakage.longestDelay?.stage || 'None'} />
-          </div>
-        </section>
+        <InsightKpiGrid>
+          <InsightKpiCard label="Highest Leakage Stage" value={leakage.highestLeak?.stage || 'None'} note="Stage currently showing the heaviest drop pressure." tone="amber" />
+          <InsightKpiCard label="Total Dropped Leads" value={leakage.totalDropped} note="Visible dropped records in the active leakage view." tone="amber" />
+          <InsightKpiCard label="Avg Drop-off Rate" value={`${leakage.avgDropRate}%`} note="Average loss rate across all currently visible stages." tone="slate" />
+          <InsightKpiCard label="Longest Delay Stage" value={leakage.longestDelay?.stage || 'None'} note="Area most likely to be compounding drop risk through delay." tone="navy" />
+        </InsightKpiGrid>
 
-        <section className="m07-analytics-grid">
-          <section className="m07-workspace-panel">
-            <h3 className="m07-workspace-title" style={{ marginTop: 0 }}>Leakage Heatmap</h3>
+        <section style={{ ...insightTokens.equalCol, marginTop: 18 }}>
+          <InsightPanel eyebrow="Leakage heatmap" title="Stage pressure by severity">
             <div className="m07-heatmap-grid">
               {leakage.rows.map((row) => (
                 <button
@@ -75,90 +65,86 @@ export default function LeakageAnalysis() {
                 </button>
               ))}
             </div>
-          </section>
+          </InsightPanel>
 
-          <section className="m07-workspace-panel">
-            <h3 className="m07-workspace-title" style={{ marginTop: 0 }}>Drop-off & Time in Stage</h3>
-            <div className="m07-bar-list">
+          <InsightPanel eyebrow="Pattern readout" title="Drop-off and delay comparison" soft>
+            <div style={{ display: 'grid', gap: 16 }}>
               {leakage.rows.map((row) => (
-                <div key={row.stage} className="m07-bar-row">
-                  <span>{row.stage}</span>
-                  <div className="m07-bar-track">
-                    <div className="m07-bar-fill danger" style={{ width: `${Math.max(6, row.dropRate)}%` }} />
+                <div key={row.stage}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+                    <strong style={{ color: '#0B2540', fontSize: 14 }}>{row.stage}</strong>
+                    <span style={{ fontSize: 13, color: '#415274' }}>{row.dropRate}% drop</span>
                   </div>
-                  <strong>{row.dropRate}%</strong>
+                  <div style={insightTokens.track}>
+                    <div style={{ ...insightTokens.fill, width: insightBarWidth(row.dropRate, maxDrop, 10), background: 'linear-gradient(135deg, #b91c1c 0%, #dc2626 100%)' }} />
+                  </div>
                 </div>
               ))}
             </div>
-            <div className="m07-bar-list" style={{ marginTop: 18 }}>
+            <div style={{ display: 'grid', gap: 16, marginTop: 18 }}>
               {leakage.rows.map((row) => (
-                <div key={`${row.stage}-time`} className="m07-bar-row">
-                  <span>{row.stage} time</span>
-                  <div className="m07-bar-track">
-                    <div className="m07-bar-fill" style={{ width: `${Math.max(8, row.avgTime * 4)}%` }} />
+                <div key={`${row.stage}-time`}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+                    <strong style={{ color: '#0B2540', fontSize: 14 }}>{row.stage} delay</strong>
+                    <span style={{ fontSize: 13, color: '#415274' }}>{row.avgTime}d avg</span>
                   </div>
-                  <strong>{row.avgTime}d</strong>
+                  <div style={insightTokens.track}>
+                    <div style={{ ...insightTokens.fill, width: insightBarWidth(row.avgTime, maxTime, 10) }} />
+                  </div>
                 </div>
               ))}
             </div>
-          </section>
+          </InsightPanel>
         </section>
 
-        <section className="m07-workspace-panel">
-          <h3 className="m07-workspace-title" style={{ marginTop: 0 }}>Leakage Table</h3>
-          <div className="m07-workspace-tablewrap">
-            <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff' }}>
-              <thead>
-                <tr style={{ background: '#f5f7fa' }}>
-                  <th style={th}>Stage</th>
-                  <th style={th}>Dropped Leads</th>
-                  <th style={th}>Drop %</th>
-                  <th style={th}>Avg Time</th>
-                  <th style={th}>Exit Reasons</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leakage.rows.map((row) => (
-                  <tr key={row.stage} onClick={() => setSelectedStage(row.stage)} style={{ cursor: 'pointer' }}>
-                    <td style={td}>{row.stage}</td>
-                    <td style={td}>{row.droppedLeads}</td>
-                    <td style={td}>{row.dropRate}%</td>
-                    <td style={td}>{row.avgTime}d</td>
-                    <td style={td}>{row.reasons.length ? row.reasons.join(', ') : 'Unknown'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <section style={{ ...insightTokens.twoCol, marginTop: 18 }}>
+          <InsightPanel eyebrow="Leakage table" title="Stage-by-stage leakage detail">
+            <div style={insightTokens.tableWrap}>
+              <table style={insightTokens.table}>
+                <thead><tr><th style={insightTokens.th}>Stage</th><th style={insightTokens.th}>Dropped Leads</th><th style={insightTokens.th}>Drop %</th><th style={insightTokens.th}>Avg Time</th><th style={insightTokens.th}>Exit Reasons</th></tr></thead>
+                <tbody>
+                  {leakage.rows.map((row) => (
+                    <tr key={row.stage} onClick={() => setSelectedStage(row.stage)} style={{ ...insightTokens.row, cursor: 'pointer' }}>
+                      <td style={insightTokens.tdStrong}>{row.stage}</td>
+                      <td style={insightTokens.td}>{row.droppedLeads}</td>
+                      <td style={insightTokens.td}>{row.dropRate}%</td>
+                      <td style={insightTokens.td}>{row.avgTime}d</td>
+                      <td style={insightTokens.td}>{row.reasons.length ? row.reasons.join(', ') : 'Unknown'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </InsightPanel>
+
+          <InsightPanel eyebrow="Interpretation notes" title="How to use this diagnosis" soft>
+            <div style={{ display: 'grid', gap: 12 }}>
+              <InsightNoteCard title="High drop with short time" body="Usually points to weak qualification, wrong targeting, or messaging mismatch early in the process." />
+              <InsightNoteCard title="High drop with long time" body="Usually signals friction, indecision, or slow owner follow-up before the record eventually falls out." />
+              <InsightNoteCard title="Use drilldown on the right stage" body="Select the stage with the most meaningful leakage pattern, then inspect the dropped leads and exit reasons below." />
+            </div>
+          </InsightPanel>
         </section>
 
         {stageRow && (
-          <section className="m07-workspace-panel">
-            <h3 className="m07-workspace-title" style={{ marginTop: 0 }}>{stageRow.stage} drilldown</h3>
-            <div className="m07-analytics-grid" style={{ marginTop: 12 }}>
-              <div className="m07-card-lite">
+          <InsightPanel eyebrow="Drilldown" title={`${stageRow.stage} drop detail`}>
+            <div style={{ ...insightTokens.equalCol, marginTop: 12 }}>
+              <div style={{ borderRadius: 16, padding: 16, border: '1px solid rgba(15,66,88,0.08)', background: '#fff' }}>
                 <h4>Dropped leads</h4>
                 {droppedLeads.length
                   ? droppedLeads.map((lead) => <div key={lead.lead_id} className="m07-list-line">{lead.lead_id} • {lead.full_name}</div>)
                   : <div className="m07-list-line">No dropped leads in this stage.</div>}
               </div>
-              <div className="m07-card-lite">
+              <div style={{ borderRadius: 16, padding: 16, border: '1px solid rgba(15,66,88,0.08)', background: '#fff' }}>
                 <h4>Exit reasons</h4>
                 {stageRow.reasons.length
                   ? stageRow.reasons.map((reason) => <div key={reason} className="m07-list-line">{reason}</div>)
                   : <div className="m07-list-line">Unknown</div>}
               </div>
             </div>
-          </section>
+          </InsightPanel>
         )}
       </main>
     </Layout>
-  );
+  )
 }
-
-function Kpi({ label, value }: { label: string; value: string | number }) {
-  return <div className="m07-kpi-card"><div className="m07-kpi-label">{label}</div><div className="m07-kpi-value">{value}</div></div>;
-}
-
-const th = { padding: 10, textAlign: 'left' as const, borderBottom: '1px solid #e5e7eb', fontSize: 12 };
-const td = { padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 12 };

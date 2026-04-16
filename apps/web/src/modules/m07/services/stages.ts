@@ -35,6 +35,10 @@ export type StageValidationRow = {
 export type StageValidationResult = {
   ok: true;
   rowResults: StageValidationRow[];
+  selectedRange: {
+    startRow: number;
+    endRow: number;
+  };
   summary: {
     checkedRows: number;
     validRows: number;

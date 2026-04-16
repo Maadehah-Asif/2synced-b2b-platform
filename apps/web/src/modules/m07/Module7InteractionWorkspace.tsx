@@ -153,6 +153,7 @@ export default function Module7InteractionWorkspace() {
   const [uploadSummary, setUploadSummary] = useState<InteractionImportSummary | null>(null);
   const [validatingCsv, setValidatingCsv] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const formErrorList = useMemo(() => Object.values(formErrors).filter(Boolean) as string[], [formErrors]);
   const shouldShowBanner = Boolean(banner && (banner.type === 'success' || activeTab !== 'list'));
 
@@ -207,6 +208,7 @@ export default function Module7InteractionWorkspace() {
     setMappingErrors(validateMappingState(next));
     setValidationResult(null);
     setUploadSummary(null);
+    setShowPreview(false);
   }
 
   async function load() {
@@ -295,6 +297,7 @@ export default function Module7InteractionWorkspace() {
     setEndRow('');
     setValidationResult(null);
     setUploadSummary(null);
+    setShowPreview(false);
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.csv')) return setCsvFileError('Only CSV files are supported.');
     if (file.size <= 0) return setCsvFileError('Uploaded file is empty.');
@@ -341,6 +344,7 @@ export default function Module7InteractionWorkspace() {
       });
       setValidationResult(result);
       setUploadSummary(null);
+      setShowPreview(false);
       setSuccess(`Validation finished. ${result.summary.validRows} valid rows and ${result.summary.invalidRows} invalid rows found.`);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'CSV validation failed.');
@@ -559,7 +563,7 @@ export default function Module7InteractionWorkspace() {
             {csvHeaders.length > 0 && (
               <div className="m07-workspace-sectiongap">
                 <div className="m07-workspace-inlinehint">Detected columns: {csvHeaders.join(', ')}</div>
-                <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 12, background: '#f8fbff', border: '1px solid rgba(15,66,88,0.08)' }}>
+                <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 12, background: '#f7fafc', border: '1px solid rgba(15,66,88,0.08)' }}>
                   <div style={{ fontWeight: 700, marginBottom: 8 }}>Map CSV columns to interaction fields</div>
                   <div style={{ fontSize: 13, color: '#35516a', lineHeight: 1.6 }}>Required fields: {INTERACTION_REQUIRED_FIELDS.map((field) => INTERACTION_FIELD_LABELS[field]).join(', ')}.</div>
                 </div>
@@ -576,9 +580,9 @@ export default function Module7InteractionWorkspace() {
                       </div>
                     );
                   })}
-                  <div><div style={{ fontSize: 12 }}>Start row *</div><input type="number" min={1} value={startRow} onChange={(event) => { setStartRow(Number(event.target.value || 1)); setValidationResult(null); }} /></div>
-                  <div><div style={{ fontSize: 12 }}>End row *</div><input type="number" min={1} value={endRow} onChange={(event) => { setEndRow(event.target.value ? Number(event.target.value) : ''); setValidationResult(null); }} /></div>
-                  <div><div style={{ fontSize: 12 }}>Duplicate handling</div><select value={duplicateMode} onChange={(event) => setDuplicateMode(event.target.value as 'skip_duplicates' | 'overwrite_existing')}><option value="skip_duplicates">Skip duplicates</option><option value="overwrite_existing">Overwrite existing</option></select></div>
+                  <div><div style={{ fontSize: 12 }}>Start row *</div><input type="number" min={1} value={startRow} onChange={(event) => { setStartRow(Number(event.target.value || 1)); setValidationResult(null); setShowPreview(false); }} /></div>
+                  <div><div style={{ fontSize: 12 }}>End row *</div><input type="number" min={1} value={endRow} onChange={(event) => { setEndRow(event.target.value ? Number(event.target.value) : ''); setValidationResult(null); setShowPreview(false); }} /></div>
+                  <div><div style={{ fontSize: 12 }}>Duplicate handling</div><select value={duplicateMode} onChange={(event) => { setDuplicateMode(event.target.value as 'skip_duplicates' | 'overwrite_existing'); setValidationResult(null); setShowPreview(false); }}><option value="skip_duplicates">Skip duplicates</option><option value="overwrite_existing">Overwrite existing</option></select></div>
                 </div>
                 {mappingErrors.length > 0 && (
                   <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 12, background: '#fff7f7', border: '1px solid rgba(195,51,51,0.18)', color: '#8b1e1e' }}>
@@ -587,14 +591,16 @@ export default function Module7InteractionWorkspace() {
                   </div>
                 )}
                 {rangeError && <div className="m07-workspace-inlinehint" style={{ color: '#900' }}>{rangeError}</div>}
-                <div className="m07-workspace-actionsrow"><button className="btn-primary" disabled={validatingCsv} onClick={runCsvValidation}>{validatingCsv ? 'Validating...' : 'Validate and Open Preview'}</button></div>
-                {previewRows.length > 0 && <div style={{ marginTop: 18 }}><ImportPreviewStep title="Interaction CSV Preview" subtitle="This reusable Module 6 preview step is shared across the M06 and M07 data hub ingestion flows." sourceHeaders={csvHeaders} rows={previewRows} currentStartRow={startRow} totalSelectedRows={previewRows.length} /></div>}
+                <div className="m07-workspace-actionsrow"><button className="btn-primary" disabled={validatingCsv} onClick={runCsvValidation}>{validatingCsv ? 'Validating...' : 'Validate CSV'}</button></div>
+                {validationResult && <div className="m07-workspace-actionsrow"><button className="btn-ghost" onClick={() => setShowPreview((prev) => !prev)}>{showPreview ? 'Hide Preview' : 'Open Preview'}</button></div>}
+                {showPreview && previewRows.length > 0 && <div style={{ marginTop: 18 }}><ImportPreviewStep title="Interaction CSV Preview" subtitle="This reusable Module 6 preview step is shared across the M06 and M07 data hub ingestion flows." sourceHeaders={csvHeaders} rows={previewRows} currentStartRow={startRow} totalSelectedRows={previewRows.length} /></div>}
                 {validationResult && (
                   <div className="m07-workspace-sectiongap">
                     <div className="m07-workspace-inlinehint">Total rows checked: {validationResult.summary.checkedRows}</div>
                     <div className="m07-workspace-inlinehint">Valid rows: {validationResult.summary.validRows}</div>
                     <div className="m07-workspace-inlinehint">Invalid rows: {validationResult.summary.invalidRows}</div>
                     <div className="m07-workspace-inlinehint">Warning rows: {validationResult.summary.warningRows}</div>
+                    <div className="m07-workspace-inlinehint">Selected range: rows {validationResult.selectedRange.startRow} to {validationResult.selectedRange.endRow}</div>
                     <div className="m07-workspace-actionsrow">
                       {validationResult.summary.invalidRows > 0 && <button className="btn-ghost" onClick={downloadInvalidRows}>Download Invalid Rows</button>}
                       {validationResult.summary.validRows > 0 && <button className="btn-primary" disabled={importing} onClick={() => submitCsvImport(validationResult.summary.invalidRows > 0)}>{importing ? 'Importing...' : validationResult.summary.invalidRows > 0 ? 'Proceed With Valid Rows Only' : 'Confirm and Import'}</button>}

@@ -2,6 +2,24 @@ import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
 
 export default function Module9Home() {
+  const cards = [
+    {
+      title: 'Cross-Channel Performance',
+      body: 'Compare campaign results from multiple channels in one place so budget and attention can move based on a shared performance view.',
+      action: 'Open Performance',
+    },
+    {
+      title: 'Fatigue & Pacing Checks',
+      body: 'Track where spend pace, frequency pressure, or campaign fatigue signals suggest that current delivery is becoming inefficient.',
+      action: 'Open Monitoring',
+    },
+    {
+      title: 'Optimization Recommendations',
+      body: 'Translate campaign signals into concrete next moves such as budget shifts, refresh decisions, or channel-level changes.',
+      action: 'Open Recommendations',
+    },
+  ]
+
   return (
     <Layout>
       <main className="page-root" style={{ padding: 20 }}>
@@ -23,7 +41,7 @@ export default function Module9Home() {
         >
           <div style={{ padding: 28 }}>
             <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Campaign Performance Optimization
+              Optimization Workspace
             </div>
             <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>Campaign Performance Aggregation & Optimization</h1>
             <div style={{ maxWidth: 780, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
@@ -52,11 +70,11 @@ export default function Module9Home() {
             <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(15,66,88,0.08)', color: 'var(--header-secondary)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               Optimization Focus
             </div>
-            <h3 style={{ margin: '14px 0 12px', fontSize: 28, color: '#0B2540' }}>What this module should aggregate</h3>
-            <div style={{ display: 'grid', gap: 12 }}>
-              <InfoCard title="Cross-channel performance" body="Use Campaign Performance Optimization to bring campaign results from different platforms into one place so teams can compare channels without switching tools." />
-              <InfoCard title="Fatigue and pacing checks" body="This is the right place to flag spend pacing issues, campaign fatigue, and channels that are underperforming against expectation." />
-              <InfoCard title="Optimization recommendations" body="The module should summarize what needs to change next, whether that is budget reallocation, creative refresh, or channel-level adjustment." />
+            <h3 style={{ margin: '14px 0 12px', fontSize: 28, color: '#0B2540' }}>Open optimization focus areas</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+              {cards.map((card) => (
+                <ActionCard key={card.title} title={card.title} desc={card.body} action={card.action} />
+              ))}
             </div>
           </div>
 
@@ -70,13 +88,13 @@ export default function Module9Home() {
             }}
           >
             <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(72,177,217,0.12)', color: '#0B2540', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Current Status
+              Interpretation Notes
             </div>
             <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>How to use Campaign Performance Optimization for now</h3>
             <div style={{ display: 'grid', gap: 12 }}>
-              <StepCard step="1" title="Treat this as the optimization landing" text="This page establishes the role of module 9 until the full aggregation dashboards and reports are introduced." />
-              <StepCard step="2" title="Read it with attribution context" text="This area should eventually work alongside ROI and journey analysis so campaign decisions come from a fuller performance picture." />
-              <StepCard step="3" title="Expand toward reports and recommendations" text="When recommendation panels and exportable optimization reports are added, this is the right home for them." />
+              <StepCard step="1" title="Start from campaign and attribution context" text="Use campaign operations and revenue-attribution modules first when the source campaign data still needs preparation or interpretation before optimization decisions." />
+              <StepCard step="2" title="Use this module for comparison and pressure checks" text="Read the cross-channel and fatigue cards here when the next question is where spend pace, performance, or creative pressure is strongest." />
+              <StepCard step="3" title="Finish with optimization decisions" text="Use the recommendations side of this module when the team is ready to decide budget shifts, refresh priorities, or channel adjustments from the combined campaign picture." />
             </div>
           </div>
         </section>
@@ -85,11 +103,35 @@ export default function Module9Home() {
   )
 }
 
-function InfoCard({ title, body }: { title: string; body: string }) {
+function ActionCard({ title, desc, action }: { title: string; desc: string; action: string }) {
   return (
-    <div style={{ borderRadius: 16, padding: 16, border: '1px solid rgba(15,66,88,0.08)', background: 'linear-gradient(180deg, rgba(255,255,255,1), rgba(245,249,253,0.98))' }}>
-      <div style={{ fontSize: 16, fontWeight: 800, color: '#0B2540', marginBottom: 6 }}>{title}</div>
-      <div style={{ fontSize: 13, color: '#415274', lineHeight: 1.7 }}>{body}</div>
+    <div
+      style={{
+        cursor: 'default',
+        borderRadius: 18,
+        padding: 20,
+        minHeight: 180,
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        textAlign: 'left',
+        background: 'linear-gradient(145deg, #0f4258 0%, #195b74 50%, #1e6b88 100%)',
+        border: '1px solid rgba(255,255,255,0.14)',
+        boxShadow: '0 10px 24px rgba(13,30,60,0.10)',
+        color: '#fff',
+      }}
+    >
+      <div>
+        <div style={{ display: 'inline-flex', padding: '6px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.14)', fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          Insight Page
+        </div>
+        <div style={{ marginTop: 12, fontSize: 21, fontWeight: 900, lineHeight: 1.25 }}>{title}</div>
+        <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.7, color: 'rgba(255,255,255,0.88)' }}>{desc}</div>
+      </div>
+      <div style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', padding: '8px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, alignSelf: 'flex-start' }}>
+        {action}
+      </div>
     </div>
   )
 }

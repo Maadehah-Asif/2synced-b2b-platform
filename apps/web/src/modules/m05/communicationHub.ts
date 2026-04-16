@@ -261,8 +261,8 @@ export async function fetchWorkspaceMemberOptions(apiUrl: string, workspaceId: s
   return {
     ok: res.ok,
     items: members
-      .filter((item) => item?.status === 'active' && item?.user)
-      .map((item) => ({
+      .filter((item: any) => item?.status === 'active' && item?.user)
+      .map((item: any) => ({
         id: String(item.user.id),
         name: String(item.user.fullName || item.user.email || 'Workspace user'),
         email: item.user.email ? String(item.user.email) : null,

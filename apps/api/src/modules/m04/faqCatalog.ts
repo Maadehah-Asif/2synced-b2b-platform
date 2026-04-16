@@ -19,6 +19,7 @@ function faq(id: string, label: string, answer: string, followUpIds: string[] = 
 const MODULE_TOPIC_ROOTS = [
   "topic-m01",
   "topic-m02",
+  "topic-m05",
   "topic-m06",
   "topic-m07",
 ];
@@ -41,6 +42,12 @@ const CONVERSATION_FAQS: GuidedAssistantFaq[] = [
     "I want help with revenue attribution and ROI",
     "Revenue Insight includes both data intake screens and revenue analysis screens. I can guide you through the workflow, show you where users enter data, or explain what each screen means.",
     ["m06-flow", "m06-inputs", "m06-screens"]
+  ),
+  faq(
+    "topic-m05",
+    "I want help with sales and marketing alignment",
+    "Sales & Marketing Alignment brings together intent, shared leads, funnel progress, website engagement, and team follow-up. I can guide you through the workflow, show you where users enter data, or explain what each screen means.",
+    ["m05-flow", "m05-inputs", "m05-screens"]
   ),
   faq(
     "topic-m07",
@@ -98,6 +105,32 @@ const CONVERSATION_FAQS: GuidedAssistantFaq[] = [
   faq("m02-generate-screen", "I want to understand the Generate Intent Scores screen", "This screen runs the scoring step. The user selects a prepared dataset, confirms the file details, and then runs the intent scoring engine. After the run, the screen shows a preview of the generated output so the user can verify the scoring result before using it in prioritization."),
   faq("m02-prioritization-screen", "I want to understand the Prioritization Dashboard", "The prioritization dashboard is where users act on the scoring output. It ranks leads by intent, engagement, and recent behavior so the team can see who deserves attention next. It also includes quick-upload shortcuts, but the main purpose of the screen is decision-making, filtering, and lead ranking."),
   faq("m02-forecast-screen", "I want to understand the Intent Forecast screen", "The intent forecast screen is for forward-looking analysis. The user picks an intent run, chooses a scope such as all leads or one segment, asks the forecasting engine a question, and generates a forecast summary. This is the screen to use when the user wants to estimate where interest is heading, not when they are still preparing raw inputs."),
+
+  faq(
+    "m05-flow",
+    "I want to understand the Sales & Marketing Alignment workflow",
+    "The best Sales & Marketing Alignment flow is: 1. start on the overview dashboard to understand the current alignment picture, 2. open the unified pipeline view if the user needs a stage-by-stage read of movement and concentration, 3. go to the Web Engagement Data Manager when website traffic or behavioral evidence still needs to be uploaded, 4. open Web Engagement Visualization after a dataset is active, 5. use the Shortcoming Analyzer to identify where flow is weak or stalled, and 6. move into the Communication Hub when the team needs ownership, discussion, or follow-up on those issues. Module 5 is a coordination layer, so it works best when Modules 2, 6, and 7 already have usable operational data.",
+    ["m05-overview-screen", "m05-pipeline-screen", "m05-web-manager-screen", "m05-web-visualization-screen", "m05-shortcomings-screen", "m05-communication-screen"]
+  ),
+  faq(
+    "m05-inputs",
+    "I want to know where to enter data for Sales & Marketing Alignment",
+    "Sales & Marketing Alignment does not own every input directly. Shared commercial records still come from other modules: intent priority comes from Module 2, shared lead records come from Module 6, and stage history comes from Module 7. Inside Module 5 itself, the main direct input areas are the Web Engagement Data Manager for website-behavior CSVs and the Communication Hub for discussion threads, blockers, follow-up items, and alignment notes.",
+    ["m05-web-manager-screen", "m05-communication-screen", "m02-prioritization-screen", "m06-leads-screen", "m07-stage-screen"]
+  ),
+  faq(
+    "m05-screens",
+    "I want a Sales & Marketing Alignment screen explained",
+    "Choose the Sales & Marketing Alignment screen you want help with.",
+    ["m05-home-screen", "m05-overview-screen", "m05-pipeline-screen", "m05-web-manager-screen", "m05-web-visualization-screen", "m05-shortcomings-screen", "m05-communication-screen"]
+  ),
+  faq("m05-home-screen", "I want to understand the Sales & Marketing Alignment home screen", "The Sales & Marketing Alignment home screen is the navigation hub for Module 5. It introduces the module as a shared coordination space and points the user toward the overview dashboard, pipeline view, web engagement manager, web visualization, shortcoming analysis, communication hub, and report center. This is the right place to start when the user is not yet sure which part of the alignment workflow they need."),
+  faq("m05-overview-screen", "I want to understand the alignment overview dashboard", "The overview dashboard is the best first analysis screen in Module 5. It combines intent, shared lead, and stage-history signals into one management view so the user can quickly understand handoff health, funnel coverage, stale risk, and which records need attention. Open this screen first when the question is broadly: are marketing and sales aligned right now?"),
+  faq("m05-pipeline-screen", "I want to understand the unified pipeline view", "The unified pipeline view is the stage-structure screen in Module 5. It shows where records are concentrated, how much of the funnel is still early-stage, whether enough records have progressed downstream, and which stages look stagnant. Users should open this screen when they need a cleaner operational read of funnel movement than the broader overview provides."),
+  faq("m05-web-manager-screen", "I want to understand the Web Engagement Data Manager", "The Web Engagement Data Manager is the main data-input screen owned by Module 5. Users upload website engagement CSV files here, validate that the file looks correct, preview the uploaded content, and manage active or archived datasets. This is the right screen when the user needs to bring website behavior into Module 5 before asking the system to visualize or analyze it."),
+  faq("m05-web-visualization-screen", "I want to understand Web Engagement Visualization", "Web Engagement Visualization is the interpretation screen for an active website engagement dataset. After the user has uploaded a valid dataset, this screen shows traffic-source patterns, campaign activity, page-category engagement, conversion-style signals, company-level activity, and operating summaries. Open this screen when the user wants to understand what web behavior is revealing, not when they are still cleaning the upload."),
+  faq("m05-shortcomings-screen", "I want to understand the Shortcoming Analyzer", "The Shortcoming Analyzer is the diagnosis screen in Module 5. It combines pipeline signals with optional web-engagement enrichment to identify bottlenecks, weak handoffs, stage stagnation, underperforming sources, or other process problems that deserve review. Users should open this screen after overview or pipeline when they want the system to point out where the current workflow appears weakest."),
+  faq("m05-communication-screen", "I want to understand the Communication Hub", "The Communication Hub is the action-and-ownership screen in Module 5. It lets users create structured discussion threads, assign participants, reply inside the workspace, move threads across status columns, and keep blockers or follow-up visible. This is the right screen when the team has already found an issue and now needs coordinated action instead of more analysis."),
 
   faq(
     "m06-flow",
@@ -190,7 +223,13 @@ const PAGE_FAQS: Record<string, FaqPageConfig> = {
   m02_intent_forecast: page("Intent Forecast Guide", "Hi. You're on the Intent Forecast screen. I can explain when to use this view and what the user needs before running a forecast.", ["m02-forecast-screen", "m02-generate-screen", "m02-prioritization-screen", "m02-flow"]),
 
   m03_home: page("Conversation Intelligence Guide", buildDefaultIntro(), MODULE_TOPIC_ROOTS),
-  m05_home: page("Sales & Marketing Alignment Guide", buildDefaultIntro(), MODULE_TOPIC_ROOTS),
+  m05_home: page("Sales & Marketing Alignment Guide", "Hi. You're in the sales and marketing alignment area. I can explain the Module 5 workflow, show you where Module 5 data is entered, or explain what each Module 5 screen is for.", ["m05-flow", "m05-inputs", "m05-screens", "topic-m02", "topic-m06", "topic-m07"]),
+  m05_overview: page("Sales & Marketing Alignment Overview Guide", "Hi. You're on the alignment overview dashboard. I can explain what this screen is showing, what it depends on, and which Module 5 screen to open next.", ["m05-overview-screen", "m05-flow", "m05-pipeline-screen", "m05-shortcomings-screen"]),
+  m05_pipeline: page("Unified Pipeline Guide", "Hi. You're on the unified pipeline view. I can explain what this stage-based screen means and when to use it instead of the broader overview.", ["m05-pipeline-screen", "m05-flow", "m05-overview-screen", "m05-shortcomings-screen"]),
+  m05_web_engagement: page("Web Engagement Data Manager Guide", "Hi. You're on the Web Engagement Data Manager. I can explain what belongs here, what a user should upload first, and what happens after the upload succeeds.", ["m05-web-manager-screen", "m05-inputs", "m05-web-visualization-screen", "m05-flow"]),
+  m05_web_visualization: page("Web Engagement Visualization Guide", "Hi. You're on Web Engagement Visualization. I can explain what this screen shows and what the user needs before this page becomes useful.", ["m05-web-visualization-screen", "m05-web-manager-screen", "m05-shortcomings-screen", "m05-flow"]),
+  m05_shortcomings: page("Shortcoming Analyzer Guide", "Hi. You're on the Shortcoming Analyzer. I can explain what kinds of weakness this screen is looking for and what the user should do after issues appear here.", ["m05-shortcomings-screen", "m05-overview-screen", "m05-pipeline-screen", "m05-communication-screen"]),
+  m05_communication: page("Communication Hub Guide", "Hi. You're on the Communication Hub. I can explain how this screen supports follow-up, thread ownership, and action tracking after Module 5 identifies an issue.", ["m05-communication-screen", "m05-flow", "m05-shortcomings-screen", "m05-inputs"]),
 
   m06_home: page("Revenue Insight Guide", "Hi. You're in the revenue attribution and ROI area. I can explain the operational intake order, the analysis flow, or what each Revenue Insight screen means.", ["m06-flow", "m06-inputs", "m06-screens", "topic-m01", "topic-m02", "topic-m07"]),
   m06_overview: page("Revenue Insight Overview Guide", "Hi. You're on the main Revenue Insight dashboard. I can explain what this overview is showing and where the user should go next.", ["m06-overview-screen", "m06-run-screen", "m06-roi-screen", "m06-flow"]),
@@ -246,6 +285,14 @@ const GENERIC_MATCH_RULES: MatchRule[] = [
   { faqId: "m01-inputs", patterns: [/\b(module\s*1|lead quality|lead scoring)\b/i, /\b(input|upload|enter data|add data|where)\b/i] },
   { faqId: "m02-flow", patterns: [/\b(module\s*2|intent)\b/i, /\b(flow|workflow|steps|process|start)\b/i] },
   { faqId: "m02-inputs", patterns: [/\b(module\s*2|intent)\b/i, /\b(input|upload|wizard|enter data|add data|where)\b/i] },
+  { faqId: "m05-flow", patterns: [/\b(module\s*5|alignment|sales and marketing|sales marketing|web engagement)\b/i, /\b(flow|workflow|steps|process|start)\b/i] },
+  { faqId: "m05-inputs", patterns: [/\b(module\s*5|alignment|sales and marketing|sales marketing|web engagement)\b/i, /\b(input|upload|enter data|add data|where)\b/i] },
+  { faqId: "m05-web-manager-screen", patterns: [/\b(module\s*5|alignment|sales and marketing|sales marketing|web engagement)\b/i, /\b(upload|csv|dataset|data manager|web engagement data manager|website data)\b/i] },
+  { faqId: "m05-web-visualization-screen", patterns: [/\b(module\s*5|alignment|sales and marketing|sales marketing|web engagement)\b/i, /\b(visualization|visualisation|traffic source|campaign activity|page category|web insights|website insights)\b/i] },
+  { faqId: "m05-shortcomings-screen", patterns: [/\b(module\s*5|alignment|sales and marketing|sales marketing|shortcoming|bottleneck|weakness|stalled|stagnation)\b/i] },
+  { faqId: "m05-communication-screen", patterns: [/\b(module\s*5|alignment|sales and marketing|sales marketing|communication hub|thread|discussion|blocker|follow[- ]?up|ownership)\b/i] },
+  { faqId: "m05-overview-screen", patterns: [/\b(module\s*5|alignment|sales and marketing|sales marketing|overview|dashboard|handoff)\b/i] },
+  { faqId: "m05-pipeline-screen", patterns: [/\b(module\s*5|alignment|sales and marketing|sales marketing|pipeline|stage distribution|stage summary|funnel shape)\b/i] },
   { faqId: "m06-flow", patterns: [/\b(module\s*6|roi|revenue attribution|attribution)\b/i, /\b(flow|workflow|steps|process|start)\b/i] },
   { faqId: "m06-inputs", patterns: [/\b(module\s*6|roi|revenue attribution|attribution)\b/i, /\b(input|enter data|add data|upload|where)\b/i] },
   { faqId: "m07-flow", patterns: [/\b(module\s*7|funnel|leakage)\b/i, /\b(flow|workflow|steps|process|start)\b/i] },
@@ -292,6 +339,49 @@ const PAGE_MATCH_RULES: Partial<Record<string, MatchRule[]>> = {
   ],
   m02_intent_forecast: [
     { faqId: "m02-forecast-screen", patterns: [/.+/i] },
+  ],
+  m05_home: [
+    { faqId: "m05-flow", patterns: [/\b(flow|workflow|steps|process|start)\b/i] },
+    { faqId: "m05-inputs", patterns: [/\b(input|upload|enter data|where|add data)\b/i] },
+    { faqId: "m05-web-manager-screen", patterns: [/\b(upload|csv|dataset|data manager|website data)\b/i] },
+    { faqId: "m05-web-visualization-screen", patterns: [/\b(visualization|visualisation|traffic source|campaign|page category|web insights)\b/i] },
+    { faqId: "m05-shortcomings-screen", patterns: [/\b(shortcoming|bottleneck|weakness|issue|stalled|stagnation)\b/i] },
+    { faqId: "m05-communication-screen", patterns: [/\b(communication|thread|discussion|blocker|follow[- ]?up|owner|ownership)\b/i] },
+    { faqId: "m05-overview-screen", patterns: [/\b(overview|dashboard|handoff)\b/i] },
+    { faqId: "m05-pipeline-screen", patterns: [/\b(pipeline|stage|funnel)\b/i] },
+    { faqId: "m05-screens", patterns: [/\b(screen|page|what does this mean|what is this)\b/i] },
+  ],
+  m05_overview: [
+    { faqId: "m05-flow", patterns: [/\b(flow|workflow|steps|process|start|next)\b/i] },
+    { faqId: "m05-pipeline-screen", patterns: [/\b(pipeline|stage|funnel)\b/i] },
+    { faqId: "m05-shortcomings-screen", patterns: [/\b(shortcoming|bottleneck|issue|weakness)\b/i] },
+    { faqId: "m05-overview-screen", patterns: [/.+/i] },
+  ],
+  m05_pipeline: [
+    { faqId: "m05-overview-screen", patterns: [/\b(overview|dashboard|handoff)\b/i] },
+    { faqId: "m05-shortcomings-screen", patterns: [/\b(shortcoming|bottleneck|issue|weakness|stalled|stagnation)\b/i] },
+    { faqId: "m05-pipeline-screen", patterns: [/.+/i] },
+  ],
+  m05_web_engagement: [
+    { faqId: "m05-web-visualization-screen", patterns: [/\b(visualization|visualisation|analy[sz]e|after upload|next)\b/i] },
+    { faqId: "m05-inputs", patterns: [/\b(where|what first|input|upload|csv|dataset)\b/i] },
+    { faqId: "m05-web-manager-screen", patterns: [/.+/i] },
+  ],
+  m05_web_visualization: [
+    { faqId: "m05-web-manager-screen", patterns: [/\b(upload|csv|dataset|data manager|change dataset)\b/i] },
+    { faqId: "m05-shortcomings-screen", patterns: [/\b(shortcoming|bottleneck|issue|weakness|what next)\b/i] },
+    { faqId: "m05-web-visualization-screen", patterns: [/.+/i] },
+  ],
+  m05_shortcomings: [
+    { faqId: "m05-communication-screen", patterns: [/\b(communication|thread|discussion|follow[- ]?up|owner|ownership|action)\b/i] },
+    { faqId: "m05-pipeline-screen", patterns: [/\b(pipeline|stage|funnel)\b/i] },
+    { faqId: "m05-web-visualization-screen", patterns: [/\b(web|traffic|campaign|source|dataset)\b/i] },
+    { faqId: "m05-shortcomings-screen", patterns: [/.+/i] },
+  ],
+  m05_communication: [
+    { faqId: "m05-shortcomings-screen", patterns: [/\b(shortcoming|bottleneck|issue|weakness|why am i here)\b/i] },
+    { faqId: "m05-inputs", patterns: [/\b(where|input|add|create thread|discussion)\b/i] },
+    { faqId: "m05-communication-screen", patterns: [/.+/i] },
   ],
   m06_home: [
     { faqId: "m06-flow", patterns: [/\b(flow|workflow|steps|process|start)\b/i] },

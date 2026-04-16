@@ -31,7 +31,7 @@ export default function Module2Home() {
         >
           <div style={{ padding: 28 }}>
             <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Intent Signals
+              Prioritization Layer
             </div>
             <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>Intent Signals & Prioritization</h1>
             <div style={{ maxWidth: 760, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
@@ -65,7 +65,7 @@ export default function Module2Home() {
               <InsightCard title="Generate Intent Scores" desc="Run the scoring pipeline on prepared datasets before reviewing prioritization and forecast outputs." onClick={() => go(`#/workspace/:workspaceId/m02/generate`)} />
               <InsightCard title="Prioritization Dashboard" desc="Rank leads by conversion likelihood and identify who deserves immediate attention." onClick={() => go(`#/workspace/:workspaceId/m02/prioritization`)} />
               <InsightCard title="Intent Forecast" desc="Review projected engagement direction and anticipate where interest is increasing." onClick={() => go(`#/workspace/:workspaceId/m02/intent-forecast`)} />
-              <InsightCard title="Report Center" desc="Open the professional summary view for intent mix, urgency, and export-ready prioritization data." onClick={() => go(`#/workspace/:workspaceId/m08/m02`)} />
+              <InsightCard title="Report Center" desc="Open the written intent report with prioritization summaries and downloadable supporting exports." onClick={() => go(`#/workspace/:workspaceId/m08/m02`)} />
             </div>
           </div>
 
@@ -79,13 +79,13 @@ export default function Module2Home() {
             }}
           >
             <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(72,177,217,0.12)', color: '#0B2540', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Useful Context
+              Interpretation Notes
             </div>
-            <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>What changed</h3>
+            <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>How to work through Module 2</h3>
             <div style={{ display: 'grid', gap: 12 }}>
-              <MiniInfo title="Operational pages moved" text="Uploads, merged records, and raw lead-facing management now live in the workspace Data Hub." />
-              <MiniInfo title="This page is for scoring and outputs" text="Stay here when you want to generate intent scores, review prioritization, and inspect forecast-oriented views." />
-              <MiniInfo title="Best use case" text="Use Intent Signals after lead intake is stable and you want to decide where sales or marketing effort should focus next." />
+              <StepCard step="1" title="Prepare intent-ready data first" text="Use the Data Hub upload and merge screens first so the lead and behavior records are ready before any scoring run starts." />
+              <StepCard step="2" title="Run Generate Intent Scores first" text="Open Generate Intent Scores when you want to create or refresh the prioritization layer from the prepared dataset." />
+              <StepCard step="3" title="Move into prioritization and forecast" text="Open Prioritization Dashboard when the question is who to act on next, then open Intent Forecast when you want a forward-looking view of rising or cooling interest." />
             </div>
           </div>
         </section>
@@ -96,7 +96,8 @@ export default function Module2Home() {
 
 function InsightCard({ title, desc, onClick }: { title: string; desc: string; onClick: () => void }) {
   return (
-    <div
+    <button
+      type="button"
       onClick={onClick}
       style={{
         cursor: 'pointer',
@@ -104,10 +105,15 @@ function InsightCard({ title, desc, onClick }: { title: string; desc: string; on
         padding: '22px',
         background: 'linear-gradient(145deg, #0f4258 0%, #195b74 50%, #1e6b88 100%)',
         color: 'white',
-        minHeight: 160,
+        minHeight: 180,
+        width: '100%',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
+        textAlign: 'left',
+        appearance: 'none',
+        position: 'relative',
+        zIndex: 1,
         boxShadow: '0 10px 24px rgba(0,0,0,0.10)',
         transition: '0.25s ease',
       }}
@@ -115,21 +121,29 @@ function InsightCard({ title, desc, onClick }: { title: string; desc: string; on
       onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
     >
       <div>
+        <div style={{ display: 'inline-flex', padding: '6px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.14)', fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          Insight Page
+        </div>
         <div style={{ fontSize: 18, fontWeight: 800 }}>{title}</div>
         <div style={{ fontSize: 13, marginTop: 8, opacity: 0.9, lineHeight: 1.6 }}>{desc}</div>
       </div>
       <div style={{ marginTop: 18, display: 'inline-flex', alignItems: 'center', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.14)', fontSize: 12, fontWeight: 800, alignSelf: 'flex-start' }}>
         Open Insight
       </div>
-    </div>
-  );
+    </button>
+  )
 }
 
-function MiniInfo({ title, text }: { title: string; text: string }) {
+function StepCard({ step, title, text }: { step: string; title: string; text: string }) {
   return (
-    <div style={{ borderRadius: 16, padding: 16, border: '1px solid rgba(15,66,88,0.08)', background: 'rgba(255,255,255,0.8)' }}>
-      <div style={{ fontSize: 15, fontWeight: 800, color: '#0B2540', marginBottom: 4 }}>{title}</div>
-      <div style={{ fontSize: 13, color: '#415274', lineHeight: 1.65 }}>{text}</div>
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+      <div style={{ width: 34, height: 34, borderRadius: 12, background: 'linear-gradient(135deg, #0f4258 0%, #2b6f8a 100%)', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 900, flexShrink: 0 }}>
+        {step}
+      </div>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: '#0B2540', marginBottom: 4 }}>{title}</div>
+        <div style={{ fontSize: 13, color: '#415274', lineHeight: 1.7 }}>{text}</div>
+      </div>
     </div>
-  );
+  )
 }

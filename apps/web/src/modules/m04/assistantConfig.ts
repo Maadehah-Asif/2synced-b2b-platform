@@ -27,6 +27,12 @@ const PAGE_LABELS: Record<string, string> = {
 
   m03_home: "Conversation AI Guide",
   m05_home: "Sales & Marketing Alignment Guide",
+  m05_overview: "Sales & Marketing Alignment Overview Guide",
+  m05_pipeline: "Unified Pipeline Guide",
+  m05_web_engagement: "Web Engagement Data Manager Guide",
+  m05_web_visualization: "Web Engagement Visualization Guide",
+  m05_shortcomings: "Shortcoming Analyzer Guide",
+  m05_communication: "Communication Hub Guide",
 
   m06_home: "Revenue Insight Guide",
   m06_overview: "Revenue Insight Overview Guide",
@@ -66,6 +72,20 @@ type PageMatcher = {
   pageKey: string;
 };
 
+function getModule5PageKey(rest: string) {
+  const [base, query = ""] = rest.split("?");
+  if (base !== "m05") return null;
+
+  const view = new URLSearchParams(query).get("view");
+  if (view === "overview") return "m05_overview";
+  if (view === "pipeline") return "m05_pipeline";
+  if (view === "web-engagement") return "m05_web_engagement";
+  if (view === "web-visualization") return "m05_web_visualization";
+  if (view === "shortcomings") return "m05_shortcomings";
+  if (view === "communication") return "m05_communication";
+  return "m05_home";
+}
+
 const PAGE_MATCHERS: PageMatcher[] = [
   { test: (rest) => rest === "", pageKey: "workspace_detail" },
 
@@ -92,7 +112,13 @@ const PAGE_MATCHERS: PageMatcher[] = [
   { test: (rest) => rest.startsWith("m02/intent-forecast"), pageKey: "m02_intent_forecast" },
 
   { test: (rest) => rest === "m03", pageKey: "m03_home" },
-  { test: (rest) => rest === "m05", pageKey: "m05_home" },
+  { test: (rest) => getModule5PageKey(rest) === "m05_home", pageKey: "m05_home" },
+  { test: (rest) => getModule5PageKey(rest) === "m05_overview", pageKey: "m05_overview" },
+  { test: (rest) => getModule5PageKey(rest) === "m05_pipeline", pageKey: "m05_pipeline" },
+  { test: (rest) => getModule5PageKey(rest) === "m05_web_engagement", pageKey: "m05_web_engagement" },
+  { test: (rest) => getModule5PageKey(rest) === "m05_web_visualization", pageKey: "m05_web_visualization" },
+  { test: (rest) => getModule5PageKey(rest) === "m05_shortcomings", pageKey: "m05_shortcomings" },
+  { test: (rest) => getModule5PageKey(rest) === "m05_communication", pageKey: "m05_communication" },
 
   { test: (rest) => rest === "m06", pageKey: "m06_home" },
   { test: (rest) => rest.startsWith("m06/roi-calc"), pageKey: "m06_roi_calc" },

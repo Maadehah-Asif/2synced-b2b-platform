@@ -159,6 +159,7 @@ export default function Module7StageWorkspace() {
   const [uploadSummary, setUploadSummary] = useState<StageImportSummary | null>(null);
   const [validatingCsv, setValidatingCsv] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const formErrorList = useMemo(() => Object.values(formErrors).filter(Boolean) as string[], [formErrors]);
   const shouldShowBanner = Boolean(banner && (banner.type === 'success' || activeTab !== 'list'));
 
@@ -222,6 +223,7 @@ export default function Module7StageWorkspace() {
     setMappingErrors(validateMappingState(next));
     setValidationResult(null);
     setUploadSummary(null);
+    setShowPreview(false);
   }
 
   async function load() {
@@ -287,6 +289,7 @@ export default function Module7StageWorkspace() {
     setEndRow('');
     setValidationResult(null);
     setUploadSummary(null);
+    setShowPreview(false);
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.csv')) return setCsvFileError('Only CSV files are supported.');
     if (file.size <= 0) return setCsvFileError('Uploaded file is empty.');
@@ -333,6 +336,7 @@ export default function Module7StageWorkspace() {
       });
       setValidationResult(result);
       setUploadSummary(null);
+      setShowPreview(false);
       setSuccess(`Validation finished. ${result.summary.validRows} valid rows and ${result.summary.invalidRows} invalid rows found.`);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'CSV validation failed.');
@@ -632,7 +636,7 @@ export default function Module7StageWorkspace() {
             {csvHeaders.length > 0 && (
               <div className="m07-workspace-sectiongap">
                 <div className="m07-workspace-inlinehint">Detected columns: {csvHeaders.join(', ')}</div>
-                <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 12, background: '#f8fbff', border: '1px solid rgba(15,66,88,0.08)' }}>
+                <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 12, background: '#f7fafc', border: '1px solid rgba(15,66,88,0.08)' }}>
                   <div style={{ fontWeight: 700, marginBottom: 8 }}>Map CSV columns to stage fields</div>
                   <div style={{ fontSize: 13, color: '#35516a', lineHeight: 1.6 }}>
                     Required fields: {STAGE_REQUIRED_FIELDS.map((field) => STAGE_FIELD_LABELS[field]).join(', ')}.
@@ -653,15 +657,15 @@ export default function Module7StageWorkspace() {
                   })}
                   <div>
                     <div style={{ fontSize: 12 }}>Start row *</div>
-                    <input type="number" min={1} value={startRow} onChange={(event) => { setStartRow(Number(event.target.value || 1)); setValidationResult(null); }} />
+                    <input type="number" min={1} value={startRow} onChange={(event) => { setStartRow(Number(event.target.value || 1)); setValidationResult(null); setShowPreview(false); }} />
                   </div>
                   <div>
                     <div style={{ fontSize: 12 }}>End row *</div>
-                    <input type="number" min={1} value={endRow} onChange={(event) => { setEndRow(event.target.value ? Number(event.target.value) : ''); setValidationResult(null); }} />
+                    <input type="number" min={1} value={endRow} onChange={(event) => { setEndRow(event.target.value ? Number(event.target.value) : ''); setValidationResult(null); setShowPreview(false); }} />
                   </div>
                   <div>
                     <div style={{ fontSize: 12 }}>Duplicate handling</div>
-                    <select value={overwriteMode} onChange={(event) => setOverwriteMode(event.target.value as 'overwrite_existing' | 'skip_duplicates')}>
+                    <select value={overwriteMode} onChange={(event) => { setOverwriteMode(event.target.value as 'overwrite_existing' | 'skip_duplicates'); setValidationResult(null); setShowPreview(false); }}>
                       <option value="overwrite_existing">Overwrite existing</option>
                       <option value="skip_duplicates">Skip duplicates</option>
                     </select>
@@ -677,10 +681,16 @@ export default function Module7StageWorkspace() {
                 )}
                 {rangeError && <div className="m07-workspace-inlinehint" style={{ color: '#900' }}>{rangeError}</div>}
                 <div className="m07-workspace-actionsrow">
-                  <button className="btn-primary" disabled={validatingCsv} onClick={runCsvValidation}>{validatingCsv ? 'Validating...' : 'Validate and Open Preview'}</button>
+                  <button className="btn-primary" disabled={validatingCsv} onClick={runCsvValidation}>{validatingCsv ? 'Validating...' : 'Validate CSV'}</button>
                 </div>
 
-                {previewRows.length > 0 && (
+                {validationResult && (
+                  <div className="m07-workspace-actionsrow">
+                    <button className="btn-ghost" onClick={() => setShowPreview((prev) => !prev)}>{showPreview ? 'Hide Preview' : 'Open Preview'}</button>
+                  </div>
+                )}
+
+                {showPreview && previewRows.length > 0 && (
                   <div style={{ marginTop: 18 }}>
                     <ImportPreviewStep
                       title="Stage History CSV Preview"
@@ -699,6 +709,7 @@ export default function Module7StageWorkspace() {
                     <div className="m07-workspace-inlinehint">Valid rows: {validationResult.summary.validRows}</div>
                     <div className="m07-workspace-inlinehint">Invalid rows: {validationResult.summary.invalidRows}</div>
                     <div className="m07-workspace-inlinehint">Warning rows: {validationResult.summary.warningRows}</div>
+                    <div className="m07-workspace-inlinehint">Selected range: rows {validationResult.selectedRange.startRow} to {validationResult.selectedRange.endRow}</div>
                     <div className="m07-workspace-actionsrow">
                       {validationResult.summary.invalidRows > 0 && <button className="btn-ghost" onClick={downloadInvalidRows}>Download Invalid Rows</button>}
                       {validationResult.summary.validRows > 0 && (

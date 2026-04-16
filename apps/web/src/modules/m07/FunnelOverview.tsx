@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
+import { InsightHero, InsightKpiCard, InsightKpiGrid, InsightMiniStat, InsightNoteCard, InsightPanel } from '../../components/InsightChrome';
+import { insightBarWidth, insightTokens } from '../../components/insightChromeTokens';
 import './module7.css';
 import { getWorkspaceIdFromHash } from '../../utils/workspace';
 import { getFilterOptions, getFunnelOverview, type M07Filters } from './funnelInsightsData';
@@ -10,15 +12,16 @@ export default function FunnelOverview() {
   const [filters, setFilters] = useState<M07Filters>({});
   const options = useMemo(() => getFilterOptions(), []);
   const overview = useMemo(() => getFunnelOverview(filters), [filters]);
+  const maxStageCount = Math.max(1, ...overview.stageCounts.map((item) => item.count));
+  const mostLoadedStage = overview.stageCounts[0] || null;
 
   return (
     <Layout>
       <main className="page-root m07-workspace-page" style={{ padding: 20 }}>
         <div className="m07-workspace-toprow"><ModuleBackButton toSuffix="/m07" /></div>
-        <section className="m07-insight-hero"><div style={{ padding: 28 }}><div className="m07-insight-badge">M07 Funnel Overview</div><h1 className="m07-insight-title">Funnel Overview</h1><div className="m07-insight-subtitle">Track lead movement and conversion across funnel stages, then drill into the exact leads causing bottlenecks.</div></div></section>
+        <InsightHero eyebrow="Funnel Insight Overview" title="Funnel Overview" subtitle="Track lead movement, conversion pace, and stage concentration in one calmer operating view before drilling into the exact records causing friction." />
 
-        <section className="m07-workspace-panel m07-workspace-panel-soft">
-          <div className="m07-workspace-label">Filters</div>
+        <InsightPanel eyebrow="Filters" title="Scope the active funnel view" soft rightMeta={<div style={{ fontSize: 13, color: '#5B6C8B' }}>{overview.stageCounts.length} stages visible</div>}>
           <div className="m07-workspace-formgrid" style={{ marginTop: 14 }}>
             <input type="date" value={filters.dateFrom || ''} onChange={(e) => setFilters((p) => ({ ...p, dateFrom: e.target.value || undefined }))} />
             <input type="date" value={filters.dateTo || ''} onChange={(e) => setFilters((p) => ({ ...p, dateTo: e.target.value || undefined }))} />
@@ -28,20 +31,18 @@ export default function FunnelOverview() {
             <select value={filters.segment || ''} onChange={(e) => setFilters((p) => ({ ...p, segment: e.target.value || undefined }))}><option value="">All segments</option>{options.segments.map((item) => <option key={item}>{item}</option>)}</select>
           </div>
           <div className="m07-workspace-actionsrow"><button className="btn-ghost" onClick={() => setFilters({})}>Reset filters</button></div>
-        </section>
+        </InsightPanel>
 
-        <section className="m07-workspace-panel"><div className="m07-analytics-kpis">
-          <StatCard label="Total Leads" value={overview.totalLeads} />
-          <StatCard label="Leads in Funnel" value={overview.activeLeads} />
-          <StatCard label="Conversion Rate" value={`${overview.conversionRate}%`} />
-          <StatCard label="Drop-off Rate" value={`${overview.dropOffRate}%`} />
-          <StatCard label="Avg Time in Funnel" value={`${overview.avgTimeInFunnel}d`} />
-        </div></section>
+        <InsightKpiGrid>
+          <InsightKpiCard label="Total Leads" value={overview.totalLeads} note="All currently visible funnel records in the selected scope." tone="navy" />
+          <InsightKpiCard label="Leads in Funnel" value={overview.activeLeads} note="Records still moving through live stage progression." tone="teal" />
+          <InsightKpiCard label="Conversion Rate" value={`${overview.conversionRate}%`} note="Share of records progressing into successful downstream outcomes." tone="teal" />
+          <InsightKpiCard label="Drop-off Rate" value={`${overview.dropOffRate}%`} note="Current funnel loss across the same visible population." tone="amber" />
+          <InsightKpiCard label="Avg Time in Funnel" value={`${overview.avgTimeInFunnel}d`} note="Average duration spent in the current funnel path." tone="slate" />
+        </InsightKpiGrid>
 
-        <section className="m07-analytics-grid">
-          <section className="m07-workspace-panel">
-            <h3 className="m07-workspace-title" style={{ marginTop: 0 }}>Funnel Chart</h3>
-            <div className="m07-workspace-copy m07-workspace-copy-tight">Current stage counts and stage-to-stage drop context.</div>
+        <section style={{ ...insightTokens.equalCol, marginTop: 18 }}>
+          <InsightPanel eyebrow="Funnel shape" title="Current stage progression">
             <div className="m07-funnel-stack" style={{ marginTop: 14 }}>
               {overview.stageCounts.map((item, index) => {
                 const next = overview.stageCounts[index + 1];
@@ -55,53 +56,59 @@ export default function FunnelOverview() {
                 );
               })}
             </div>
-          </section>
+          </InsightPanel>
 
-          <section className="m07-workspace-panel">
-            <h3 className="m07-workspace-title" style={{ marginTop: 0 }}>Stage Distribution</h3>
-            <div className="m07-workspace-copy m07-workspace-copy-tight">Current stage occupancy across the active funnel.</div>
-            <div className="m07-bar-list" style={{ marginTop: 14 }}>
+          <InsightPanel eyebrow="Operating readout" title="Stage occupancy summary" soft>
+            <div style={{ display: 'grid', gap: 12 }}>
               {overview.stageCounts.map((item) => (
-                <div key={item.stage} className="m07-bar-row">
-                  <span>{item.stage}</span>
-                  <div className="m07-bar-track">
-                    <div className="m07-bar-fill" style={{ width: `${Math.max(8, item.count * 10)}%` }} />
+                <div key={item.stage}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 6, alignItems: 'baseline' }}>
+                    <strong style={{ color: '#0B2540', fontSize: 14 }}>{item.stage}</strong>
+                    <span style={{ fontSize: 13, color: '#415274' }}>{item.count} leads</span>
                   </div>
-                  <strong>{item.count}</strong>
+                  <div style={insightTokens.track}>
+                    <div style={{ ...insightTokens.fill, width: insightBarWidth(item.count, maxStageCount, 12) }} />
+                  </div>
                 </div>
               ))}
             </div>
-          </section>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginTop: 16 }}>
+              <InsightMiniStat label="Most loaded stage" value={mostLoadedStage?.stage || 'None'} />
+              <InsightMiniStat label="Largest stage count" value={mostLoadedStage?.count || 0} />
+              <InsightMiniStat label="Visible stages" value={overview.stageCounts.length} />
+            </div>
+          </InsightPanel>
         </section>
 
-        <section className="m07-workspace-panel">
-          <h3 className="m07-workspace-title" style={{ marginTop: 0 }}>Conversion Table</h3>
-          <div className="m07-workspace-tablewrap">
-            <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff' }}>
-              <thead><tr style={{ background: '#f5f7fa' }}><th style={th}>Stage</th><th style={th}>Entered</th><th style={th}>Progressed</th><th style={th}>Dropped</th><th style={th}>Conversion %</th></tr></thead>
-              <tbody>{overview.conversionTable.map((row) => <tr key={row.stage}><td style={td}>{row.stage}</td><td style={td}>{row.entered}</td><td style={td}>{row.progressed}</td><td style={td}>{row.dropped}</td><td style={td}>{row.conversion}%</td></tr>)}</tbody>
-            </table>
-          </div>
+        <section style={{ ...insightTokens.twoCol, marginTop: 18 }}>
+          <InsightPanel eyebrow="Conversion detail" title="Stage conversion table">
+            <div style={insightTokens.tableWrap}>
+              <table style={insightTokens.table}>
+                <thead><tr><th style={insightTokens.th}>Stage</th><th style={insightTokens.th}>Entered</th><th style={insightTokens.th}>Progressed</th><th style={insightTokens.th}>Dropped</th><th style={insightTokens.th}>Conversion %</th></tr></thead>
+                <tbody>{overview.conversionTable.map((row) => <tr key={row.stage} style={insightTokens.row}><td style={insightTokens.tdStrong}>{row.stage}</td><td style={insightTokens.td}>{row.entered}</td><td style={insightTokens.td}>{row.progressed}</td><td style={insightTokens.td}>{row.dropped}</td><td style={insightTokens.td}>{row.conversion}%</td></tr>)}</tbody>
+              </table>
+            </div>
+          </InsightPanel>
+
+          <InsightPanel eyebrow="Reading guide" title="How to interpret this view" soft>
+            <div style={{ display: 'grid', gap: 12 }}>
+              <InsightNoteCard title="Start with concentration" body="If one stage holds a disproportionate share of records, check whether qualification, follow-up, or approval steps are slowing movement there." />
+              <InsightNoteCard title="Use drop context next" body="Large stage-to-stage drop percentages usually indicate messaging mismatch, process friction, or weak handoff quality between owners." />
+              <InsightNoteCard title="Open lead journeys after this" body="When a stage looks overloaded or leaky, move into Lead Journey Explorer to inspect the exact lead histories behind the pattern." />
+            </div>
+          </InsightPanel>
         </section>
 
-        <section className="m07-workspace-panel">
-          <h3 className="m07-workspace-title" style={{ marginTop: 0 }}>Lead List</h3>
-          <div className="m07-workspace-copy m07-workspace-copy-tight">Click a row to open the lead journey explorer and inspect stage progression with interaction history.</div>
-          <div className="m07-workspace-tablewrap" style={{ marginTop: 12 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff' }}>
-              <thead><tr style={{ background: '#f5f7fa' }}><th style={th}>Lead ID</th><th style={th}>Current Stage</th><th style={th}>Time in Stage</th><th style={th}>Last Interaction</th><th style={th}>Status</th></tr></thead>
-              <tbody>{overview.leadsTable.map((row) => <tr key={row.lead_id} onClick={() => { if (wid) window.location.hash = `#/workspace/${wid}/m07/journey/${row.lead_id}`; }} style={{ cursor: wid ? 'pointer' : 'default' }}><td style={td}>{row.lead_id}</td><td style={td}>{row.currentStage}</td><td style={td}>{row.timeInStage}d</td><td style={td}>{row.lastInteractionDate ? new Date(row.lastInteractionDate).toLocaleDateString() : 'No interactions'}</td><td style={td}>{row.status}</td></tr>)}</tbody>
+        <InsightPanel eyebrow="Lead drilldown" title="Records behind the current funnel state">
+          <div style={{ ...insightTokens.mutedText, marginBottom: 12 }}>Click a row to open the lead journey explorer and inspect stage progression with interaction history.</div>
+          <div style={insightTokens.tableWrap}>
+            <table style={insightTokens.table}>
+              <thead><tr><th style={insightTokens.th}>Lead ID</th><th style={insightTokens.th}>Current Stage</th><th style={insightTokens.th}>Time in Stage</th><th style={insightTokens.th}>Last Interaction</th><th style={insightTokens.th}>Status</th></tr></thead>
+              <tbody>{overview.leadsTable.map((row) => <tr key={row.lead_id} onClick={() => { if (wid) window.location.hash = `#/workspace/${wid}/m07/journey/${row.lead_id}`; }} style={{ ...insightTokens.row, cursor: wid ? 'pointer' : 'default' }}><td style={insightTokens.tdStrong}>{row.lead_id}</td><td style={insightTokens.td}>{row.currentStage}</td><td style={insightTokens.td}>{row.timeInStage}d</td><td style={insightTokens.td}>{row.lastInteractionDate ? new Date(row.lastInteractionDate).toLocaleDateString() : 'No interactions'}</td><td style={insightTokens.td}>{row.status}</td></tr>)}</tbody>
             </table>
           </div>
-        </section>
+        </InsightPanel>
       </main>
     </Layout>
   );
 }
-
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return <div className="m07-kpi-card"><div className="m07-kpi-label">{label}</div><div className="m07-kpi-value">{value}</div></div>;
-}
-
-const th = { padding: 10, textAlign: 'left' as const, borderBottom: '1px solid #e5e7eb', fontSize: 12 };
-const td = { padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 12 };

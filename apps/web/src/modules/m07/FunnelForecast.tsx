@@ -1,130 +1,180 @@
-import { useEffect, useState } from 'react';
-import Layout from '../../components/Layout';
-import ModuleBackButton from '../../components/ModuleBackButton';
+import { useEffect, useMemo, useState } from 'react'
+import Layout from '../../components/Layout'
+import ModuleBackButton from '../../components/ModuleBackButton'
+import { InsightHero, InsightKpiCard, InsightKpiGrid, InsightNoteCard, InsightPanel } from '../../components/InsightChrome'
+import { insightTokens } from '../../components/insightChromeTokens'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+
+type ForecastOptionsResponse = {
+  ok?: boolean
+  sources?: string[]
+  stages?: string[]
+  datasetPath?: string
+}
+
+type FunnelForecastKpis = {
+  latestConversionRate: number
+  latestDropRate: number
+  latestAvgDaysInStage: number
+  projectedConversionRate: number
+}
+
+type FunnelHistoryRow = {
+  month: string
+  leadsEntered: number
+  conversionRate: number
+  dropRate: number
+  avgDaysInStage: number
+}
+
+type FunnelForecastRow = {
+  month: string
+  projectedConversionRate: number
+  projectedDropRate: number
+  projectedAvgDaysInStage: number
+}
+
+type FunnelForecastResult = {
+  kpis: FunnelForecastKpis
+  history: FunnelHistoryRow[]
+  forecast: FunnelForecastRow[]
+  explanation: string
+}
 
 export default function FunnelForecast() {
-  const [sources, setSources] = useState<string[]>([]);
-  const [stages, setStages] = useState<string[]>([]);
-  const [source, setSource] = useState('');
-  const [stage, setStage] = useState('');
-  const [horizonMonths, setHorizonMonths] = useState(3);
-  const [datasetPath, setDatasetPath] = useState('');
-  const [result, setResult] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [sources, setSources] = useState<string[]>([])
+  const [stages, setStages] = useState<string[]>([])
+  const [source, setSource] = useState('')
+  const [stage, setStage] = useState('')
+  const [horizonMonths, setHorizonMonths] = useState(3)
+  const [datasetPath, setDatasetPath] = useState('')
+  const [result, setResult] = useState<FunnelForecastResult | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch(`${API_BASE}/m07/forecast/options`).then((r) => r.json()).then((j) => {
-      if (!j?.ok) return;
-      setSources(Array.isArray(j.sources) ? j.sources : []);
-      setStages(Array.isArray(j.stages) ? j.stages : []);
-      setDatasetPath(typeof j.datasetPath === 'string' ? j.datasetPath : '');
-    }).catch(() => {});
-  }, []);
+    fetch(`${API_BASE}/m07/forecast/options`)
+      .then((response) => response.json())
+      .then((json: ForecastOptionsResponse) => {
+        if (!json?.ok) return
+        setSources(Array.isArray(json.sources) ? json.sources : [])
+        setStages(Array.isArray(json.stages) ? json.stages : [])
+        setDatasetPath(typeof json.datasetPath === 'string' ? json.datasetPath : '')
+      })
+      .catch(() => {})
+  }, [])
 
   async function run() {
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
     try {
-      const r = await fetch(`${API_BASE}/m07/forecast`, {
+      const response = await fetch(`${API_BASE}/m07/forecast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ source: source || undefined, stage: stage || undefined, horizonMonths }),
-      });
-      const j = await r.json();
-      if (!r.ok) setError(j?.path ? `Dataset missing: ${j.path}` : j?.error || 'Forecast failed.');
-      setResult(r.ok ? j : null);
+      })
+      const json = await response.json().catch(() => ({} as { path?: string; error?: string }))
+      if (!response.ok) {
+        setError(json?.path ? `Dataset missing: ${json.path}` : json?.error || 'Forecast failed.')
+        setResult(null)
+        return
+      }
+      setResult(json as FunnelForecastResult)
     } catch {
-      setError('Unable to run forecast.');
-      setResult(null);
+      setError('Unable to run forecast.')
+      setResult(null)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
+
+  const historyRows = useMemo(() => result?.history || [], [result])
+  const forecastRows = useMemo(() => result?.forecast || [], [result])
 
   return (
     <Layout>
       <main className="page-root" style={{ padding: 20 }}>
-        <ModuleBackButton toSuffix="/m07" label="Module 7 Home" />
-        <section style={hero}>
-          <div style={badge}>Forecast</div>
-          <h1 style={title}>Funnel Forecast Explorer</h1>
-          <div style={copy}>Forecast conversion, drop pressure, and stage delay so Module 7 can anticipate funnel health changes before leakage compounds.</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <ModuleBackButton toSuffix="/m07" />
+        </div>
+
+        <InsightHero eyebrow="Funnel Insight Forecast" title="Funnel Forecast Explorer" subtitle="Project conversion, drop pressure, and stage delay so funnel owners can anticipate health changes before leakage compounds." />
+
+        <section style={{ ...insightTokens.twoCol, marginTop: 18 }}>
+          <InsightPanel eyebrow="Scenario setup" title="Choose the funnel forecast scope">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+              <select value={source} onChange={(e) => setSource(e.target.value)}>
+                <option value="">All sources</option>
+                {sources.map((item) => <option key={item}>{item}</option>)}
+              </select>
+              <select value={stage} onChange={(e) => setStage(e.target.value)}>
+                <option value="">All stages</option>
+                {stages.map((item) => <option key={item}>{item}</option>)}
+              </select>
+              <select value={String(horizonMonths)} onChange={(e) => setHorizonMonths(Number(e.target.value))}>
+                <option value="3">3 months</option>
+                <option value="6">6 months</option>
+                <option value="9">9 months</option>
+              </select>
+              <button className="btn-primary" onClick={run} disabled={loading}>{loading ? 'Generating…' : 'Generate Forecast'}</button>
+            </div>
+            {datasetPath ? <div style={{ marginTop: 10, fontSize: 12, color: '#5a6786' }}>Dataset path: {datasetPath}</div> : null}
+            {error ? <div style={{ marginTop: 10, color: 'crimson', fontSize: 13 }}>{error}</div> : null}
+          </InsightPanel>
+
+          <InsightPanel eyebrow="How to use this" title="Decision context" soft>
+            <div style={{ display: 'grid', gap: 12 }}>
+              <InsightNoteCard title="Use for planning, not maintenance" body="This screen is for estimating where conversion and delay are heading, not for fixing bad records. Input corrections still belong in Data Hub." />
+              <InsightNoteCard title="Read drop and delay together" body="A better conversion forecast is only strong if projected drop pressure and stage duration stay controlled at the same time." />
+              <InsightNoteCard title="Best paired with leakage and trends" body="Use forecast after reviewing current leakage and trend behavior so the scenario is grounded in the current funnel condition." />
+            </div>
+          </InsightPanel>
         </section>
 
-        <section style={panel}>
-          <div style={badgeDark}>Scenario Setup</div>
-          <div style={grid}>
-            <select value={source} onChange={(e) => setSource(e.target.value)}>
-              <option value="">All sources</option>
-              {sources.map((item) => <option key={item}>{item}</option>)}
-            </select>
-            <select value={stage} onChange={(e) => setStage(e.target.value)}>
-              <option value="">All stages</option>
-              {stages.map((item) => <option key={item}>{item}</option>)}
-            </select>
-            <select value={String(horizonMonths)} onChange={(e) => setHorizonMonths(Number(e.target.value))}>
-              <option value="3">3 months</option>
-              <option value="6">6 months</option>
-              <option value="9">9 months</option>
-            </select>
-            <button className="btn-primary" onClick={run} disabled={loading}>{loading ? 'Generating…' : 'Generate Forecast'}</button>
-          </div>
-          {datasetPath && <div style={{ marginTop: 10, fontSize: 12, color: '#5a6786' }}>Dataset path: {datasetPath}</div>}
-          {error && <div style={{ marginTop: 10, color: 'crimson' }}>{error}</div>}
-        </section>
-
-        {result && (
+        {result ? (
           <>
-            <section style={cards}>
-              <Card label="Latest Conversion" value={`${result.kpis.latestConversionRate}%`} />
-              <Card label="Latest Drop Rate" value={`${result.kpis.latestDropRate}%`} />
-              <Card label="Latest Avg Days" value={`${result.kpis.latestAvgDaysInStage}d`} />
-              <Card label="Projected Conversion" value={`${result.kpis.projectedConversionRate}%`} />
+            <InsightKpiGrid>
+              <InsightKpiCard label="Latest Conversion" value={`${result.kpis.latestConversionRate}%`} note="Current conversion rate in the historical series." tone="teal" />
+              <InsightKpiCard label="Latest Drop Rate" value={`${result.kpis.latestDropRate}%`} note="Current drop pressure before the forecast window begins." tone="amber" />
+              <InsightKpiCard label="Latest Avg Days" value={`${result.kpis.latestAvgDaysInStage}d`} note="Most recent visible delay across the historical view." tone="slate" />
+              <InsightKpiCard label="Projected Conversion" value={`${result.kpis.projectedConversionRate}%`} note="Headline conversion outcome at the end of the scenario horizon." tone="navy" />
+            </InsightKpiGrid>
+
+            <section style={{ ...insightTokens.equalCol, marginTop: 18 }}>
+              <InsightPanel eyebrow="History" title="Observed monthly funnel behavior">
+                <div style={insightTokens.tableWrap}>
+                  <table style={insightTokens.table}>
+                    <thead><tr><th style={insightTokens.th}>Month</th><th style={insightTokens.th}>Entered</th><th style={insightTokens.th}>Conversion %</th><th style={insightTokens.th}>Drop %</th><th style={insightTokens.th}>Avg Days</th></tr></thead>
+                    <tbody>{historyRows.map((row) => <tr key={row.month} style={insightTokens.row}><td style={insightTokens.tdStrong}>{row.month}</td><td style={insightTokens.td}>{row.leadsEntered}</td><td style={insightTokens.td}>{row.conversionRate}%</td><td style={insightTokens.td}>{row.dropRate}%</td><td style={insightTokens.td}>{row.avgDaysInStage}d</td></tr>)}</tbody>
+                  </table>
+                </div>
+              </InsightPanel>
+
+              <InsightPanel eyebrow="Forecast" title="Projected monthly funnel behavior" soft>
+                <div style={insightTokens.tableWrap}>
+                  <table style={insightTokens.table}>
+                    <thead><tr><th style={insightTokens.th}>Month</th><th style={insightTokens.th}>Projected Conversion %</th><th style={insightTokens.th}>Projected Drop %</th><th style={insightTokens.th}>Projected Avg Days</th></tr></thead>
+                    <tbody>{forecastRows.map((row) => <tr key={row.month} style={insightTokens.row}><td style={insightTokens.tdStrong}>{row.month}</td><td style={insightTokens.td}>{row.projectedConversionRate}%</td><td style={insightTokens.td}>{row.projectedDropRate}%</td><td style={insightTokens.td}>{row.projectedAvgDaysInStage}d</td></tr>)}</tbody>
+                  </table>
+                </div>
+              </InsightPanel>
             </section>
-            <section style={twoCol}>
-              <section style={panel}>
-                <div style={badgeDark}>History</div>
-                <table style={table}>
-                  <thead><tr><th style={th}>Month</th><th style={th}>Entered</th><th style={th}>Conversion %</th><th style={th}>Drop %</th><th style={th}>Avg Days</th></tr></thead>
-                  <tbody>{(result.history || []).map((row: any) => <tr key={row.month}><td style={td}>{row.month}</td><td style={td}>{row.leadsEntered}</td><td style={td}>{row.conversionRate}%</td><td style={td}>{row.dropRate}%</td><td style={td}>{row.avgDaysInStage}d</td></tr>)}</tbody>
-                </table>
-              </section>
-              <section style={panel}>
-                <div style={badgeDark}>Forecast</div>
-                <table style={table}>
-                  <thead><tr><th style={th}>Month</th><th style={th}>Conversion %</th><th style={th}>Drop %</th><th style={th}>Avg Days</th></tr></thead>
-                  <tbody>{(result.forecast || []).map((row: any) => <tr key={row.month}><td style={td}>{row.month}</td><td style={td}>{row.projectedConversionRate}%</td><td style={td}>{row.projectedDropRate}%</td><td style={td}>{row.projectedAvgDaysInStage}d</td></tr>)}</tbody>
-                </table>
-              </section>
-            </section>
-            <section style={panel}>
-              <div style={badgeDark}>Explanation</div>
-              <div style={{ marginTop: 12, color: '#415274', lineHeight: 1.8 }}>{result.explanation}</div>
-            </section>
+
+            <InsightPanel eyebrow="Forecast interpretation" title="What the projection is saying">
+              <div style={{ display: 'grid', gap: 12 }}>
+                <InsightNoteCard title="Scenario scope" body={`This projection is using ${source || 'all sources'}, ${stage || 'all stages'}, over a ${horizonMonths}-month horizon.`} />
+                <InsightNoteCard title="Projected operating implication" body={result.kpis.projectedConversionRate >= result.kpis.latestConversionRate ? 'The forecast suggests conversion may improve from the current baseline, provided the process keeps drop pressure and delay controlled.' : 'The forecast suggests conversion may weaken relative to the current baseline, so leakage and handoff quality should be reviewed early.'} />
+                <InsightNoteCard title="Forecast explanation" body={result.explanation} />
+              </div>
+            </InsightPanel>
           </>
+        ) : (
+          <InsightPanel eyebrow="Forecast output" title="Waiting for a scenario run" soft>
+            <div style={insightTokens.mutedText}>Choose a source, optional stage focus, and horizon, then generate a forecast to see projected conversion, drop pressure, and delay movement.</div>
+          </InsightPanel>
         )}
       </main>
     </Layout>
-  );
+  )
 }
-
-function Card({ label, value }: { label: string; value: string | number }) {
-  return <div style={card}><div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5c6a86', fontWeight: 800 }}>{label}</div><div style={{ fontSize: 30, fontWeight: 900, color: '#0B2540', marginTop: 10 }}>{value}</div></div>;
-}
-
-const hero: React.CSSProperties = { marginTop: 18, borderRadius: 24, padding: 28, background: 'linear-gradient(135deg, rgba(18,59,87,0.98) 0%, rgba(15,66,88,0.94) 52%, rgba(72,177,217,0.24) 100%)', color: '#fff' };
-const panel: React.CSSProperties = { marginTop: 18, borderRadius: 22, padding: 22, background: 'linear-gradient(180deg, rgba(255,255,255,1), rgba(247,250,253,0.98))', border: '1px solid rgba(15,66,88,0.08)', boxShadow: '0 16px 38px rgba(13,30,60,0.06)' };
-const badge: React.CSSProperties = { display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' };
-const badgeDark: React.CSSProperties = { display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(15,66,88,0.08)', color: '#0B2540', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' };
-const title: React.CSSProperties = { margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' };
-const copy: React.CSSProperties = { maxWidth: 780, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 };
-const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginTop: 16 };
-const cards: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14, marginTop: 18 };
-const twoCol: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: 18 };
-const card: React.CSSProperties = { borderRadius: 18, padding: 18, background: '#fff', border: '1px solid rgba(15,66,88,0.08)', boxShadow: '0 10px 24px rgba(13,30,60,0.06)' };
-const table: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', marginTop: 12 };
-const th: React.CSSProperties = { padding: 10, textAlign: 'left', borderBottom: '1px solid #e5e7eb', fontSize: 12, background: '#f5f7fa' };
-const td: React.CSSProperties = { padding: 10, borderBottom: '1px solid #eef2f7', fontSize: 12 };

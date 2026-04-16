@@ -25,7 +25,7 @@ export type ModuleReportExport = {
 
 export type ModuleReportPayload = {
   ok: true;
-  moduleKey: 'm01' | 'm02' | 'm06' | 'm07';
+  moduleKey: 'm01' | 'm02' | 'm05' | 'm06' | 'm07';
   title: string;
   subtitle: string;
   generatedAt: string;

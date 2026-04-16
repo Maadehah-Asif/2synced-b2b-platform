@@ -32,6 +32,10 @@ export type InteractionValidationRow = {
 export type InteractionValidationResult = {
   ok: true;
   rowResults: InteractionValidationRow[];
+  selectedRange: {
+    startRow: number;
+    endRow: number;
+  };
   summary: {
     checkedRows: number;
     validRows: number;

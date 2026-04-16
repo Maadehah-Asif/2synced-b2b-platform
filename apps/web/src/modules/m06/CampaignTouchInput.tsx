@@ -170,6 +170,7 @@ export default function CampaignTouchInput(){
   const [validationResult, setValidationResult] = useState<TouchValidationResult | null>(null);
   const [submittingCsv, setSubmittingCsv] = useState(false);
   const [uploadSummary, setUploadSummary] = useState<TouchImportSummary | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -230,6 +231,7 @@ export default function CampaignTouchInput(){
     setDuplicatePolicy('skip');
     setValidationResult(null);
     setUploadSummary(null);
+    setShowPreview(false);
   }
 
   function validateForm(nextForm: TouchFormState) {
@@ -280,6 +282,7 @@ export default function CampaignTouchInput(){
     setMappingErrors(validateMappingState(next));
     setValidationResult(null);
     setUploadSummary(null);
+    setShowPreview(false);
   }
 
   function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -394,6 +397,7 @@ export default function CampaignTouchInput(){
       });
       setValidationResult(result);
       setUploadSummary(null);
+      setShowPreview(false);
       setToast({ msg: `Validation finished. ${result.summary.validRows} valid rows and ${result.summary.invalidRows} invalid rows found.`, type: 'success' });
     } catch (error: unknown) {
       setToast({ msg: error instanceof Error ? error.message : 'CSV validation failed.', type: 'error' });
@@ -649,19 +653,20 @@ export default function CampaignTouchInput(){
                         </div>
                       );
                     })}
-                    <div><label>Campaign identifier</label><select value={campaignIdentifier} onChange={(event) => setCampaignIdentifier(event.target.value as 'name'|'campaign_id')}><option value="campaign_id">Campaign ID</option><option value="name">Campaign name</option></select></div>
-                    <div><label>Lead identifier</label><select value={leadIdentifier} onChange={(event) => setLeadIdentifier(event.target.value as 'id'|'email')}><option value="id">Lead ID</option><option value="email">Lead email</option></select></div>
-                    <div><label>Duplicate policy</label><select value={duplicatePolicy} onChange={(event) => setDuplicatePolicy(event.target.value as 'skip'|'allow')}><option value="skip">Skip duplicates</option><option value="allow">Allow duplicates</option></select></div>
-                    <div><label>Start row *</label><input type="number" min={1} value={startRow} onChange={(event) => { setStartRow(Number(event.target.value || 1)); setValidationResult(null); }} /></div>
-                    <div><label>End row *</label><input type="number" min={1} value={endRow} onChange={(event) => { setEndRow(event.target.value ? Number(event.target.value) : ''); setValidationResult(null); }} /></div>
+                    <div><label>Campaign identifier</label><select value={campaignIdentifier} onChange={(event) => { setCampaignIdentifier(event.target.value as 'name'|'campaign_id'); setValidationResult(null); setShowPreview(false); }}><option value="campaign_id">Campaign ID</option><option value="name">Campaign name</option></select></div>
+                    <div><label>Lead identifier</label><select value={leadIdentifier} onChange={(event) => { setLeadIdentifier(event.target.value as 'id'|'email'); setValidationResult(null); setShowPreview(false); }}><option value="id">Lead ID</option><option value="email">Lead email</option></select></div>
+                    <div><label>Duplicate policy</label><select value={duplicatePolicy} onChange={(event) => { setDuplicatePolicy(event.target.value as 'skip'|'allow'); setValidationResult(null); setShowPreview(false); }}><option value="skip">Skip duplicates</option><option value="allow">Allow duplicates</option></select></div>
+                    <div><label>Start row *</label><input type="number" min={1} value={startRow} onChange={(event) => { setStartRow(Number(event.target.value || 1)); setValidationResult(null); setShowPreview(false); }} /></div>
+                    <div><label>End row *</label><input type="number" min={1} value={endRow} onChange={(event) => { setEndRow(event.target.value ? Number(event.target.value) : ''); setValidationResult(null); setShowPreview(false); }} /></div>
                   </div>
                   {mappingErrors.length > 0 && <div className="m06-summary-box" style={{ border: '1px solid rgba(195,51,51,0.18)', background: '#fff7f7' }}><strong>Mapping issues</strong><div style={{ marginTop: 8, display: 'grid', gap: 4 }}>{mappingErrors.map((issue) => <div key={issue}>{issue}</div>)}</div></div>}
                   {rangeError && <div className="m06-summary-box" style={{ border: '1px solid rgba(195,51,51,0.18)', background: '#fff7f7' }}><strong>Row range issue</strong><div style={{ marginTop: 8 }}>{rangeError}</div></div>}
                   <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}>
-                    <button className="btn-primary" disabled={validatingCsv} onClick={runCsvValidation}>{validatingCsv ? 'Validating...' : 'Validate and Open Preview'}</button>
+                    <button className="btn-primary" disabled={validatingCsv} onClick={runCsvValidation}>{validatingCsv ? 'Validating...' : 'Validate CSV'}</button>
                     <button className="btn-ghost" onClick={resetCsvState}>Reset Upload</button>
                   </div>
-                  {previewRows.length > 0 && <div style={{ marginTop: 18 }}><ImportPreviewStep title="Touch CSV Preview" subtitle="This reusable Module 6 preview step is shared across data-hub ingestion flows." sourceHeaders={csvHeaders} rows={previewRows} currentStartRow={startRow} totalSelectedRows={previewRows.length} /></div>}
+                  {validationResult && <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}><button className="btn-ghost" onClick={() => setShowPreview((prev) => !prev)}>{showPreview ? 'Hide Preview' : 'Open Preview'}</button></div>}
+                  {showPreview && previewRows.length > 0 && <div style={{ marginTop: 18 }}><ImportPreviewStep title="Touch CSV Preview" subtitle="This reusable Module 6 preview step is shared across data-hub ingestion flows." sourceHeaders={csvHeaders} rows={previewRows} currentStartRow={startRow} totalSelectedRows={previewRows.length} /></div>}
                   {validationResult && (
                     <div className="m06-summary-box" style={{ marginTop: 16 }}>
                       <div style={{ fontWeight:600, marginBottom:4 }}>Validation Summary</div>
@@ -669,6 +674,7 @@ export default function CampaignTouchInput(){
                       <div>Valid rows: {validationResult.summary.validRows}</div>
                       <div>Invalid rows: {validationResult.summary.invalidRows}</div>
                       <div>Warning rows: {validationResult.summary.warningRows}</div>
+                      <div>Selected range: rows {validationResult.selectedRange.startRow} to {validationResult.selectedRange.endRow}</div>
                       <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}>
                         {validationResult.summary.invalidRows > 0 && <button className="btn-ghost" onClick={downloadInvalidRows}>Download Invalid Rows</button>}
                         {validationResult.summary.validRows > 0 && <button className="btn-primary" disabled={submittingCsv} onClick={() => submitCsvImport(validationResult.summary.invalidRows > 0)}>{submittingCsv ? 'Importing...' : validationResult.summary.invalidRows > 0 ? 'Proceed With Valid Rows Only' : 'Confirm and Import'}</button>}

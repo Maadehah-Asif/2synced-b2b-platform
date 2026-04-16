@@ -152,6 +152,7 @@ export default function Module6DealsWorkspace(){
   const [uploadSummary, setUploadSummary] = useState<DealImportSummary|null>(null);
   const [validatingCsv, setValidatingCsv] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     const now = new Date();
@@ -207,6 +208,7 @@ export default function Module6DealsWorkspace(){
     setMappingErrors(validateMappingState(next));
     setValidationResult(null);
     setUploadSummary(null);
+    setShowPreview(false);
   }
 
   async function load(){
@@ -299,6 +301,7 @@ export default function Module6DealsWorkspace(){
     setEndRow('');
     setValidationResult(null);
     setUploadSummary(null);
+    setShowPreview(false);
     if (!file) { input.value = ''; return; }
     if (!file.name.toLowerCase().endsWith('.csv')) { setCsvFileError('Only CSV files are supported.'); input.value = ''; return; }
     if (file.size <= 0) { setCsvFileError('Uploaded file is empty.'); input.value = ''; return; }
@@ -347,6 +350,7 @@ export default function Module6DealsWorkspace(){
       });
       setValidationResult(result);
       setUploadSummary(null);
+      setShowPreview(false);
       setToast({ msg:`Validation finished. ${result.summary.validRows} valid rows and ${result.summary.invalidRows} invalid rows found.`, type:'success' });
     } catch (error: unknown) {
       setToast({ msg: error instanceof Error ? error.message : 'CSV validation failed.', type:'error' });
@@ -552,14 +556,15 @@ export default function Module6DealsWorkspace(){
                         </div>
                       );
                     })}
-                    <div><label>Start row *</label><input type="number" min={1} value={startRow} onChange={(event)=>{ setStartRow(Number(event.target.value||1)); setValidationResult(null); }} /></div>
-                    <div><label>End row *</label><input type="number" min={1} value={endRow} onChange={(event)=>{ setEndRow(event.target.value ? Number(event.target.value) : ''); setValidationResult(null); }} /></div>
-                    <div><label>Duplicate policy</label><select value={duplicatePolicy} onChange={(event)=>setDuplicatePolicy(event.target.value as 'skip'|'allow')}><option value="skip">Skip duplicates</option><option value="allow">Allow duplicates</option></select></div>
+                    <div><label>Start row *</label><input type="number" min={1} value={startRow} onChange={(event)=>{ setStartRow(Number(event.target.value||1)); setValidationResult(null); setShowPreview(false); }} /></div>
+                    <div><label>End row *</label><input type="number" min={1} value={endRow} onChange={(event)=>{ setEndRow(event.target.value ? Number(event.target.value) : ''); setValidationResult(null); setShowPreview(false); }} /></div>
+                    <div><label>Duplicate policy</label><select value={duplicatePolicy} onChange={(event)=>{ setDuplicatePolicy(event.target.value as 'skip'|'allow'); setValidationResult(null); setShowPreview(false); }}><option value="skip">Skip duplicates</option><option value="allow">Allow duplicates</option></select></div>
                   </div>
                   {mappingErrors.length > 0 && <div className="m06-summary-box" style={{ border: '1px solid rgba(195,51,51,0.18)', background: '#fff7f7' }}><strong>Mapping issues</strong><div style={{ marginTop: 8, display:'grid', gap:4 }}>{mappingErrors.map((issue)=><div key={issue}>{issue}</div>)}</div></div>}
                   {rangeError && <div className="m06-summary-box" style={{ border: '1px solid rgba(195,51,51,0.18)', background: '#fff7f7' }}><strong>Row range issue</strong><div style={{ marginTop: 8 }}>{rangeError}</div></div>}
-                  <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}><button className="btn-primary" disabled={validatingCsv} onClick={runCsvValidation}>{validatingCsv ? 'Validating...' : 'Validate and Open Preview'}</button><button className="btn-ghost" onClick={() => { setCsvFileName(''); setCsvText(''); setCsvHeaders([]); setCsvRows([]); setCsvFileError(null); setMapping(defaultDealMapping()); setMappingErrors([]); setStartRow(1); setEndRow(''); setValidationResult(null); setUploadSummary(null); }}>Reset Upload</button></div>
-                  {previewRows.length > 0 && <div style={{ marginTop: 18 }}><ImportPreviewStep title="Deal CSV Preview" subtitle="This reusable Module 6 preview step is shared across data-hub ingestion flows." sourceHeaders={csvHeaders} rows={previewRows} currentStartRow={startRow} totalSelectedRows={previewRows.length} /></div>}
+                  <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}><button className="btn-primary" disabled={validatingCsv} onClick={runCsvValidation}>{validatingCsv ? 'Validating...' : 'Validate CSV'}</button><button className="btn-ghost" onClick={() => { setCsvFileName(''); setCsvText(''); setCsvHeaders([]); setCsvRows([]); setCsvFileError(null); setMapping(defaultDealMapping()); setMappingErrors([]); setStartRow(1); setEndRow(''); setValidationResult(null); setUploadSummary(null); setShowPreview(false); }}>Reset Upload</button></div>
+                  {validationResult && <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}><button className="btn-ghost" onClick={() => setShowPreview((prev) => !prev)}>{showPreview ? 'Hide Preview' : 'Open Preview'}</button></div>}
+                  {showPreview && previewRows.length > 0 && <div style={{ marginTop: 18 }}><ImportPreviewStep title="Deal CSV Preview" subtitle="This reusable Module 6 preview step is shared across data-hub ingestion flows." sourceHeaders={csvHeaders} rows={previewRows} currentStartRow={startRow} totalSelectedRows={previewRows.length} /></div>}
                   {validationResult && (
                     <div className="m06-summary-box" style={{ marginTop:16 }}>
                       <div style={{ fontWeight:600, marginBottom:4 }}>Validation Summary</div>
@@ -567,6 +572,7 @@ export default function Module6DealsWorkspace(){
                       <div>Valid rows: {validationResult.summary.validRows}</div>
                       <div>Invalid rows: {validationResult.summary.invalidRows}</div>
                       <div>Warning rows: {validationResult.summary.warningRows}</div>
+                      <div>Selected range: rows {validationResult.selectedRange.startRow} to {validationResult.selectedRange.endRow}</div>
                       <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}>
                         {validationResult.summary.invalidRows > 0 && <button className="btn-ghost" onClick={downloadInvalidRows}>Download Invalid Rows</button>}
                         {validationResult.summary.validRows > 0 && <button className="btn-primary" disabled={importing} onClick={() => submitCsvImport(validationResult.summary.invalidRows > 0)}>{importing ? 'Importing...' : validationResult.summary.invalidRows > 0 ? 'Proceed With Valid Rows Only' : 'Confirm and Import'}</button>}

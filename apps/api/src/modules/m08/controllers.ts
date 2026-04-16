@@ -6,6 +6,7 @@ import MappingTemplate from '../m01/models/MappingTemplate.js';
 import IntentRun from '../m02/models/IntentRun.js';
 import M2LeadIntentSummary from '../m02/models/M2LeadIntentSummary.js';
 import M2LeadBehaviorEvent from '../m02/models/M2LeadBehaviorEvent.js';
+import CommunicationThread from '../m05/models/CommunicationThread.js';
 import { Module6Lead } from '../m06/models/Module6Lead.js';
 import { Campaign } from '../m06/models/Campaign.js';
 import { Deal } from '../m06/models/Deal.js';
@@ -16,7 +17,8 @@ import FunnelLead from '../m07/models/FunnelLead.js';
 import StageHistory from '../m07/models/StageHistory.js';
 import Interaction from '../m07/models/Interaction.js';
 
-type ModuleKey = 'm01' | 'm02' | 'm06' | 'm07';
+type ModuleKey = 'm01' | 'm02' | 'm05' | 'm06' | 'm07';
+const MODULE5_UPLOAD_PREFIX = 'm05-web-engagement__';
 
 type ReportMetric = {
   label: string;
@@ -78,7 +80,7 @@ function getWorkspaceId(req: Request) {
 }
 
 function isModuleKey(value: string): value is ModuleKey {
-  return value === 'm01' || value === 'm02' || value === 'm06' || value === 'm07';
+  return value === 'm01' || value === 'm02' || value === 'm05' || value === 'm06' || value === 'm07';
 }
 
 function formatDate(value: Date | string | null | undefined) {
@@ -455,6 +457,200 @@ async function buildM02Report(workspaceId: string): Promise<ReportBundle> {
   };
 }
 
+async function buildM05Report(workspaceId: string): Promise<ReportBundle> {
+  const [prioritizedRows, sharedLeads, stageRows, uploads, threads] = await Promise.all([
+    M2LeadIntentSummary.find({ workspaceId }).sort({ intentScore: -1 }).lean(),
+    Module6Lead.find({ project_id: workspaceId, is_archived: { $ne: true } }).lean(),
+    StageHistory.find({ workspace_id: workspaceId, is_archived: { $ne: true } }).lean(),
+    UploadFile.find({
+      workspace: workspaceId,
+      filename: { $regex: `^${MODULE5_UPLOAD_PREFIX}` },
+    }).sort({ createdAt: -1 }).lean(),
+    CommunicationThread.find({
+      workspaceId,
+      archivedAt: null,
+    }).sort({ updatedAt: -1 }).lean(),
+  ]);
+
+  const activeUploads = uploads.filter((item: any) => item.status !== 'archived');
+  const stageLeadIds = new Set(stageRows.map((row: any) => row.lead_id));
+  const prioritizedLeadIds = new Set(prioritizedRows.map((row: any) => row.leadId));
+  const prioritizedSharedLeadCount = sharedLeads.filter((lead: any) => prioritizedLeadIds.has(lead.lead_id)).length;
+  const hotRows = prioritizedRows.filter((row: any) => ['HOT', 'BLAZING'].includes(String(row.intentSegment || '').toUpperCase()));
+  const hotLeadIds = new Set(hotRows.map((row: any) => row.leadId));
+  const hotInPipeline = hotRows.filter((row: any) => stageLeadIds.has(row.leadId)).length;
+  const pipelineCoverage = sharedLeads.length > 0 ? (sharedLeads.filter((lead: any) => stageLeadIds.has(lead.lead_id)).length / sharedLeads.length) * 100 : 0;
+  const prioritizationCoverage = sharedLeads.length > 0 ? (prioritizedSharedLeadCount / sharedLeads.length) * 100 : 0;
+  const hotPipelineCoverage = hotRows.length > 0 ? (hotInPipeline / hotRows.length) * 100 : 0;
+  const openThreads = threads.filter((thread: any) => thread.status !== 'resolved');
+  const highPriorityThreads = threads.filter((thread: any) => thread.priority === 'high' && thread.status !== 'resolved');
+  const alignmentConcernThreads = threads.filter((thread: any) => thread.type === 'alignment_concern');
+  const stageCounts = new Map<string, number>();
+  for (const row of stageRows) {
+    const key = row.stage_name || 'Unspecified';
+    stageCounts.set(key, (stageCounts.get(key) || 0) + 1);
+  }
+  const stageDistribution = Array.from(stageCounts.entries())
+    .map(([stage, count]) => ({
+      stage,
+      count,
+      share: stageRows.length > 0 ? (count / stageRows.length) * 100 : 0,
+    }))
+    .sort((a, b) => b.count - a.count);
+  const latestUpload = activeUploads[0];
+  const latestThread = threads[0];
+
+  return {
+    payload: {
+      ok: true,
+      moduleKey: 'm05',
+      title: 'Sales and Marketing Alignment Report',
+      subtitle: 'Shared operational view across prioritized demand, pipeline coverage, web-signal availability, and cross-team follow-through.',
+      generatedAt: new Date().toISOString(),
+      overviewTitle: 'Executive Summary',
+      overviewBody: [
+        `Sales & Marketing Alignment is the shared operating layer between commercial teams. Its purpose is to align lead readiness, intent priority, funnel visibility, website engagement context, and communication follow-through into one management view.`,
+        sharedLeads.length > 0
+          ? `${formatNumber(sharedLeads.length)} shared leads are currently available. ${formatNumber(prioritizedSharedLeadCount)} already have prioritization coverage, representing ${formatPercent(prioritizationCoverage, 1)} alignment between the shared lead table and current intent-ready demand.`
+          : 'No shared lead base is currently available, so alignment reporting is still in a setup state.',
+        hotRows.length > 0
+          ? `${formatNumber(hotRows.length)} HOT or BLAZING leads are currently visible, and ${formatNumber(hotInPipeline)} of them already appear in stage tracking. This gives the business ${formatPercent(hotPipelineCoverage, 1)} high-intent pipeline coverage.`
+          : 'No high-intent lead cohort is currently available, so the alignment view is focused more on readiness than active conversion pressure.',
+      ],
+      recommendations: [
+        activeUploads.length === 0 ? 'Upload at least one validated web-engagement dataset so Module 5 can compare funnel movement against live website and campaign activity.' : 'Keep the web-engagement library current so alignment discussions continue to reflect real traffic and engagement behavior.',
+        hotRows.length > 0 && hotPipelineCoverage < 70 ? 'Review why high-intent leads are not consistently appearing in pipeline stages; this usually indicates handoff delay or incomplete follow-through between teams.' : 'Current high-intent pipeline coverage is broadly usable; focus on preserving response discipline for the hottest lead cohort.',
+        highPriorityThreads.length > 0 ? `Resolve the ${formatNumber(highPriorityThreads.length)} high-priority communication threads quickly so alignment blockers do not remain open without ownership.` : 'No high-priority unresolved communication threads are currently open, which supports a healthier cross-team operating rhythm.',
+      ],
+      metricCards: [
+        { label: 'Shared Leads', value: formatNumber(sharedLeads.length), helper: `${formatNumber(prioritizedSharedLeadCount)} leads already connect to prioritization coverage.` },
+        { label: 'High-Intent Leads', value: formatNumber(hotRows.length), helper: `${formatPercent(hotPipelineCoverage, 1)} of HOT and BLAZING leads already appear in stage tracking.` },
+        { label: 'Web Datasets', value: formatNumber(activeUploads.length), helper: latestUpload ? `Latest validated dataset: ${latestUpload.originalName || latestUpload.filename}.` : 'No active Module 5 engagement dataset is available.' },
+        { label: 'Open Threads', value: formatNumber(openThreads.length), helper: `${formatNumber(highPriorityThreads.length)} high-priority issues remain unresolved.` },
+      ],
+      highlights: [
+        `${formatNumber(sharedLeads.length)} shared leads, ${formatNumber(prioritizedRows.length)} prioritized rows, ${formatNumber(stageRows.length)} stage records, and ${formatNumber(threads.length)} active communication threads are currently available for alignment reporting.`,
+        activeUploads.length > 0 ? `${formatNumber(activeUploads.length)} active web-engagement datasets are available to enrich cross-team interpretation.` : 'No active web-engagement dataset is currently available for Module 5.',
+        latestThread ? `The latest communication thread is "${latestThread.title}", which confirms cross-team follow-through is being tracked inside the platform.` : 'No communication threads exist yet, so alignment follow-through is not being documented in the hub.',
+      ],
+      sections: [
+        {
+          key: 'alignment-summary',
+          title: 'Alignment Readiness Summary',
+          description: 'Shared business view across lead availability, prioritization coverage, pipeline presence, and collaboration follow-through.',
+          columns: ['Area', 'Current State', 'Interpretation'],
+          rows: [
+            ['Shared lead base', formatNumber(sharedLeads.length), sharedLeads.length > 0 ? 'A usable cross-team lead base is available.' : 'No shared lead base is currently available.'],
+            ['Prioritization coverage', formatPercent(prioritizationCoverage, 1), prioritizationCoverage >= 70 ? 'Lead-to-prioritization coverage is strong.' : prioritizationCoverage >= 40 ? 'Coverage is usable but incomplete.' : 'Coverage is still too limited for confident alignment review.'],
+            ['Pipeline coverage', formatPercent(pipelineCoverage, 1), pipelineCoverage >= 60 ? 'A meaningful share of leads already appears in funnel stages.' : 'Pipeline representation is still relatively thin.' ],
+            ['Collaboration backlog', formatNumber(openThreads.length), openThreads.length > 0 ? 'Open threads still require managed follow-through.' : 'No open communication backlog is currently visible.'],
+          ],
+        },
+        {
+          key: 'priority-coverage',
+          title: 'Priority Lead Coverage',
+          description: 'How current high-intent demand is translating into visible funnel ownership.',
+          columns: ['Priority Area', 'Count', 'Interpretation'],
+          rows: [
+            ['HOT and BLAZING leads', formatNumber(hotRows.length), hotRows.length > 0 ? 'Current demand pool available for immediate review.' : 'No high-intent pool is currently visible.'],
+            ['High-intent leads in pipeline', formatNumber(hotInPipeline), hotInPipeline > 0 ? 'A share of the highest-intent demand is already represented in stage tracking.' : 'No high-intent leads currently appear in pipeline stages.'],
+            ['High-intent pipeline coverage', formatPercent(hotPipelineCoverage, 1), hotPipelineCoverage >= 70 ? 'Coverage is strong.' : hotPipelineCoverage >= 40 ? 'Coverage is partial and should improve.' : 'Coverage is weak and suggests handoff issues.'],
+          ],
+        },
+        {
+          key: 'communication',
+          title: 'Communication and Ownership Queue',
+          description: 'Active communication threads supporting cross-team clarification, issue handling, and follow-through.',
+          columns: ['Thread', 'Type', 'Status', 'Priority', 'Last Update'],
+          rows: threads.slice(0, 10).map((thread: any) => [
+            thread.title || 'Untitled thread',
+            thread.type || 'general',
+            thread.status || 'open',
+            thread.priority || 'medium',
+            formatDateTime(thread.lastMessageAt || thread.updatedAt),
+          ]),
+        },
+        {
+          key: 'web-library',
+          title: 'Web Engagement Library',
+          description: 'Validated Module 5 web-engagement datasets available for alignment interpretation.',
+          columns: ['Dataset', 'Status', 'Size KB', 'Uploaded'],
+          rows: uploads.slice(0, 10).map((item: any) => [
+            item.originalName || item.filename || 'Web engagement dataset',
+            item.status || 'active',
+            formatNumber((Number(item.length || 0) / 1024), 1),
+            formatDateTime(item.createdAt),
+          ]),
+        },
+        {
+          key: 'stage-distribution',
+          title: 'Pipeline Stage Distribution',
+          description: 'How the visible alignment population is currently distributed across stage tracking.',
+          columns: ['Stage', 'Rows', 'Share'],
+          rows: stageDistribution.slice(0, 10).map((item) => [item.stage, item.count, formatPercent(item.share, 1)]),
+        },
+      ],
+      exports: [
+        { key: 'shared-leads', label: 'Shared Leads CSV', description: 'Lead-level shared operating table used in the alignment view.', filename: 'm05_shared_leads_report.csv' },
+        { key: 'prioritized-leads', label: 'Prioritized Leads CSV', description: 'Intent-priority lead rows supporting alignment review.', filename: 'm05_prioritized_leads_report.csv' },
+        { key: 'communication-threads', label: 'Communication Threads CSV', description: 'Current cross-team communication and follow-through queue.', filename: 'm05_communication_threads_report.csv' },
+        { key: 'web-datasets', label: 'Web Dataset Library CSV', description: 'Validated Module 5 website-engagement uploads available to users.', filename: 'm05_web_dataset_library_report.csv' },
+      ],
+    },
+    csv: {
+      'shared-leads': {
+        filename: 'm05_shared_leads_report.csv',
+        header: ['lead_id', 'company', 'source', 'owner', 'lead_score', 'intent_score', 'segment'],
+        rows: sharedLeads.map((lead: any) => [
+          lead.lead_id,
+          lead.company || '',
+          lead.source || '',
+          lead.owner || '',
+          Number(lead.lead_score || 0),
+          Number(lead.intent_score || 0),
+          lead.segment || '',
+        ]),
+      },
+      'prioritized-leads': {
+        filename: 'm05_prioritized_leads_report.csv',
+        header: ['lead_id', 'full_name', 'company', 'intent_score', 'intent_segment', 'days_since_last_action'],
+        rows: prioritizedRows.map((row: any) => [
+          row.leadId,
+          row.fullName || [row.firstName, row.lastName].filter(Boolean).join(' '),
+          row.company || '',
+          Number(row.intentScore || 0),
+          row.intentSegment || '',
+          row.daysSinceLastAction ?? '',
+        ]),
+      },
+      'communication-threads': {
+        filename: 'm05_communication_threads_report.csv',
+        header: ['title', 'type', 'status', 'priority', 'message_count', 'last_message_at', 'created_by'],
+        rows: threads.map((thread: any) => [
+          thread.title || '',
+          thread.type || 'general',
+          thread.status || 'open',
+          thread.priority || 'medium',
+          Number(thread.messageCount || 0),
+          formatDateTime(thread.lastMessageAt || thread.updatedAt),
+          thread.createdByName || '',
+        ]),
+      },
+      'web-datasets': {
+        filename: 'm05_web_dataset_library_report.csv',
+        header: ['filename', 'original_name', 'status', 'size_bytes', 'created_at'],
+        rows: uploads.map((item: any) => [
+          item.filename || '',
+          item.originalName || '',
+          item.status || 'active',
+          Number(item.length || 0),
+          formatDateTime(item.createdAt),
+        ]),
+      },
+    },
+  };
+}
+
 async function buildM06Report(workspaceId: string): Promise<ReportBundle> {
   const [leads, campaigns, deals, touches, latestRun] = await Promise.all([
     Module6Lead.find({ project_id: workspaceId, is_archived: { $ne: true } }).lean(),
@@ -788,6 +984,7 @@ async function buildM07Report(workspaceId: string): Promise<ReportBundle> {
 async function buildReport(moduleKey: ModuleKey, workspaceId: string) {
   if (moduleKey === 'm01') return buildM01Report(workspaceId);
   if (moduleKey === 'm02') return buildM02Report(workspaceId);
+  if (moduleKey === 'm05') return buildM05Report(workspaceId);
   if (moduleKey === 'm06') return buildM06Report(workspaceId);
   return buildM07Report(workspaceId);
 }

@@ -31,7 +31,7 @@ export default function Module6Home(){
         >
           <div style={{ padding: 28 }}>
             <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Revenue Insight
+              Attribution Workspace
             </div>
             <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>Revenue Attribution & ROI</h1>
             <div style={{ maxWidth: 820, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
@@ -69,13 +69,13 @@ export default function Module6Home(){
               }}
             >
               <Card onClick={() => go(`#/workspace/:workspaceId/m06/element1`)} title="Dashboard" desc="View key stats and insight summaries." />
-              <Card onClick={() => go(`#/workspace/:workspaceId/m06/roi-calc`)} title="ROI Calculation" desc="Run ROI calculations from existing data." />
-              <Card onClick={() => go(`#/workspace/:workspaceId/m06/roi`)} title="ROI Dashboard" desc="Review attributed revenue and ROI visuals." />
-              <Card onClick={() => go(`#/workspace/:workspaceId/m06/forecast`)} title="Forecasts" desc="Predict revenue and performance trends." />
               <Card onClick={() => go(`#/workspace/:workspaceId/m06/journeys`)} title="Journey Preview" desc="Preview customer journeys built from touch data." />
               <Card onClick={() => go(`#/workspace/:workspaceId/m06/run-attribution`)} title="Run Attribution" desc="Analyze campaign contribution impact." />
+              <Card onClick={() => go(`#/workspace/:workspaceId/m06/roi-calc`)} title="ROI Calculation" desc="Run ROI calculations from existing data." />
+              <Card onClick={() => go(`#/workspace/:workspaceId/m06/roi`)} title="ROI Dashboard" desc="Review attributed revenue and ROI visuals." />
               <Card onClick={() => go(`#/workspace/:workspaceId/m06/allocation`)} title="Allocation Dashboard" desc="Review budget allocation insights." />
-              <Card onClick={() => go(`#/workspace/:workspaceId/m08/m06`)} title="Report Center" desc="Download professional revenue, attribution, campaign, and deal reports." />
+              <Card onClick={() => go(`#/workspace/:workspaceId/m08/m06`)} title="Report Center" desc="Open the written revenue report with commercial summaries and downloadable supporting exports." />
+              <Card onClick={() => go(`#/workspace/:workspaceId/m06/forecast`)} title="Forecasts" desc="Predict revenue and performance trends." />
             </div>
           </div>
 
@@ -89,13 +89,13 @@ export default function Module6Home(){
             }}
           >
             <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(72,177,217,0.12)', color: '#0B2540', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Useful Context
+              Interpretation Notes
             </div>
-            <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>What belongs here</h3>
+            <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>How to work through Module 6</h3>
             <div style={{ display: 'grid', gap: 12 }}>
-              <MiniInfo title="Insight-side only" text="Campaign creation, touch input, lead tables, and deal management were intentionally moved to the workspace Data Hub." />
-              <MiniInfo title="Best use case" text="Use Revenue Insight when you want contribution analysis, forecast views, ROI interpretation, or budget allocation guidance." />
-              <MiniInfo title="Recommended sequence" text="Prepare campaign, touch, and deal data first. Then come here to interpret revenue and attribution outcomes." />
+              <StepCard step="1" title="Prepare operational records first" text="Use the Data Hub campaign, touch, lead, and deal workspaces first when the underlying attribution inputs still need creation, cleanup, or import." />
+              <StepCard step="2" title="Start with dashboard-level reading" text="Open Dashboard, Journey Preview, or Run Attribution first when you need the current revenue picture, customer-path context, or contribution analysis setup." />
+              <StepCard step="3" title="Move into decision screens next" text="Use ROI Calculation and ROI Dashboard for return analysis, Allocation Dashboard for budget interpretation, and Forecasts when the next question is forward-looking revenue movement." />
             </div>
           </div>
         </section>
@@ -106,19 +106,25 @@ export default function Module6Home(){
 
 function Card({ title, desc, onClick }: { title: string, desc: string, onClick: ()=>void }) {
   return (
-    <div 
+    <button
+      type="button"
       onClick={onClick}
       style={{
         padding: '20px',
-        borderRadius: 16,
+        borderRadius: 18,
         cursor: 'pointer',
-        minHeight: 142,
+        minHeight: 180,
+        width: '100%',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
+        textAlign: 'left',
+        appearance: 'none',
+        position: 'relative',
+        zIndex: 1,
         background: 'linear-gradient(145deg, #0f4258 0%, #195b74 50%, #1e6b88 100%)',
-        border: '1px solid rgba(255,255,255,0.18)',
-        boxShadow: '0 8px 20px rgba(0,0,0,0.10)',
+        border: '1px solid rgba(255,255,255,0.14)',
+        boxShadow: '0 10px 24px rgba(13,30,60,0.10)',
         transition: '0.25s ease',
         color: 'white'
       }}
@@ -132,21 +138,29 @@ function Card({ title, desc, onClick }: { title: string, desc: string, onClick: 
       }}
     >
       <div>
-        <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.2px' }}>{title}</div>
+        <div style={{ display: 'inline-flex', padding: '6px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.14)', fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          Insight Page
+        </div>
+        <div style={{ marginTop: 12, fontSize: 21, fontWeight: 900, letterSpacing: '-0.2px', lineHeight: 1.25 }}>{title}</div>
         <div style={{ fontSize: 13, marginTop: 8, opacity: 0.88, lineHeight: 1.5 }}>{desc}</div>
       </div>
-      <div style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.14)', fontSize: 12, fontWeight: 800, alignSelf: 'flex-start' }}>
+      <div style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', padding: '8px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, alignSelf: 'flex-start' }}>
         Open Insight
       </div>
-    </div>
-  );
+    </button>
+  )
 }
 
-function MiniInfo({ title, text }: { title: string; text: string }) {
+function StepCard({ step, title, text }: { step: string; title: string; text: string }) {
   return (
-    <div style={{ borderRadius: 16, padding: 16, border: '1px solid rgba(15,66,88,0.08)', background: 'rgba(255,255,255,0.8)' }}>
-      <div style={{ fontSize: 15, fontWeight: 800, color: '#0B2540', marginBottom: 4 }}>{title}</div>
-      <div style={{ fontSize: 13, color: '#415274', lineHeight: 1.65 }}>{text}</div>
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+      <div style={{ width: 34, height: 34, borderRadius: 12, background: 'linear-gradient(135deg, #0f4258 0%, #2b6f8a 100%)', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 900, flexShrink: 0 }}>
+        {step}
+      </div>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: '#0B2540', marginBottom: 4 }}>{title}</div>
+        <div style={{ fontSize: 13, color: '#415274', lineHeight: 1.7 }}>{text}</div>
+      </div>
     </div>
-  );
+  )
 }

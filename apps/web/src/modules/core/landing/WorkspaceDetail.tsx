@@ -21,10 +21,6 @@ const moduleDisplayNames: Record<string, string> = {
   M09: "Campaign Performance Optimization",
 };
 
-function getInsightModuleLabel(moduleName: string) {
-  return moduleDisplayNames[moduleName] || moduleName;
-}
-
 function useParamsHash() {
   const hash = window.location.hash || "";
   const m = hash.match(/#\/workspace\/(.+)/);
@@ -48,7 +44,6 @@ type InsightCard = {
   desc: string;
   image: string;
   path: (id: string) => string;
-  reportPath?: (id: string) => string;
 };
 
 const dataHubCards: HubCard[] = [
@@ -56,7 +51,7 @@ const dataHubCards: HubCard[] = [
     module: "M01",
     title: "Lead Input",
     desc: "Upload source lead files and prepare raw records used by scoring workflows.",
-    cta: "Go to Data",
+    cta: "Manage",
     kind: "Input",
     entity: "Leads",
     usedIn: ["M01"],
@@ -66,7 +61,7 @@ const dataHubCards: HubCard[] = [
     module: "M01",
     title: "Merged CSVs",
     desc: "Review merged lead datasets before turning them into module 1 lead records.",
-    cta: "Open",
+    cta: "Manage",
     kind: "View",
     entity: "Leads",
     usedIn: ["M01"],
@@ -76,7 +71,7 @@ const dataHubCards: HubCard[] = [
     module: "M02",
     title: "Intent Input Data",
     desc: "Upload and map behavior or intent-related records used by prioritization flows.",
-    cta: "Go to Data",
+    cta: "Manage",
     kind: "Input",
     entity: "Intent Data",
     usedIn: ["M02"],
@@ -96,7 +91,7 @@ const dataHubCards: HubCard[] = [
     module: "M02",
     title: "Intent Upload",
     desc: "Open the direct upload screen for intent-source files when you do not need the wizard flow.",
-    cta: "Open",
+    cta: "Manage",
     kind: "Input",
     entity: "Intent Data",
     usedIn: ["M02"],
@@ -106,7 +101,7 @@ const dataHubCards: HubCard[] = [
     module: "M02",
     title: "Merged CSVs",
     desc: "Review merged datasets used to create module 2 lead and intent-ready records.",
-    cta: "Open",
+    cta: "Manage",
     kind: "View",
     entity: "Intent Data",
     usedIn: ["M02"],
@@ -136,7 +131,7 @@ const dataHubCards: HubCard[] = [
     module: "M06",
     title: "Lead Data",
     desc: "Open the shared lead table used by both attribution and funnel workflows.",
-    cta: "Open",
+    cta: "Manage",
     kind: "View",
     entity: "Leads",
     usedIn: ["M06", "M07"],
@@ -175,7 +170,7 @@ const dataHubCards: HubCard[] = [
   {
     module: "M05",
     title: "Web Engagement Data",
-    desc: "Upload, preview, archive, and manage web engagement CSV datasets used by the Module 5 alignment workspace.",
+    desc: "Upload, preview, archive, and manage web engagement CSV datasets used by the Sales & Marketing Alignment workspace.",
     cta: "Manage",
     kind: "Input",
     entity: "Web Engagement",
@@ -191,7 +186,6 @@ const insightCards: InsightCard[] = [
     desc: "Open module 1 scoring flows and lead quality views.",
     image: "/src/assets/leadscoring.png",
     path: (id) => `#/workspace/${id}/m01`,
-    reportPath: (id) => `#/workspace/${id}/m08/m01`,
   },
   {
     module: "M02",
@@ -199,7 +193,6 @@ const insightCards: InsightCard[] = [
     desc: "Open prioritization and intent-focused outputs for decision making.",
     image: "/src/assets/intentscore.png",
     path: (id) => `#/workspace/${id}/m02`,
-    reportPath: (id) => `#/workspace/${id}/m08/m02`,
   },
   {
     module: "M03",
@@ -221,7 +214,6 @@ const insightCards: InsightCard[] = [
     desc: "Open ROI and attribution outputs for revenue analysis.",
     image: "/src/assets/ROI.png",
     path: (id) => `#/workspace/${id}/m06`,
-    reportPath: (id) => `#/workspace/${id}/m08/m06`,
   },
   {
     module: "M07",
@@ -229,7 +221,6 @@ const insightCards: InsightCard[] = [
     desc: "Open funnel diagnostics and module-level insight entry points.",
     image: "/src/assets/funnel.png",
     path: (id) => `#/workspace/${id}/m07`,
-    reportPath: (id) => `#/workspace/${id}/m08/m07`,
   },
   {
     module: "M09",
@@ -669,24 +660,6 @@ export default function WorkspaceDetail() {
                     <div style={{ height: 6, background: "linear-gradient(90deg, rgba(15,66,88,0.95) 0%, rgba(72,177,217,0.82) 100%)" }} />
                     <div style={{ height: 150, position: "relative" }}>
                       <img alt="insight visual" src={card.image} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      <div
-                        style={{
-                          position: "absolute",
-                          left: 14,
-                          bottom: 12,
-                          padding: "6px 10px",
-                          borderRadius: 999,
-                          background: "rgba(255,255,255,0.92)",
-                          border: "1px solid rgba(15,66,88,0.10)",
-                          color: "var(--header-secondary)",
-                          fontSize: 11,
-                          fontWeight: 800,
-                          letterSpacing: "0.04em",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        {getInsightModuleLabel(card.module)}
-                      </div>
                     </div>
 
                     <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12, flex: 1, background: "linear-gradient(180deg, #ffffff 0%, #fdfefe 100%)" }}>
@@ -694,30 +667,16 @@ export default function WorkspaceDetail() {
                       <div style={{ fontSize: 13, color: palette.slate, lineHeight: 1.7, flex: 1 }}>{card.desc}</div>
                       <div style={{ paddingTop: 8, borderTop: "1px solid rgba(15,66,88,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                         <div style={{ fontSize: 12, color: palette.slate, fontWeight: 700 }}>Insight entry point</div>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                          {card.reportPath ? (
-                            <button
-                              className="btn-outline btn-sm"
-                              style={{ padding: "10px 15px", borderRadius: 12, fontWeight: 800 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openPath(card.reportPath!(id || ""));
-                              }}
-                            >
-                              Report
-                            </button>
-                          ) : null}
-                          <button
-                            className="btn-primary"
-                            style={{ padding: "10px 15px", borderRadius: 12, fontWeight: 800 }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openPath(card.path(id || ""));
-                            }}
-                          >
-                            Open
-                          </button>
-                        </div>
+                        <button
+                          className="btn-primary"
+                          style={{ padding: "10px 15px", borderRadius: 12, fontWeight: 800 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPath(card.path(id || ""));
+                          }}
+                        >
+                          Open
+                        </button>
                       </div>
                     </div>
                   </div>

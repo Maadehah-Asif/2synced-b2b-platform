@@ -6,7 +6,7 @@ import { downloadModuleReportExport, fetchModuleReport, type ModuleReportPayload
 
 function getModuleKeyFromHash() {
   const hash = window.location.hash || '';
-  const match = hash.match(/\/m08\/(m01|m02|m06|m07)(?:\/|$)/i);
+  const match = hash.match(/\/m08\/(m01|m02|m05|m06|m07)(?:\/|$)/i);
   return match ? match[1].toLowerCase() : null;
 }
 
@@ -48,6 +48,15 @@ function getReportTemplate(moduleKey: string | null) {
         snapshotHeading: '2. Prioritization Snapshot',
         findingsHeading: '3. Intent Findings',
         recommendationsHeading: '4. Priority Actions',
+        appendixPrefix: 'Appendix',
+      };
+    case 'm05':
+      return {
+        coverLabel: 'Alignment Management Report',
+        summaryHeading: '1. Alignment Summary',
+        snapshotHeading: '2. Alignment Performance Snapshot',
+        findingsHeading: '3. Alignment Findings',
+        recommendationsHeading: '4. Alignment Actions',
         appendixPrefix: 'Appendix',
       };
     case 'm06':

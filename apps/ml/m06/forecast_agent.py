@@ -13,7 +13,8 @@ CSV_NAME = "full_marketing_forecast_dataset.csv"
 
 def _load_dataset() -> pd.DataFrame:
     here = os.path.dirname(os.path.abspath(__file__))
-    csv_path = os.path.join(here, CSV_NAME)
+    repo_root = os.path.dirname(os.path.dirname(here))
+    csv_path = os.path.join(repo_root, "api", "src", "modules", "m06", "data", CSV_NAME)
     df = pd.read_csv(csv_path)
 
     # Basic cleaning and type coercion

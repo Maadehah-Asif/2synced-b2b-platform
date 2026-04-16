@@ -6,6 +6,7 @@ import FunnelStageHistory from './models/StageHistory.js';
 import StageHistory from './models/StageHistory.js';
 import Interaction from './models/Interaction.js';
 import { Campaign } from '../m06/models/Campaign.js';
+import { getM07ForecastFilters, runM07Forecast } from './forecasting.js';
 
 const STAGE_STATUSES = new Set(['active', 'completed', 'dropped']);
 const INTERACTION_TYPES = new Set(['call', 'email', 'meeting', 'demo']);
@@ -1082,4 +1083,35 @@ export async function archiveStage(req: Request, res: Response){
 
 export async function deleteStagePermanent(req: Request, res: Response){
   try{ const id = String(req.params.id || ''); if(!id) return res.status(400).json({ error: 'id required' }); await StageHistory.deleteOne({ _id: id }); return res.json({ ok: true }); }catch(e){ console.error('[m07.deleteStagePermanent]', e); return res.status(500).json({ error: 'internal' }); }
+}
+
+export async function getForecastOptions(_req: Request, res: Response) {
+  try {
+    return res.json({ ok: true, ...getM07ForecastFilters() });
+  } catch (e) {
+    console.error('[m07.getForecastOptions]', e);
+    return res.status(500).json({ error: 'forecast_options_failed' });
+  }
+}
+
+export async function forecastFunnel(req: Request, res: Response) {
+  try {
+    const body = (req.body || {}) as Record<string, unknown>;
+    const source = typeof body.source === 'string' && body.source.trim() ? body.source.trim() : undefined;
+    const stage = typeof body.stage === 'string' && body.stage.trim() ? body.stage.trim() : undefined;
+    const horizonMonths = Number.isFinite(Number(body.horizonMonths)) ? Number(body.horizonMonths) : 3;
+    const request = {
+      ...(source ? { source } : {}),
+      ...(stage ? { stage } : {}),
+      horizonMonths,
+    };
+    return res.json(runM07Forecast(request));
+  } catch (e: any) {
+    console.error('[m07.forecastFunnel]', e);
+    const message = typeof e?.message === 'string' ? e.message : 'internal';
+    if (message.startsWith('missing_dataset:')) {
+      return res.status(400).json({ error: 'missing_dataset', path: message.replace('missing_dataset:', '') });
+    }
+    return res.status(500).json({ error: 'forecast_failed' });
+  }
 }

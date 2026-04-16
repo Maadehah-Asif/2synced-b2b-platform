@@ -11,6 +11,20 @@ const palette = {
   accent: "#0f4258",
 };
 
+const moduleDisplayNames: Record<string, string> = {
+  M01: "Lead Quality & Scoring",
+  M02: "Intent Signals",
+  M03: "Conversation AI",
+  M05: "Sales & Marketing Alignment",
+  M06: "Revenue Insight",
+  M07: "Funnel Insight",
+  M09: "Campaign Performance Optimization",
+};
+
+function getInsightModuleLabel(moduleName: string) {
+  return moduleDisplayNames[moduleName] || moduleName;
+}
+
 function useParamsHash() {
   const hash = window.location.hash || "";
   const m = hash.match(/#\/workspace\/(.+)/);
@@ -34,6 +48,7 @@ type InsightCard = {
   desc: string;
   image: string;
   path: (id: string) => string;
+  reportPath?: (id: string) => string;
 };
 
 const dataHubCards: HubCard[] = [
@@ -166,6 +181,7 @@ const insightCards: InsightCard[] = [
     desc: "Open module 1 scoring flows and lead quality views.",
     image: "/src/assets/leadscoring.png",
     path: (id) => `#/workspace/${id}/m01`,
+    reportPath: (id) => `#/workspace/${id}/m08/m01`,
   },
   {
     module: "M02",
@@ -173,6 +189,7 @@ const insightCards: InsightCard[] = [
     desc: "Open prioritization and intent-focused outputs for decision making.",
     image: "/src/assets/intentscore.png",
     path: (id) => `#/workspace/${id}/m02`,
+    reportPath: (id) => `#/workspace/${id}/m08/m02`,
   },
   {
     module: "M03",
@@ -194,6 +211,7 @@ const insightCards: InsightCard[] = [
     desc: "Open ROI and attribution outputs for revenue analysis.",
     image: "/src/assets/ROI.png",
     path: (id) => `#/workspace/${id}/m06`,
+    reportPath: (id) => `#/workspace/${id}/m08/m06`,
   },
   {
     module: "M07",
@@ -201,6 +219,7 @@ const insightCards: InsightCard[] = [
     desc: "Open funnel diagnostics and module-level insight entry points.",
     image: "/src/assets/funnel.png",
     path: (id) => `#/workspace/${id}/m07`,
+    reportPath: (id) => `#/workspace/${id}/m08/m07`,
   },
   {
     module: "M09",
@@ -219,7 +238,6 @@ export default function WorkspaceDetail() {
   const [memberCount, setMemberCount] = useState<number>(0);
   const [entityFilter, setEntityFilter] = useState<string>("All data");
   const [moduleFilter, setModuleFilter] = useState<string>("All modules");
-  const [actionFilter, setActionFilter] = useState<string>("All actions");
 
   useEffect(() => {
     (async () => {
@@ -271,14 +289,13 @@ export default function WorkspaceDetail() {
   const moduleOptions = [
     "All modules",
     ...Array.from(new Set([...dataHubCards.flatMap((card) => card.usedIn), "M03", "M05", "M09"]))
-      .sort((a, b) => Number(a.replace(/\D/g, "")) - Number(b.replace(/\D/g, ""))),
+      .sort((a, b) => Number(a.replace(/\D/g, "")) - Number(b.replace(/\D/g, "")))
+      .map((module) => moduleDisplayNames[module] || module),
   ];
-  const actionOptions = ["All actions", ...Array.from(new Set(dataHubCards.map((card) => card.kind).filter(Boolean) as string[]))];
 
   const visibleHubCards = dataHubCards.filter((card) => {
     if (entityFilter !== "All data" && card.entity !== entityFilter) return false;
-    if (moduleFilter !== "All modules" && !card.usedIn.includes(moduleFilter)) return false;
-    if (actionFilter !== "All actions" && card.kind !== actionFilter) return false;
+    if (moduleFilter !== "All modules" && !card.usedIn.some((module) => moduleDisplayNames[module] === moduleFilter)) return false;
     return true;
   });
 
@@ -463,7 +480,7 @@ export default function WorkspaceDetail() {
                   style={{
                     marginTop: 18,
                     display: "grid",
-                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                     gap: 10,
                   }}
                 >
@@ -520,33 +537,6 @@ export default function WorkspaceDetail() {
                       ))}
                     </select>
                   </label>
-
-                  <label style={{ display: "grid", gap: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.72)" }}>
-                      Action
-                    </span>
-                    <select
-                      value={actionFilter}
-                      onChange={(e) => setActionFilter(e.target.value)}
-                      style={{
-                        width: "100%",
-                        borderRadius: 12,
-                        border: "1px solid rgba(255,255,255,0.16)",
-                        background: "rgba(255,255,255,0.12)",
-                        color: "#fff",
-                        padding: "10px 12px",
-                        fontSize: 13,
-                        fontWeight: 700,
-                        outline: "none",
-                      }}
-                    >
-                      {actionOptions.map((option) => (
-                        <option key={option} value={option} style={{ color: palette.ink }}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
                 </div>
               </div>
 
@@ -573,26 +563,16 @@ export default function WorkspaceDetail() {
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        <div style={{ display: "inline-flex", alignItems: "center", padding: "5px 10px", borderRadius: 999, background: "rgba(15,66,88,0.10)", color: palette.accent, fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                          {card.entity}
-                        </div>
-                        {card.usedIn.map((module) => (
-                          <div key={`${card.title}-${module}`} style={{ display: "inline-flex", alignItems: "center", padding: "5px 9px", borderRadius: 999, background: "rgba(72,177,217,0.10)", color: palette.slate, fontSize: 11, fontWeight: 700 }}>
-                            {module}
-                          </div>
-                        ))}
+                      <div style={{ display: "inline-flex", alignItems: "center", padding: "5px 10px", borderRadius: 999, background: "rgba(15,66,88,0.10)", color: palette.accent, fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                        {card.entity}
                       </div>
-                      {card.kind && (
-                        <div style={{ display: "inline-flex", alignItems: "center", padding: "5px 9px", borderRadius: 999, background: "rgba(72,177,217,0.10)", color: palette.slate, fontSize: 11, fontWeight: 700 }}>
-                          {card.kind}
-                        </div>
-                      )}
                     </div>
                     <div style={{ fontSize: 18, fontWeight: 900, color: palette.ink, lineHeight: 1.3 }}>{card.title}</div>
                     <div style={{ fontSize: 13, color: palette.slate, lineHeight: 1.7, flex: 1 }}>{card.desc}</div>
                     <div style={{ paddingTop: 8, borderTop: "1px solid rgba(15,66,88,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                      <div style={{ fontSize: 12, color: palette.slate, fontWeight: 700 }}>Used in {card.usedIn.join(", ")}</div>
+                      <div style={{ fontSize: 12, color: palette.slate, fontWeight: 700 }}>
+                        Used in {card.usedIn.map((module) => moduleDisplayNames[module] || module).join(", ")}
+                      </div>
                       <button
                         className="btn-primary"
                         style={{ padding: "9px 13px", borderRadius: 12, fontWeight: 800 }}
@@ -695,7 +675,7 @@ export default function WorkspaceDetail() {
                           textTransform: "uppercase",
                         }}
                       >
-                        {card.module}
+                        {getInsightModuleLabel(card.module)}
                       </div>
                     </div>
 
@@ -704,16 +684,30 @@ export default function WorkspaceDetail() {
                       <div style={{ fontSize: 13, color: palette.slate, lineHeight: 1.7, flex: 1 }}>{card.desc}</div>
                       <div style={{ paddingTop: 8, borderTop: "1px solid rgba(15,66,88,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                         <div style={{ fontSize: 12, color: palette.slate, fontWeight: 700 }}>Insight entry point</div>
-                        <button
-                          className="btn-primary"
-                          style={{ padding: "10px 15px", borderRadius: 12, fontWeight: 800 }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openPath(card.path(id || ""));
-                          }}
-                        >
-                          Open
-                        </button>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                          {card.reportPath ? (
+                            <button
+                              className="btn-outline btn-sm"
+                              style={{ padding: "10px 15px", borderRadius: 12, fontWeight: 800 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openPath(card.reportPath!(id || ""));
+                              }}
+                            >
+                              Report
+                            </button>
+                          ) : null}
+                          <button
+                            className="btn-primary"
+                            style={{ padding: "10px 15px", borderRadius: 12, fontWeight: 800 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openPath(card.path(id || ""));
+                            }}
+                          >
+                            Open
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>

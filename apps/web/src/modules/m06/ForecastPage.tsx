@@ -48,13 +48,8 @@ function formatNumber(v: number | null | undefined) {
 
 export default function ForecastPage() {
   const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
-  const BASIC_CHANNELS: Array<{ id: string; name: string }> = [
-    { id: 'email', name: 'Email' },
-    { id: 'ads', name: 'Ads' },
-    { id: 'linkedin', name: 'LinkedIn' },
-    { id: 'webinar', name: 'Webinar' },
-  ];
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string>(BASIC_CHANNELS[0].id);
+  const [channels, setChannels] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
   const [windowKey, setWindowKey] = useState<ForecastWindowKey>('3m');
   const [multiplier, setMultiplier] = useState<number>(1.0);
 
@@ -62,10 +57,28 @@ export default function ForecastPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AgentResult | null>(null);
 
-  // No remote fetch: use fixed basic channels only for now
   useEffect(() => {
-    // Ensure a default is set
-    if (!selectedCampaignId) setSelectedCampaignId(BASIC_CHANNELS[0].id);
+    fetch(`${API_BASE}/m06/forecast/options`)
+      .then((res) => res.json())
+      .then((json) => {
+        const items = Array.isArray(json?.channels)
+          ? json.channels.map((channel: string) => ({
+              id: channel,
+              name: channel.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
+            }))
+          : [];
+        setChannels(items);
+        if (!selectedCampaignId && items[0]) setSelectedCampaignId(items[0].id);
+      })
+      .catch(() => {
+        const fallback = [
+          { id: 'email', name: 'Email' },
+          { id: 'webinar', name: 'Webinar' },
+          { id: 'cold_outreach', name: 'Cold Outreach' },
+        ];
+        setChannels(fallback);
+        if (!selectedCampaignId) setSelectedCampaignId(fallback[0].id);
+      });
   }, []);
 
   async function generateForecast() {
@@ -214,7 +227,7 @@ export default function ForecastPage() {
                     onChange={(e) => setSelectedCampaignId(e.target.value)}
                     style={{ minWidth: 220 }}
                   >
-                    {BASIC_CHANNELS.map((c) => (
+                    {channels.map((c) => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>

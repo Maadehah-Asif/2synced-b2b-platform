@@ -13,7 +13,7 @@ import Lead from '../m01/models/Lead.js';
 import { CHANNEL_SET } from './constants.js';
 import { Module6Lead } from './models/Module6Lead.js';
 import FunnelLead from '../m07/models/FunnelLead.js';
-import { runForecast } from './forecasting.js';
+import { getForecastChannels, runForecast } from './forecasting.js';
 import { invokePythonAgent, invokePythonAgentByChannel, type ForecastResult as AgentForecastResult } from './pythonAgentInvoker.js';
 
 // Helper: get project id from query/body (accept projectId or workspace/workspaceId)
@@ -3666,6 +3666,15 @@ export async function forecast(req: Request, res: Response) {
     return res.json(result);
   } catch (e) {
     console.error('[m06/forecast-csv]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+export async function forecastOptions(_req: Request, res: Response) {
+  try {
+    return res.json({ ok: true, channels: getForecastChannels() });
+  } catch (e) {
+    console.error('[m06/forecast-options]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }

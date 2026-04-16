@@ -34,6 +34,7 @@ import {
 	roiDashboard,
 	roiByRun,
 	forecast,
+	forecastOptions,
 	forecastViaAgent,
 	latestRun,
 	runList,
@@ -76,6 +77,7 @@ router.get('/run/:id/results', getRunResults);
 router.get('/roi', roiDashboard);
 router.get('/roi-by-run', roiByRun);
 router.post('/forecast', forecast);
+router.get('/forecast/options', forecastOptions);
 router.post('/forecast-agent', forecastViaAgent);
 router.get('/latest-run', latestRun);
 router.get('/run-list', runList);

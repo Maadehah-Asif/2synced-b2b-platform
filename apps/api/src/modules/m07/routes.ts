@@ -10,6 +10,8 @@ import {
   updateInteraction,
   archiveInteraction,
   deleteInteractionPermanent,
+  getForecastOptions,
+  forecastFunnel,
 } from './controllers.js';
 import {
   createStage,
@@ -51,5 +53,7 @@ router.get('/interactions/:id', getInteraction);
 router.put('/interactions/:id', updateInteraction);
 router.post('/interactions/:id/archive', archiveInteraction);
 router.delete('/interactions/:id/permanent', deleteInteractionPermanent);
+router.get('/forecast/options', getForecastOptions);
+router.post('/forecast', forecastFunnel);
 
 export default router;

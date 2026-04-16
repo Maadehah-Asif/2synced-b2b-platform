@@ -18,12 +18,19 @@ import Module6Dropdown from './modules/m06/Module6Dropdown'
 import Module6Main from './modules/m06/Module6Main'
 import Module6Home from './modules/m06/Module6Home'
 import Module1Home from './modules/m01/Module1Home'
+import LeadScoreForecast from './modules/m01/LeadScoreForecast'
 import Module2Home from './modules/m02/Module2Home'
 import Module3Home from './modules/m03/Module3Home'
 import Module5Home from './modules/m05/Module5Home'
 import Module7Home from './modules/m07/Module7Home'
 import Module9Home from './modules/m09/Module9Home'
 import FunnelOverview from './modules/m07/FunnelOverview'
+import LeakageAnalysis from './modules/m07/LeakageAnalysis'
+import LeadJourneyExplorer from './modules/m07/LeadJourneyExplorer'
+import FatigueAnalysis from './modules/m07/FatigueAnalysis'
+import RecommendationsCenter from './modules/m07/RecommendationsCenter'
+import FunnelTrends from './modules/m07/FunnelTrends'
+import FunnelForecast from './modules/m07/FunnelForecast'
 import Module7StageWorkspace from './modules/m07/Module7StageWorkspace'
 import StageDetail from './modules/m07/StageDetail'
 import Module7InteractionWorkspace from './modules/m07/Module7InteractionWorkspace'
@@ -48,6 +55,7 @@ import LeadsListM02 from './modules/m02/LeadsList'
 import MergeCSVM02 from './modules/m02/MergeCSV'
 import ForecastPage from './modules/m06/ForecastPage'
 import UploadWizardM02 from './modules/m02/UploadWizard'
+import ModuleReportPage from './modules/m08/ModuleReportPage'
 
 function App() {
   const [route, setRoute] = useState<string>(window.location.hash || '#/login')
@@ -78,6 +86,7 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m06/forecast')) return <ForecastPage />
   // Module 6 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m06') && !route.includes('/m06/')) return <Module6Home />
+  if (route.startsWith('#/workspace/') && route.includes('/m08/')) return <ModuleReportPage />
   if (route.startsWith('#/workspace/') && route.includes('/m06/campaigns/manage')) return <Module6Campaigns />
   if (route.startsWith('#/workspace/') && route.includes('/m06/campaigns')) return <Module6Campaigns />
   if (route.startsWith('#/workspace/') && route.includes('/m06/touch-workspace')) return <Module6TouchWorkspace />
@@ -94,6 +103,7 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m01/upload/preview')) return <UploadPreview />
   if (route.startsWith('#/workspace/') && route.includes('/m01/merged/preview')) return <UploadPreview />
   if (route.startsWith('#/workspace/') && route.includes('/m01/leads/preview')) return <UploadPreview />
+  if (route.startsWith('#/workspace/') && route.includes('/m01/forecast')) return <LeadScoreForecast />
   if (route.startsWith('#/workspace/') && route.includes('/m01/merge-columns')) return <MergeCSV />
   if (route.startsWith('#/workspace/') && route.includes('/m01/merged')) return <MergedList />
   if (route.startsWith('#/workspace/') && route.includes('/m01/leads')) return <LeadsList />
@@ -121,6 +131,12 @@ function App() {
   // Module 9 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m09') && !route.includes('/m09/')) return <Module9Home />
   if (route.startsWith('#/workspace/') && route.includes('/m07/overview')) return <FunnelOverview />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/forecast')) return <FunnelForecast />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/leakage')) return <LeakageAnalysis />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/journey/')) return <LeadJourneyExplorer />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/fatigue')) return <FatigueAnalysis />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/recommendations')) return <RecommendationsCenter />
+  if (route.startsWith('#/workspace/') && route.includes('/m07/trends')) return <FunnelTrends />
   // More specific m07 routes first so upload/list resolve before detail
   if (route.startsWith('#/workspace/') && route.includes('/m07/leads/upload')) return <Module6Leads />
   if (route.startsWith('#/workspace/') && route.includes('/m07/leads') && !route.includes('/m07/leads/')) return <Module6Leads />

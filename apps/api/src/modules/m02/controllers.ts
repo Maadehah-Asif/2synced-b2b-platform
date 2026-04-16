@@ -8,6 +8,7 @@ import { Readable } from 'stream';
 import { CampaignTouch } from '../m06/models/CampaignTouch.js';
 import M2LeadIntentSummary from './models/M2LeadIntentSummary.js';
 import M2LeadBehaviorEvent from './models/M2LeadBehaviorEvent.js';
+import { getM02ForecastFilters, runM02DatasetForecast } from './forecasting.js';
 
 type IntentSegment = 'COLD' | 'WARM' | 'HOT' | 'BLAZING';
 type BehaviorEventType = 'email_open' | 'email_click' | 'reply' | 'website_visit' | 'linkedin_view' | 'call' | 'demo_request';
@@ -1025,5 +1026,36 @@ export async function getBehaviorTimelineByLead(req: Request, res: Response) {
   } catch (e:any) {
     console.error('[m02.getBehaviorTimelineByLead]', e);
     return res.status(500).json({ ok: false, error: 'internal' });
+  }
+}
+
+export async function getForecastDatasetOptions(_req: Request, res: Response) {
+  try {
+    return res.json({ ok: true, ...getM02ForecastFilters() });
+  } catch (e) {
+    console.error('[m02.getForecastDatasetOptions]', e);
+    return res.status(500).json({ error: 'forecast_options_failed' });
+  }
+}
+
+export async function intentForecastDataset(req: Request, res: Response) {
+  try {
+    const body = (req.body || {}) as Record<string, unknown>;
+    const segment = typeof body.segment === 'string' && body.segment.trim() ? body.segment.trim() : undefined;
+    const industry = typeof body.industry === 'string' && body.industry.trim() ? body.industry.trim() : undefined;
+    const horizonMonths = Number.isFinite(Number(body.horizonMonths)) ? Number(body.horizonMonths) : 3;
+    const request = {
+      ...(segment ? { segment } : {}),
+      ...(industry ? { industry } : {}),
+      horizonMonths,
+    };
+    return res.json(runM02DatasetForecast(request));
+  } catch (e: any) {
+    console.error('[m02.intentForecastDataset]', e);
+    const message = typeof e?.message === 'string' ? e.message : 'internal';
+    if (message.startsWith('missing_dataset:')) {
+      return res.status(400).json({ error: 'missing_dataset', path: message.replace('missing_dataset:', '') });
+    }
+    return res.status(500).json({ error: 'forecast_failed' });
   }
 }

@@ -59,9 +59,10 @@ export function loadDatasetOnce(): CampaignMonth[] {
 
   const csvPath = path.join(
     process.cwd(),
-    'apps',
-    'ml',
+    'src',
+    'modules',
     'm06',
+    'data',
     'full_marketing_forecast_dataset.csv',
   );
 
@@ -102,6 +103,17 @@ export function loadDatasetOnce(): CampaignMonth[] {
   });
 
   return cachedData;
+}
+
+export function getForecastChannels(): string[] {
+  const data = loadDatasetOnce();
+  return Array.from(
+    new Set(
+      data
+        .map((row) => String(row.channel || '').trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ).sort();
 }
 
 export function runForecast(input: ForecastRequest): ForecastResult {

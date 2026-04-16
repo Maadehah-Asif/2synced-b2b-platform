@@ -8,7 +8,9 @@ import workspaceRouter from "./modules/core/workspaces/routes.js";
 import m01Router from "./modules/m01/routes.js";
 import m06Router from "./modules/m06/routes.js";
 import m02Router from "./modules/m02/routes.js";
+import m04Router from "./modules/m04/routes.js";
 import m07Router from "./modules/m07/routes.js";
+import m08Router from "./modules/m08/routes.js";
 
 const app = express();
 app.use(cors());
@@ -26,7 +28,9 @@ app.use("/m01", m01Router);
 app.use("/m06", m06Router);
 // Module 02 (intent scoring)
 app.use("/m02", m02Router);
+app.use("/m04", m04Router);
 app.use("/m07", m07Router);
+app.use("/m08", m08Router);
 
 app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
   if (

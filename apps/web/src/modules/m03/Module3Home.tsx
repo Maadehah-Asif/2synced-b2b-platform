@@ -7,7 +7,7 @@ export default function Module3Home() {
       <main className="page-root" style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix="" label="Back" />
-          <h2 style={{ marginTop: 16 }}>Module 3</h2>
+          <h2 style={{ marginTop: 16 }}>Conversation Intelligence</h2>
         </div>
 
         <section
@@ -23,11 +23,11 @@ export default function Module3Home() {
         >
           <div style={{ padding: 28 }}>
             <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              M03
+              Conversation Intelligence
             </div>
             <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>Conversation Intelligence</h1>
             <div style={{ maxWidth: 780, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
-              Module 3 is the interpretation layer for conversation data. It should help teams understand thread sentiment, objection patterns, and response quality once messages and interaction history are already available in the workspace.
+              Conversation Intelligence is the interpretation layer for conversation data. It should help teams understand thread sentiment, objection patterns, and response quality once messages and interaction history are already available in the workspace.
             </div>
           </div>
         </section>
@@ -54,7 +54,7 @@ export default function Module3Home() {
             </div>
             <h3 style={{ margin: '14px 0 12px', fontSize: 28, color: '#0B2540' }}>What this module should surface</h3>
             <div style={{ display: 'grid', gap: 12 }}>
-              <InfoCard title="Conversation quality" body="Use M03 to understand whether outreach, replies, and ongoing threads are moving conversations forward or creating friction." />
+              <InfoCard title="Conversation quality" body="Use Conversation Intelligence to understand whether outreach, replies, and ongoing threads are moving conversations forward or creating friction." />
               <InfoCard title="Sentiment and objection patterns" body="This is the right place to surface recurring objections, negative tone shifts, and signals that deals or leads may be cooling off." />
               <InfoCard title="Decision support" body="Conversation analysis should help sales and marketing teams decide which accounts need escalation, follow-up, or message adjustment next." />
             </div>
@@ -72,10 +72,10 @@ export default function Module3Home() {
             <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(72,177,217,0.12)', color: '#0B2540', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               Current Status
             </div>
-            <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>How to use M03 for now</h3>
+            <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>How to use Conversation Intelligence for now</h3>
             <div style={{ display: 'grid', gap: 12 }}>
               <StepCard step="1" title="Prepare source records first" text="Keep lead, funnel, and interaction data maintained in the workspace-level Data Hub and the operational module screens." />
-              <StepCard step="2" title="Use this page as the insight landing" text="This module home defines the role of conversation intelligence in the workspace until more dedicated M03 screens are added." />
+              <StepCard step="2" title="Use this page as the insight landing" text="This module home defines the role of conversation intelligence in the workspace until more dedicated conversation screens are added." />
               <StepCard step="3" title="Expand here later" text="When conversation dashboards or summaries are introduced, this page is now the correct place to link and organize them." />
             </div>
           </div>

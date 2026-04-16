@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { uploadFile, listUploads, previewUpload, previewMerged, listMergedFiles, getMergedFileDetails, getUploadDetails, deleteUpload, restoreUpload, permanentDeleteUpload, mergeUploads, checkUploadsConsistency, fixUploadRecord, createMappingTemplate, listMappingTemplates, getMappingTemplate, updateMappingTemplate, deleteMappingTemplate, listLeadsCodes, getLeadsCodeDetails, previewLeadsCode, generateLeadsCode, downloadLeadsCode } from "./controllers.js";
+import { uploadFile, listUploads, previewUpload, previewMerged, listMergedFiles, getMergedFileDetails, getUploadDetails, deleteUpload, restoreUpload, permanentDeleteUpload, mergeUploads, checkUploadsConsistency, fixUploadRecord, createMappingTemplate, listMappingTemplates, getMappingTemplate, updateMappingTemplate, deleteMappingTemplate, listLeadsCodes, getLeadsCodeDetails, previewLeadsCode, generateLeadsCode, downloadLeadsCode, getForecastOptions, forecastLeadQuality } from "./controllers.js";
 import { attachOptionalUser } from "../core/auth/middleware.js";
 
 const router = Router();
@@ -48,5 +48,7 @@ router.get('/leads/:id/preview', previewLeadsCode);
 router.get('/leads/:id/download', downloadLeadsCode);
 router.get('/leads/:id', getLeadsCodeDetails);
 router.post('/leads/generate', generateLeadsCode);
+router.get('/forecast/options', getForecastOptions);
+router.post('/forecast', forecastLeadQuality);
 
 export default router;

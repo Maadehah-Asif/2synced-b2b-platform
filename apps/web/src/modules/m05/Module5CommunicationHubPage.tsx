@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type DragEvent, type FormEvent } from 'react'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'
 import {
   archiveCommunicationThread,
@@ -42,6 +42,9 @@ export default function Module5CommunicationHubPage() {
   const [replyText, setReplyText] = useState('')
   const [savingReply, setSavingReply] = useState(false)
   const [savingMeta, setSavingMeta] = useState<'status' | 'priority' | 'archive' | 'delete' | null>(null)
+  const [dragState, setDragState] = useState<{ threadId: string; fromStatus: CommunicationThreadStatus } | null>(null)
+  const [dragTargetStatus, setDragTargetStatus] = useState<CommunicationThreadStatus | null>(null)
+  const [dragError, setDragError] = useState<string | null>(null)
   const [showComposer, setShowComposer] = useState(false)
   const [creating, setCreating] = useState(false)
   const [memberOptions, setMemberOptions] = useState<WorkspaceMemberOption[]>([])
@@ -193,6 +196,12 @@ export default function Module5CommunicationHubPage() {
     return { open, inProgress, resolved }
   }, [threads])
 
+  const groupedThreads = useMemo(() => ({
+    open: threads.filter((item) => item.status === 'open'),
+    in_progress: threads.filter((item) => item.status === 'in_progress'),
+    resolved: threads.filter((item) => item.status === 'resolved'),
+  }), [threads])
+
   const memberSearchResults = useMemo(() => {
     const selectedIds = new Set(createForm.participants.map((participant) => participant.userId || participant.email || participant.name))
     const query = participantQuery.trim().toLowerCase()
@@ -316,6 +325,73 @@ export default function Module5CommunicationHubPage() {
     }
   }
 
+  async function handleDropStatusChange(threadId: string, nextStatus: CommunicationThreadStatus) {
+    if (!workspaceId) return
+
+    const targetThread = threads.find((item) => item.id === threadId)
+    if (!targetThread || !targetThread.permissions.canChangeStatus) return
+    if (targetThread.status === nextStatus) return
+
+    const previousThread = targetThread
+    setDragError(null)
+
+    const optimisticThread = { ...targetThread, status: nextStatus }
+    setThreads((current) => current.map((item) => item.id === threadId ? optimisticThread : item))
+    setDetail((current) => current && current.thread.id === threadId
+      ? { ...current, thread: optimisticThread }
+      : current)
+
+    try {
+      const result = await updateCommunicationThreadStatus(API_URL, workspaceId, threadId, nextStatus)
+      if (!result.ok || !result.thread) {
+        setThreads((current) => current.map((item) => item.id === threadId ? previousThread : item))
+        setDetail((current) => current && current.thread.id === threadId
+          ? { ...current, thread: previousThread }
+          : current)
+        setDragError(result.error || 'The thread could not be moved to that status.')
+        return
+      }
+
+      setThreads((current) => current.map((item) => item.id === threadId ? result.thread! : item))
+      setDetail((current) => current && current.thread.id === threadId
+        ? { ...current, thread: result.thread! }
+        : current)
+    } catch {
+      setThreads((current) => current.map((item) => item.id === threadId ? previousThread : item))
+      setDetail((current) => current && current.thread.id === threadId
+        ? { ...current, thread: previousThread }
+        : current)
+      setDragError('The thread could not be moved right now. Please try again.')
+    } finally {
+      setDragState(null)
+      setDragTargetStatus(null)
+    }
+  }
+
+  function handleThreadDragStart(thread: CommunicationThread) {
+    if (!thread.permissions.canChangeStatus) return
+    setDragError(null)
+    setDragState({ threadId: thread.id, fromStatus: thread.status })
+  }
+
+  function handleThreadDragEnd() {
+    setDragState(null)
+    setDragTargetStatus(null)
+  }
+
+  function handleStatusSectionDragOver(event: DragEvent<HTMLElement>, status: CommunicationThreadStatus) {
+    if (!dragState) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    setDragTargetStatus(status)
+  }
+
+  function handleStatusSectionDrop(event: DragEvent<HTMLElement>, status: CommunicationThreadStatus) {
+    event.preventDefault()
+    if (!dragState) return
+    void handleDropStatusChange(dragState.threadId, status)
+  }
+
   function handleAddParticipant(member: WorkspaceMemberOption) {
     setCreateForm((current) => ({
       ...current,
@@ -434,6 +510,8 @@ export default function Module5CommunicationHubPage() {
         </div>
       </section>
 
+      {dragError && <section style={subtleNotice}>{dragError}</section>}
+
       {error && <section style={errorNotice}>{error}</section>}
 
       <section style={layoutGrid}>
@@ -503,25 +581,83 @@ export default function Module5CommunicationHubPage() {
           )}
 
           {listState === 'ready' && (
-            <div style={threadList}>
-              {threads.map((thread) => (
-                <button key={thread.id} type="button" onClick={() => setSelectedId(thread.id)} style={{ ...threadItem, ...(selectedId === thread.id ? threadItemActive : null) }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', textAlign: 'left', lineHeight: 1.45 }}>{thread.title}</div>
-                    <span style={priorityBadge(thread.priority)}>{formatThreadPriority(thread.priority)}</span>
+            <div style={threadGroupList}>
+              {STATUS_OPTIONS.map((status) => (
+                <section
+                  key={status}
+                  style={{
+                    ...threadSection,
+                    ...(dragState && dragTargetStatus === status ? threadSectionActiveDrop : null),
+                  }}
+                  onDragOver={(event) => handleStatusSectionDragOver(event, status)}
+                  onDrop={(event) => handleStatusSectionDrop(event, status)}
+                  onDragLeave={() => {
+                    if (dragTargetStatus === status) setDragTargetStatus(null)
+                  }}
+                >
+                  <div style={threadSectionHeader}>
+                    <div style={threadSectionLabel}>{formatThreadStatus(status)}</div>
+                    <div style={threadSectionCount}>{groupedThreads[status].length}</div>
                   </div>
-                  <div style={threadMetaRow}>
-                    <span style={typePill}>{formatThreadType(thread.type)}</span>
-                    <span style={statusBadge(thread.status)}>{formatThreadStatus(thread.status)}</span>
-                    {thread.archivedAt && <span style={archivedBadge}>Archived</span>}
+                  <div style={threadSectionDivider} />
+                  <div style={threadSectionBody}>
+                    {groupedThreads[status].length === 0 ? (
+                      <div style={threadSectionEmpty}>No threads here</div>
+                    ) : (
+                      groupedThreads[status].map((thread) => (
+                        <div
+                          key={thread.id}
+                          role="button"
+                          tabIndex={0}
+                          draggable={thread.permissions.canChangeStatus}
+                          onClick={() => setSelectedId(thread.id)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              setSelectedId(thread.id)
+                            }
+                          }}
+                          onDragStart={() => handleThreadDragStart(thread)}
+                          onDragEnd={handleThreadDragEnd}
+                          style={{
+                            ...threadItem,
+                            ...threadStatusAccent(thread.status),
+                            ...(selectedId === thread.id ? threadItemActive : null),
+                            ...(dragState?.threadId === thread.id ? draggedThreadItem : null),
+                            ...(!thread.permissions.canChangeStatus ? threadItemLocked : null),
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+                            <div style={{ display: 'grid', gap: 6 }}>
+                              <div style={threadTitleRow}>
+                                <span style={statusDot(thread.status)} />
+                                <div style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', textAlign: 'left', lineHeight: 1.45 }}>{thread.title}</div>
+                              </div>
+                              <div style={threadMetaRow}>
+                                <span style={typePill}>{formatThreadType(thread.type)}</span>
+                                <span style={statusBadge(thread.status)}>{formatThreadStatus(thread.status)}</span>
+                                {thread.archivedAt && <span style={archivedBadge}>Archived</span>}
+                                {!thread.permissions.canChangeStatus && <span style={lockedBadge}>Locked</span>}
+                              </div>
+                            </div>
+                            <span style={priorityBadge(thread.priority)}>{formatThreadPriority(thread.priority)}</span>
+                          </div>
+                          <div style={{ marginTop: 10, fontSize: 12, lineHeight: 1.65, color: '#64748B', textAlign: 'left' }}>
+                            {thread.lastMessagePreview || 'No recent reply yet'}
+                          </div>
+                          <div style={threadFooterRow}>
+                            <span>
+                              {thread.lastMessageAt ? `Updated ${new Date(thread.lastMessageAt).toLocaleString()}` : `Created ${new Date(thread.createdAt).toLocaleString()}`}
+                            </span>
+                            {thread.permissions.canChangeStatus && (
+                              <span style={dragHint}>Drag to move</span>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
-                  <div style={{ marginTop: 10, fontSize: 12, lineHeight: 1.65, color: '#64748B', textAlign: 'left' }}>
-                    {thread.lastMessagePreview || 'No recent reply yet'}
-                  </div>
-                  <div style={{ marginTop: 10, fontSize: 12, color: '#64748B', textAlign: 'left' }}>
-                    {thread.lastMessageAt ? `Updated ${new Date(thread.lastMessageAt).toLocaleString()}` : `Created ${new Date(thread.createdAt).toLocaleString()}`}
-                  </div>
-                </button>
+                </section>
               ))}
             </div>
           )}
@@ -628,7 +764,7 @@ export default function Module5CommunicationHubPage() {
                     {detail.thread.participants.map((participant, index) => (
                       <span key={`${participant.name}-${index}`} style={participantChip}>
                         {participant.name}
-                        {participant.role ? ` · ${participant.role.replace(/_/g, ' ')}` : ''}
+                        {participant.role ? ` / ${participant.role.replace(/_/g, ' ')}` : ''}
                         {participant.email ? ` (${participant.email})` : ''}
                       </span>
                     ))}
@@ -750,8 +886,8 @@ export default function Module5CommunicationHubPage() {
                               style={selectedParticipantChip}
                               onClick={() => handleRemoveParticipant(targetId)}
                             >
-                              <span>{participant.name}{participant.role ? ` · ${participant.role.replace(/_/g, ' ')}` : ''}</span>
-                              <span style={{ fontWeight: 900, color: '#94A3B8' }}>×</span>
+                              <span>{participant.name}{participant.role ? ` / ${participant.role.replace(/_/g, ' ')}` : ''}</span>
+                              <span style={{ fontWeight: 900, color: '#94A3B8' }}>x</span>
                             </button>
                           )
                         })}
@@ -767,7 +903,7 @@ export default function Module5CommunicationHubPage() {
                             <button key={member.id} type="button" style={memberOptionButton} onClick={() => handleAddParticipant(member)}>
                               <div style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', textAlign: 'left' }}>{member.name}</div>
                               <div style={{ fontSize: 12, color: '#64748B', textAlign: 'left' }}>
-                                {member.role.replace(/_/g, ' ')}{member.email ? ` · ${member.email}` : ''}
+                                {member.role.replace(/_/g, ' ')}{member.email ? ` / ${member.email}` : ''}
                               </div>
                             </button>
                           ))}
@@ -833,11 +969,7 @@ function SkeletonBlock({ height }: { height: number }) {
 }
 
 function statusBadge(status: CommunicationThreadStatus): CSSProperties {
-  const palette = status === 'resolved'
-    ? { bg: 'rgba(15,118,110,0.12)', color: '#0F766E' }
-    : status === 'in_progress'
-      ? { bg: 'rgba(36,83,166,0.10)', color: '#2453A6' }
-      : { bg: 'rgba(245,158,11,0.14)', color: '#B45309' }
+  const palette = getStatusPalette(status)
   return {
     display: 'inline-flex',
     alignItems: 'center',
@@ -847,6 +979,35 @@ function statusBadge(status: CommunicationThreadStatus): CSSProperties {
     color: palette.color,
     fontSize: 11,
     fontWeight: 800,
+  }
+}
+
+function getStatusPalette(status: CommunicationThreadStatus) {
+  if (status === 'resolved') {
+    return { bg: 'rgba(15,118,110,0.12)', color: '#0F766E', accent: '#10B981', border: 'rgba(16,185,129,0.24)' }
+  }
+  if (status === 'in_progress') {
+    return { bg: 'rgba(245,158,11,0.14)', color: '#B45309', accent: '#F59E0B', border: 'rgba(245,158,11,0.24)' }
+  }
+  return { bg: 'rgba(36,83,166,0.10)', color: '#2453A6', accent: '#3B82F6', border: 'rgba(59,130,246,0.22)' }
+}
+
+function statusDot(status: CommunicationThreadStatus): CSSProperties {
+  const palette = getStatusPalette(status)
+  return {
+    width: 9,
+    height: 9,
+    borderRadius: 999,
+    background: palette.accent,
+    flexShrink: 0,
+    marginTop: 6,
+  }
+}
+
+function threadStatusAccent(status: CommunicationThreadStatus): CSSProperties {
+  const palette = getStatusPalette(status)
+  return {
+    borderLeft: `4px solid ${palette.accent}`,
   }
 }
 
@@ -950,6 +1111,16 @@ const errorNotice: CSSProperties = {
   lineHeight: 1.7,
 }
 
+const subtleNotice: CSSProperties = {
+  borderRadius: 14,
+  padding: '12px 14px',
+  background: '#FFF7ED',
+  border: '1px solid rgba(251,191,36,0.24)',
+  color: '#9A3412',
+  fontSize: 13,
+  lineHeight: 1.7,
+}
+
 const layoutGrid: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
@@ -1027,9 +1198,61 @@ const selectInput: CSSProperties = {
   background: '#ffffff',
 }
 
-const threadList: CSSProperties = {
+const threadGroupList: CSSProperties = {
+  display: 'grid',
+  gap: 18,
+}
+
+const threadSection: CSSProperties = {
+  display: 'grid',
+  gap: 12,
+  padding: '0 0 2px',
+  borderRadius: 16,
+  transition: 'background 120ms ease, border-color 120ms ease',
+}
+
+const threadSectionActiveDrop: CSSProperties = {
+  background: '#F8FAFC',
+}
+
+const threadSectionHeader: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 10,
+}
+
+const threadSectionLabel: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  color: '#64748B',
+}
+
+const threadSectionCount: CSSProperties = {
+  fontSize: 12,
+  color: '#94A3B8',
+  fontWeight: 700,
+}
+
+const threadSectionDivider: CSSProperties = {
+  height: 1,
+  background: 'rgba(226,232,240,1)',
+}
+
+const threadSectionBody: CSSProperties = {
   display: 'grid',
   gap: 10,
+}
+
+const threadSectionEmpty: CSSProperties = {
+  borderRadius: 14,
+  padding: '12px 14px',
+  border: '1px dashed rgba(226,232,240,1)',
+  background: '#FAFCFD',
+  color: '#94A3B8',
+  fontSize: 12,
 }
 
 const threadItem: CSSProperties = {
@@ -1038,11 +1261,27 @@ const threadItem: CSSProperties = {
   border: '1px solid rgba(226,232,240,1)',
   background: '#ffffff',
   cursor: 'pointer',
+  transition: 'transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease',
 }
 
 const threadItemActive: CSSProperties = {
   background: '#F8FAFC',
   borderColor: 'rgba(15,66,88,0.22)',
+}
+
+const draggedThreadItem: CSSProperties = {
+  transform: 'scale(1.01)',
+  boxShadow: '0 18px 36px rgba(15,23,42,0.12)',
+}
+
+const threadItemLocked: CSSProperties = {
+  cursor: 'default',
+}
+
+const threadTitleRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 8,
 }
 
 const threadMetaRow: CSSProperties = {
@@ -1072,6 +1311,33 @@ const archivedBadge: CSSProperties = {
   color: '#475569',
   fontSize: 11,
   fontWeight: 800,
+}
+
+const lockedBadge: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '5px 9px',
+  borderRadius: 999,
+  background: '#F8FAFC',
+  color: '#94A3B8',
+  fontSize: 11,
+  fontWeight: 800,
+}
+
+const threadFooterRow: CSSProperties = {
+  marginTop: 10,
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: 10,
+  flexWrap: 'wrap',
+  fontSize: 12,
+  color: '#64748B',
+  textAlign: 'left',
+}
+
+const dragHint: CSSProperties = {
+  color: '#94A3B8',
+  fontWeight: 700,
 }
 
 const emptyBox: CSSProperties = {

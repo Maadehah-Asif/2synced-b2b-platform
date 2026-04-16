@@ -186,6 +186,15 @@ html, body, #root { height: 100%; margin: 0; padding: 0; overflow: hidden; }
 .app-main { overflow: auto; -webkit-overflow-scrolling: touch; }
 .card-pad { padding: 18px; max-height: calc(100vh - 200px); overflow: auto; box-sizing: border-box; }
 
+/* Public landing page needs document-level scrolling instead of the dashboard shell scroll lock. */
+html.landing-page-open,
+body.landing-page-open,
+body.landing-page-open #root {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
 /* Spacing helpers */
 .ml-6 { margin-left: 6px; }
 .ml-8 { margin-left: 8px; }

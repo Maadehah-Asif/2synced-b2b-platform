@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { attachOptionalUser } from '../core/auth/middleware.js';
 import {
   addCommunicationReply,
+  archiveCommunicationThread,
   createCommunicationThread,
+  deleteCommunicationThread,
   getCommunicationThreadDetail,
   getWebEngagementAnalytics,
   listCommunicationThreads,
@@ -21,5 +23,7 @@ router.post('/communication/threads', createCommunicationThread);
 router.post('/communication/threads/:threadId/messages', addCommunicationReply);
 router.patch('/communication/threads/:threadId/status', updateCommunicationThreadStatus);
 router.patch('/communication/threads/:threadId/priority', updateCommunicationThreadPriority);
+router.patch('/communication/threads/:threadId/archive', archiveCommunicationThread);
+router.delete('/communication/threads/:threadId', deleteCommunicationThread);
 
 export default router;

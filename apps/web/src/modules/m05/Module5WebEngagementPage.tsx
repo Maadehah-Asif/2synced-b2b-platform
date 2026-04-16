@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'
-import { setModule5View } from './navigation'
 import {
   buildUploadValidation,
   MODULE5_UPLOAD_PREFIX,
@@ -238,10 +237,6 @@ export default function Module5WebEngagementPage() {
 
   return (
     <div style={{ marginTop: 18 }}>
-      <button type="button" onClick={() => setModule5View('home')} style={backBtn}>
-        Back to Module 5 Home
-      </button>
-
       <section style={heroSection}>
         <div style={{ padding: 28 }}>
           <div style={heroPill}>M05 Web Data</div>
@@ -270,7 +265,7 @@ export default function Module5WebEngagementPage() {
         </section>
       )}
 
-      <section style={mainGrid}>
+      <section style={{ marginTop: 18 }}>
         <div style={panelCard}>
           <SectionHeader eyebrow="Upload" title="Add a new engagement CSV" />
           <div style={{ fontSize: 13, lineHeight: 1.7, color: '#415274' }}>
@@ -398,15 +393,6 @@ export default function Module5WebEngagementPage() {
               </div>
             </div>
           </form>
-        </div>
-
-        <div style={panelCardMuted}>
-          <SectionHeader eyebrow="Trust check" title="What this first version supports" />
-          <div style={{ display: 'grid', gap: 12 }}>
-            <FeatureCard title="Shared storage" text="Module 5 reuses the existing workspace file-library backend instead of creating a separate upload system." />
-            <FeatureCard title="Manager-friendly controls" text="The flow focuses on upload, preview, archive, and delete so the dataset state stays clear and easy to trust." />
-            <FeatureCard title="Ready for later views" text="These uploaded datasets are intended to feed future web-engagement visualization work inside Module 5." />
-          </div>
         </div>
       </section>
 

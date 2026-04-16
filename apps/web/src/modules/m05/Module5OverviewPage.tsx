@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'
 import { buildOverviewMetrics, type AlignmentCard, type AttentionRow, type DashboardData, type Module6Lead, type PipelineStagePreview, type PrioritizationRow, type StageRecord, type SummaryCard, type Watchout } from './overview'
-import { setModule5View } from './navigation'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
@@ -91,11 +90,7 @@ export default function Module5OverviewPage() {
 
   return (
     <div style={{ marginTop: 18 }}>
-      <button type="button" onClick={() => setModule5View('home')} style={overviewBackBtn}>
-        Back to Module 5 Home
-      </button>
-
-      <HeroSection story={metrics.story} />
+      <HeroSection />
 
       {state === 'loading' && <LoadingState />}
       {state === 'error' && <ErrorState error={error} />}
@@ -117,7 +112,7 @@ export default function Module5OverviewPage() {
 
           <section style={mainGrid}>
             <div style={panelCard}>
-              <SectionHeader eyebrow="Pipeline" title="Funnel shape" />
+              <SectionHeader eyebrow="Pipeline" title="Funnel shape" icon="◫" />
               {metrics.pipelineStages.length > 0 ? (
                 <>
                   <div style={funnelChart}>
@@ -139,7 +134,7 @@ export default function Module5OverviewPage() {
             </div>
 
             <div style={panelCardMuted}>
-              <SectionHeader eyebrow="Readout" title="Manager snapshot" />
+              <SectionHeader eyebrow="Readout" title="Manager snapshot" icon="≣" />
               <div style={{ display: 'grid', gap: 12 }}>
                 <HeadlineCard title="Coverage" value={`${Math.round(metrics.movement.coveragePct)}%`} note="of active leads already show up in pipeline tracking" />
                 <HeadlineCard title="Progress" value={String(metrics.movement.completedStageRows)} note="completed stage rows are visible across the current funnel" />
@@ -150,7 +145,7 @@ export default function Module5OverviewPage() {
 
           <section style={twoColumnGrid}>
             <div style={panelCard}>
-              <SectionHeader eyebrow="Alignment" title="Marketing to sales handoff" />
+              <SectionHeader eyebrow="Alignment" title="Marketing to sales handoff" icon="↗" />
               <div style={{ display: 'grid', gap: 14 }}>
                 {metrics.alignmentCards.map((card) => (
                   <AlignmentFlowCard key={card.label} card={card} />
@@ -159,7 +154,7 @@ export default function Module5OverviewPage() {
             </div>
 
             <div style={panelCardMuted}>
-              <SectionHeader eyebrow="Watchouts" title="What needs attention" />
+              <SectionHeader eyebrow="Watchouts" title="What needs attention" icon="!" />
               <div style={{ display: 'grid', gap: 12 }}>
                 {metrics.watchouts.map((watchout) => (
                   <WatchoutCard key={watchout.title} watchout={watchout} />
@@ -169,7 +164,7 @@ export default function Module5OverviewPage() {
           </section>
 
           <section style={panelCard}>
-            <SectionHeader eyebrow="Action table" title="Priority records needing attention" />
+            <SectionHeader eyebrow="Action table" title="Priority records needing attention" icon="□" />
             {metrics.attentionRows.length > 0 ? (
               <AttentionTable rows={metrics.attentionRows} />
             ) : (
@@ -184,39 +179,30 @@ export default function Module5OverviewPage() {
   )
 }
 
-function HeroSection({ story }: { story: { title: string; body: string } }) {
+function HeroSection() {
   return (
     <section style={heroSection}>
       <div style={{ padding: 28 }}>
         <div style={heroPill}>M05 Overview</div>
-        <div style={heroGrid}>
-          <div>
-            <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>
-              Alignment overview dashboard
-            </h1>
-            <div style={{ maxWidth: 620, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
-              A quick visual read on whether marketing is bringing in interest, sales is moving it forward, and where the funnel is getting stuck.
-            </div>
-          </div>
-
-          <div style={storyBox}>
-            <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.74)' }}>
-              Current story
-            </div>
-            <div style={{ marginTop: 10, fontSize: 22, fontWeight: 800, color: '#fff', lineHeight: 1.3 }}>{story.title}</div>
-            <div style={{ marginTop: 8, color: 'rgba(255,255,255,0.82)', fontSize: 14, lineHeight: 1.65 }}>{story.body}</div>
-          </div>
+        <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>
+          Sales Marketing Alignment Dashboard
+        </h1>
+        <div style={{ maxWidth: 720, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
+          A quick visual read on whether marketing is bringing in interest, sales is moving it forward, and where the funnel is getting stuck.
         </div>
       </div>
     </section>
   )
 }
 
-function SectionHeader({ eyebrow, title }: { eyebrow: string; title: string }) {
+function SectionHeader({ eyebrow, title, icon }: { eyebrow: string; title: string; icon?: string }) {
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={sectionPill}>{eyebrow}</div>
-      <h3 style={{ margin: '12px 0 0', fontSize: 24, color: '#0B2540' }}>{title}</h3>
+      <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+        {icon && <span style={sectionIcon}>{icon}</span>}
+        <h3 style={{ margin: 0, fontSize: 24, color: '#0B2540' }}>{title}</h3>
+      </div>
     </div>
   )
 }
@@ -449,6 +435,20 @@ const heroPill: CSSProperties = {
   fontWeight: 800,
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
+}
+
+const sectionIcon: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 28,
+  height: 28,
+  borderRadius: 10,
+  background: 'rgba(15,66,88,0.08)',
+  color: '#0B2540',
+  fontSize: 14,
+  fontWeight: 800,
+  flexShrink: 0,
 }
 
 const storyBox: CSSProperties = {

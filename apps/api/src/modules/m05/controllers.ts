@@ -153,7 +153,7 @@ function normalizeSearch(value: unknown) {
 
 function normalizeThreadType(value: unknown): CommunicationThreadType {
   const raw = String(value || '').trim();
-  return ['lead_issue', 'campaign_issue', 'alignment_concern', 'follow_up', 'blocker', 'general'].includes(raw)
+  return ['lead_issue', 'campaign_issue', 'alignment_concern', 'follow_up', 'blocker', 'general', 'note'].includes(raw)
     ? raw as CommunicationThreadType
     : 'general';
 }
@@ -174,14 +174,22 @@ function normalizeThreadPriority(value: unknown): CommunicationThreadPriority {
 
 function sanitizeParticipants(value: unknown): CommunicationParticipant[] {
   if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
   return value
     .map((item) => {
+      const userIdRaw = String((item as any)?.userId || '').trim();
       const name = String((item as any)?.name || '').trim();
       const email = String((item as any)?.email || '').trim().toLowerCase();
+      const role = String((item as any)?.role || '').trim();
       if (!name) return null;
+      const dedupeKey = userIdRaw || email || name.toLowerCase();
+      if (!dedupeKey || seen.has(dedupeKey)) return null;
+      seen.add(dedupeKey);
       return {
+        ...(userIdRaw && isValidObjectId(userIdRaw) ? { userId: new mongoose.Types.ObjectId(userIdRaw) } : {}),
         name,
         ...(email ? { email } : {}),
+        ...(role ? { role } : {}),
       };
     })
     .filter(Boolean) as CommunicationParticipant[];
@@ -202,7 +210,36 @@ function getActor(req: Request) {
   };
 }
 
-function serializeThread(thread: any) {
+function isThreadCreator(thread: any, actor: ReturnType<typeof getActor>) {
+  if (!actor.id && !actor.email) return false;
+  if (actor.id && thread.createdBy && String(thread.createdBy) === String(actor.id)) return true;
+  if (actor.email && thread.createdByEmail && String(thread.createdByEmail).trim().toLowerCase() === actor.email) return true;
+  return false;
+}
+
+function isThreadParticipant(thread: any, actor: ReturnType<typeof getActor>) {
+  if (!actor.id && !actor.email) return false;
+  return Array.isArray(thread.participants) && thread.participants.some((participant: any) => {
+    if (actor.id && participant?.userId && String(participant.userId) === String(actor.id)) return true;
+    if (actor.email && participant?.email && String(participant.email).trim().toLowerCase() === actor.email) return true;
+    return false;
+  });
+}
+
+function canManageThreadStatus(thread: any, actor: ReturnType<typeof getActor>) {
+  return isThreadCreator(thread, actor) || isThreadParticipant(thread, actor);
+}
+
+function canArchiveThread(thread: any, actor: ReturnType<typeof getActor>) {
+  return canManageThreadStatus(thread, actor);
+}
+
+function canDeleteThread(thread: any, actor: ReturnType<typeof getActor>) {
+  return isThreadCreator(thread, actor);
+}
+
+function serializeThread(thread: any, actor?: ReturnType<typeof getActor>) {
+  const resolvedActor = actor || { id: null, name: '', email: null };
   return {
     id: String(thread._id),
     workspaceId: String(thread.workspaceId),
@@ -214,11 +251,19 @@ function serializeThread(thread: any) {
     createdByName: thread.createdByName,
     createdByEmail: thread.createdByEmail || null,
     participants: Array.isArray(thread.participants) ? thread.participants : [],
+    archivedAt: thread.archivedAt || null,
+    archivedBy: thread.archivedBy ? String(thread.archivedBy) : null,
+    archivedByName: thread.archivedByName || null,
     messageCount: Number(thread.messageCount || 0),
     lastMessageAt: thread.lastMessageAt || null,
     lastMessagePreview: thread.lastMessagePreview || null,
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,
+    permissions: {
+      canChangeStatus: canManageThreadStatus(thread, resolvedActor),
+      canArchive: canArchiveThread(thread, resolvedActor),
+      canDelete: canDeleteThread(thread, resolvedActor),
+    },
   };
 }
 
@@ -582,12 +627,14 @@ export async function getWebEngagementAnalytics(req: Request, res: Response) {
 export async function listCommunicationThreads(req: Request, res: Response) {
   try {
     const workspaceId = normalizeWorkspaceId(req);
+    const actor = getActor(req);
     if (!workspaceId || !isValidObjectId(workspaceId)) return res.status(400).json({ error: 'workspace is required' });
 
     const status = normalizeSearch(req.query.status);
     const priority = normalizeSearch(req.query.priority);
     const type = normalizeSearch(req.query.type);
     const q = normalizeSearch(req.query.q);
+    const view = normalizeSearch(req.query.view) || 'active';
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
 
     const filter: Record<string, any> = {
@@ -596,7 +643,9 @@ export async function listCommunicationThreads(req: Request, res: Response) {
 
     if (status && ['open', 'in_progress', 'resolved'].includes(status)) filter.status = status;
     if (priority && ['low', 'medium', 'high'].includes(priority)) filter.priority = priority;
-    if (type && ['lead_issue', 'campaign_issue', 'alignment_concern', 'follow_up', 'blocker', 'general'].includes(type)) filter.type = type;
+    if (type && ['lead_issue', 'campaign_issue', 'alignment_concern', 'follow_up', 'blocker', 'general', 'note'].includes(type)) filter.type = type;
+    if (view === 'archived') filter.archivedAt = { $ne: null };
+    if (view !== 'all' && view !== 'archived') filter.archivedAt = null;
     if (q) {
       filter.$or = [
         { title: { $regex: q, $options: 'i' } },
@@ -614,7 +663,7 @@ export async function listCommunicationThreads(req: Request, res: Response) {
 
     return res.json({
       ok: true,
-      items: items.map(serializeThread),
+      items: items.map((item) => serializeThread(item, actor)),
     });
   } catch (e) {
     console.error('[m05.listCommunicationThreads]', e);
@@ -626,6 +675,7 @@ export async function getCommunicationThreadDetail(req: Request, res: Response) 
   try {
     const workspaceId = normalizeWorkspaceId(req);
     const threadId = String(req.params.threadId || '').trim();
+    const actor = getActor(req);
 
     if (!workspaceId || !isValidObjectId(workspaceId)) return res.status(400).json({ error: 'workspace is required' });
     if (!threadId || !isValidObjectId(threadId)) return res.status(400).json({ error: 'invalid thread id' });
@@ -639,7 +689,7 @@ export async function getCommunicationThreadDetail(req: Request, res: Response) 
 
     return res.json({
       ok: true,
-      thread: serializeThread(thread),
+      thread: serializeThread(thread, actor),
       messages: messages.map(serializeMessage),
     });
   } catch (e) {
@@ -660,6 +710,12 @@ export async function createCommunicationThread(req: Request, res: Response) {
     if (!workspaceId || !isValidObjectId(workspaceId)) return res.status(400).json({ error: 'workspace is required' });
     if (!title) return res.status(400).json({ error: 'title is required' });
     if (!body) return res.status(400).json({ error: 'initial message is required' });
+    if (type !== 'note' && participants.length === 0) {
+      return res.status(400).json({
+        error: 'participants_required',
+        detail: 'Add at least one participant for discussion threads. Notes can be created without participants.',
+      });
+    }
 
     const actor = getActor(req);
     const now = new Date();
@@ -674,6 +730,9 @@ export async function createCommunicationThread(req: Request, res: Response) {
       createdByName: actor.name,
       createdByEmail: actor.email,
       participants,
+      archivedAt: null,
+      archivedBy: null,
+      archivedByName: null,
       messageCount: 1,
       lastMessageAt: now,
       lastMessagePreview: summarizeBody(body),
@@ -690,7 +749,7 @@ export async function createCommunicationThread(req: Request, res: Response) {
 
     return res.status(201).json({
       ok: true,
-      thread: serializeThread(thread.toObject()),
+      thread: serializeThread(thread.toObject(), actor),
       message: serializeMessage(message.toObject()),
     });
   } catch (e) {
@@ -730,7 +789,7 @@ export async function addCommunicationReply(req: Request, res: Response) {
     return res.status(201).json({
       ok: true,
       message: serializeMessage(message.toObject()),
-      thread: serializeThread(thread.toObject()),
+      thread: serializeThread(thread.toObject(), actor),
     });
   } catch (e) {
     console.error('[m05.addCommunicationReply]', e);
@@ -743,19 +802,21 @@ export async function updateCommunicationThreadStatus(req: Request, res: Respons
     const workspaceId = normalizeWorkspaceId(req.body);
     const threadId = String(req.params.threadId || '').trim();
     const status = normalizeThreadStatus(req.body?.status);
+    const actor = getActor(req);
 
     if (!workspaceId || !isValidObjectId(workspaceId)) return res.status(400).json({ error: 'workspace is required' });
     if (!threadId || !isValidObjectId(threadId)) return res.status(400).json({ error: 'invalid thread id' });
 
     const thread = await findThreadInWorkspace(threadId, workspaceId);
     if (!thread) return res.status(404).json({ error: 'thread not found' });
+    if (!canManageThreadStatus(thread, actor)) return res.status(403).json({ error: 'forbidden' });
 
     thread.status = status;
     await thread.save();
 
     return res.json({
       ok: true,
-      thread: serializeThread(thread.toObject()),
+      thread: serializeThread(thread.toObject(), actor),
     });
   } catch (e) {
     console.error('[m05.updateCommunicationThreadStatus]', e);
@@ -768,6 +829,7 @@ export async function updateCommunicationThreadPriority(req: Request, res: Respo
     const workspaceId = normalizeWorkspaceId(req.body);
     const threadId = String(req.params.threadId || '').trim();
     const priority = normalizeThreadPriority(req.body?.priority);
+    const actor = getActor(req);
 
     if (!workspaceId || !isValidObjectId(workspaceId)) return res.status(400).json({ error: 'workspace is required' });
     if (!threadId || !isValidObjectId(threadId)) return res.status(400).json({ error: 'invalid thread id' });
@@ -780,10 +842,74 @@ export async function updateCommunicationThreadPriority(req: Request, res: Respo
 
     return res.json({
       ok: true,
-      thread: serializeThread(thread.toObject()),
+      thread: serializeThread(thread.toObject(), actor),
     });
   } catch (e) {
     console.error('[m05.updateCommunicationThreadPriority]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+export async function archiveCommunicationThread(req: Request, res: Response) {
+  try {
+    const workspaceId = normalizeWorkspaceId(req.body);
+    const threadId = String(req.params.threadId || '').trim();
+    const archived = req.body?.archived !== false;
+    const actor = getActor(req);
+
+    if (!workspaceId || !isValidObjectId(workspaceId)) return res.status(400).json({ error: 'workspace is required' });
+    if (!threadId || !isValidObjectId(threadId)) return res.status(400).json({ error: 'invalid thread id' });
+
+    const thread = await findThreadInWorkspace(threadId, workspaceId);
+    if (!thread) return res.status(404).json({ error: 'thread not found' });
+    if (!canArchiveThread(thread, actor)) return res.status(403).json({ error: 'forbidden' });
+
+    if (archived) {
+      thread.archivedAt = new Date();
+      thread.archivedBy = actor.id;
+      thread.archivedByName = actor.name;
+    } else {
+      thread.archivedAt = null;
+      thread.archivedBy = null;
+      thread.archivedByName = null;
+    }
+
+    await thread.save();
+
+    return res.json({
+      ok: true,
+      thread: serializeThread(thread.toObject(), actor),
+    });
+  } catch (e) {
+    console.error('[m05.archiveCommunicationThread]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
+export async function deleteCommunicationThread(req: Request, res: Response) {
+  try {
+    const workspaceId = normalizeWorkspaceId(req.body);
+    const threadId = String(req.params.threadId || '').trim();
+    const actor = getActor(req);
+
+    if (!workspaceId || !isValidObjectId(workspaceId)) return res.status(400).json({ error: 'workspace is required' });
+    if (!threadId || !isValidObjectId(threadId)) return res.status(400).json({ error: 'invalid thread id' });
+
+    const thread = await findThreadInWorkspace(threadId, workspaceId);
+    if (!thread) return res.status(404).json({ error: 'thread not found' });
+    if (!canDeleteThread(thread, actor)) return res.status(403).json({ error: 'forbidden' });
+
+    await Promise.all([
+      CommunicationMessage.deleteMany({ workspaceId, threadId }),
+      CommunicationThread.deleteOne({ _id: threadId, workspaceId }),
+    ]);
+
+    return res.json({
+      ok: true,
+      deletedThreadId: threadId,
+    });
+  } catch (e) {
+    console.error('[m05.deleteCommunicationThread]', e);
     return res.status(500).json({ error: 'internal' });
   }
 }

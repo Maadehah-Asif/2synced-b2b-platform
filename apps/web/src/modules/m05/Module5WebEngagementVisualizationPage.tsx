@@ -220,10 +220,6 @@ export default function Module5WebEngagementVisualizationPage() {
 
   return (
     <div style={page}>
-      <button type="button" onClick={() => setModule5View('home')} style={backBtn}>
-        Back to Module 5 Home
-      </button>
-
       <section style={heroSection}>
         <div style={heroBody}>
           <div style={heroGrid}>

@@ -6,14 +6,17 @@ export type CommunicationThreadType =
   | 'alignment_concern'
   | 'follow_up'
   | 'blocker'
-  | 'general';
+  | 'general'
+  | 'note';
 
 export type CommunicationThreadStatus = 'open' | 'in_progress' | 'resolved';
 export type CommunicationThreadPriority = 'low' | 'medium' | 'high';
 
 export interface CommunicationParticipant {
+  userId?: Types.ObjectId | null;
   name: string;
   email?: string;
+  role?: string | null;
 }
 
 export interface CommunicationThreadDocument extends Document {
@@ -26,6 +29,9 @@ export interface CommunicationThreadDocument extends Document {
   createdByName: string;
   createdByEmail?: string | null;
   participants: CommunicationParticipant[];
+  archivedAt?: Date | null;
+  archivedBy?: Types.ObjectId | null;
+  archivedByName?: string | null;
   messageCount: number;
   lastMessageAt?: Date | null;
   lastMessagePreview?: string | null;
@@ -35,8 +41,14 @@ export interface CommunicationThreadDocument extends Document {
 
 const ParticipantSchema = new Schema<CommunicationParticipant>(
   {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
     name: { type: String, required: true, trim: true },
     email: { type: String, trim: true, lowercase: true },
+    role: { type: String, trim: true, default: null },
   },
   { _id: false }
 );
@@ -58,7 +70,7 @@ const CommunicationThreadSchema = new Schema<CommunicationThreadDocument>(
     type: {
       type: String,
       required: true,
-      enum: ['lead_issue', 'campaign_issue', 'alignment_concern', 'follow_up', 'blocker', 'general'],
+      enum: ['lead_issue', 'campaign_issue', 'alignment_concern', 'follow_up', 'blocker', 'general', 'note'],
       default: 'general',
     },
     status: {
@@ -94,6 +106,21 @@ const CommunicationThreadSchema = new Schema<CommunicationThreadDocument>(
       type: [ParticipantSchema],
       default: [],
     },
+    archivedAt: {
+      type: Date,
+      default: null,
+    },
+    archivedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    archivedByName: {
+      type: String,
+      trim: true,
+      maxlength: 120,
+      default: null,
+    },
     messageCount: {
       type: Number,
       default: 0,
@@ -116,6 +143,7 @@ const CommunicationThreadSchema = new Schema<CommunicationThreadDocument>(
 CommunicationThreadSchema.index({ workspaceId: 1, updatedAt: -1 });
 CommunicationThreadSchema.index({ workspaceId: 1, status: 1, priority: 1, updatedAt: -1 });
 CommunicationThreadSchema.index({ workspaceId: 1, type: 1, updatedAt: -1 });
+CommunicationThreadSchema.index({ workspaceId: 1, archivedAt: 1, updatedAt: -1 });
 CommunicationThreadSchema.index({ workspaceId: 1, title: 'text', createdByName: 'text', lastMessagePreview: 'text' });
 
 const CommunicationThread =

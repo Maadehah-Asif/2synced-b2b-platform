@@ -26,8 +26,16 @@ export default function Module5Home() {
     <Layout>
       <main className="page-root" style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <ModuleBackButton toSuffix="" label="Back" />
-          <h2 style={{ marginTop: 16 }}>Module 5</h2>
+          {view === 'home' ? (
+            <>
+              <ModuleBackButton toSuffix="" label="Back" />
+              <h2 style={{ marginTop: 16 }}>Module 5</h2>
+            </>
+          ) : (
+            <button type="button" className="btn-outline btn-sm" onClick={() => setModule5View('home')}>
+              Back
+            </button>
+          )}
         </div>
 
         {view === 'overview' ? (

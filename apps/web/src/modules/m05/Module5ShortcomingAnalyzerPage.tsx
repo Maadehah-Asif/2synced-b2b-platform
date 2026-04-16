@@ -197,28 +197,24 @@ export default function Module5ShortcomingAnalyzerPage() {
 
   return (
     <div style={page}>
-      <button type="button" onClick={() => setModule5View('home')} style={backBtn}>
-        Back to Module 5 Home
-      </button>
-
       <section style={heroSection}>
         <div style={heroBody}>
           <div style={heroGrid}>
             <div>
               <div style={heroPill}>Shortcoming analyzer</div>
-              <h1 style={{ margin: '16px 0 8px', fontSize: 36, lineHeight: 1.05, fontWeight: 900, color: '#0F172A' }}>
-                Process weakness view
+              <h1 style={{ margin: '16px 0 8px', fontSize: 36, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>
+                Process Weakness Detected
               </h1>
-              <div style={{ maxWidth: 720, color: '#475569', fontSize: 15, lineHeight: 1.75 }}>
+              <div style={{ maxWidth: 720, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.75 }}>
                 A rule-based alignment dashboard for spotting where sales and marketing flow is slowing down, where web interest is not turning into progress, and what managers should review first.
               </div>
             </div>
 
             <div style={heroNote}>
-              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748B' }}>
+              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.74)' }}>
                 Rule-based now, ML-ready later
               </div>
-              <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.7, color: '#475569' }}>
+              <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.7, color: 'rgba(255,255,255,0.82)' }}>
                 This version separates input signals, derived features, severity scoring, and issue outputs so a future ML layer can plug into the same operational surface without redesigning the page.
               </div>
             </div>
@@ -556,8 +552,10 @@ const backBtn: CSSProperties = {
 
 const heroSection: CSSProperties = {
   borderRadius: 24,
-  border: '1px solid rgba(226,232,240,1)',
-  background: 'linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%)',
+  overflow: 'hidden',
+  border: '1px solid rgba(15,66,88,0.08)',
+  boxShadow: '0 20px 46px rgba(13,30,60,0.08)',
+  background: 'linear-gradient(135deg, rgba(18,59,87,0.98) 0%, rgba(15,66,88,0.94) 52%, rgba(72,177,217,0.24) 100%)',
 }
 
 const heroBody: CSSProperties = {
@@ -573,21 +571,22 @@ const heroGrid: CSSProperties = {
 
 const heroPill: CSSProperties = {
   display: 'inline-flex',
-  padding: '6px 10px',
+  padding: '7px 12px',
   borderRadius: 999,
-  background: '#EEF6FA',
-  color: '#0F4258',
-  fontSize: 11,
+  background: 'rgba(255,255,255,0.12)',
+  border: '1px solid rgba(255,255,255,0.16)',
+  color: '#fff',
+  fontSize: 12,
   fontWeight: 800,
-  letterSpacing: '0.06em',
+  letterSpacing: '0.08em',
   textTransform: 'uppercase',
 }
 
 const heroNote: CSSProperties = {
   borderRadius: 18,
   padding: 18,
-  background: '#F8FAFC',
-  border: '1px solid rgba(226,232,240,1)',
+  background: 'rgba(255,255,255,0.10)',
+  border: '1px solid rgba(255,255,255,0.14)',
 }
 
 const panelCard: CSSProperties = {

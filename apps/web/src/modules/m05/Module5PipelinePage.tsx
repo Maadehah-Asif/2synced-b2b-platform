@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'
-import { setModule5View } from './navigation'
 import type { DashboardData, Module6Lead, PrioritizationRow, StageRecord } from './overview'
 import { buildPipelineMetrics, type PipelineKpi, type PipelineStageCard, type PipelineWatchout, type StageSummaryRow } from './pipeline'
 
@@ -92,10 +91,6 @@ export default function Module5PipelinePage() {
 
   return (
     <div style={{ marginTop: 18 }}>
-      <button type="button" onClick={() => setModule5View('home')} style={backBtn}>
-        Back to Module 5 Home
-      </button>
-
       <section style={heroSection}>
         <div style={{ padding: 28 }}>
           <div style={heroPill}>M05 Pipeline</div>

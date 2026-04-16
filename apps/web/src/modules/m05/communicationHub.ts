@@ -7,13 +7,22 @@ export type CommunicationThreadType =
   | 'follow_up'
   | 'blocker'
   | 'general'
+  | 'note'
 
 export type CommunicationThreadStatus = 'open' | 'in_progress' | 'resolved'
 export type CommunicationThreadPriority = 'low' | 'medium' | 'high'
 
 export type CommunicationParticipant = {
+  userId?: string | null
   name: string
   email?: string
+  role?: string | null
+}
+
+export type CommunicationPermissions = {
+  canChangeStatus: boolean
+  canArchive: boolean
+  canDelete: boolean
 }
 
 export type CommunicationThread = {
@@ -27,11 +36,15 @@ export type CommunicationThread = {
   createdByName: string
   createdByEmail: string | null
   participants: CommunicationParticipant[]
+  archivedAt: string | null
+  archivedBy: string | null
+  archivedByName: string | null
   messageCount: number
   lastMessageAt: string | null
   lastMessagePreview: string | null
   createdAt: string
   updatedAt: string
+  permissions: CommunicationPermissions
 }
 
 export type CommunicationMessage = {
@@ -55,6 +68,7 @@ export type CommunicationListFilters = {
   status?: '' | CommunicationThreadStatus
   priority?: '' | CommunicationThreadPriority
   type?: '' | CommunicationThreadType
+  view?: 'active' | 'archived' | 'all'
 }
 
 export type CreateCommunicationThreadInput = {
@@ -64,6 +78,14 @@ export type CreateCommunicationThreadInput = {
   type: CommunicationThreadType
   priority: CommunicationThreadPriority
   participants: CommunicationParticipant[]
+}
+
+export type WorkspaceMemberOption = {
+  id: string
+  name: string
+  email: string | null
+  role: string
+  status: string
 }
 
 function buildQuery(workspaceId: string, extra: Record<string, string | undefined>) {
@@ -82,6 +104,7 @@ export function formatThreadType(type: CommunicationThreadType) {
     follow_up: 'Follow-up',
     blocker: 'Blocker',
     general: 'General',
+    note: 'Note',
   }[type]
 }
 
@@ -107,6 +130,7 @@ export async function fetchCommunicationThreads(apiUrl: string, workspaceId: str
     status: filters.status || undefined,
     priority: filters.priority || undefined,
     type: filters.type || undefined,
+    view: filters.view || undefined,
   })}`, {
     headers: getAuthHeaders(),
   })
@@ -195,6 +219,56 @@ export async function updateCommunicationThreadPriority(apiUrl: string, workspac
   return {
     ok: res.ok && Boolean(json?.ok),
     thread: json?.thread as CommunicationThread | undefined,
+    error: json?.error ? String(json.error) : null,
+  }
+}
+
+export async function archiveCommunicationThread(apiUrl: string, workspaceId: string, threadId: string, archived: boolean) {
+  const res = await fetch(`${apiUrl}/m05/communication/threads/${threadId}/archive`, {
+    method: 'PATCH',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ workspaceId, archived }),
+  })
+  const json = await res.json().catch(() => ({}))
+  return {
+    ok: res.ok && Boolean(json?.ok),
+    thread: json?.thread as CommunicationThread | undefined,
+    error: json?.detail ? String(json.detail) : json?.error ? String(json.error) : null,
+  }
+}
+
+export async function deleteCommunicationThread(apiUrl: string, workspaceId: string, threadId: string) {
+  const res = await fetch(`${apiUrl}/m05/communication/threads/${threadId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ workspaceId }),
+  })
+  const json = await res.json().catch(() => ({}))
+  return {
+    ok: res.ok && Boolean(json?.ok),
+    deletedThreadId: json?.deletedThreadId ? String(json.deletedThreadId) : null,
+    error: json?.detail ? String(json.detail) : json?.error ? String(json.error) : null,
+  }
+}
+
+export async function fetchWorkspaceMemberOptions(apiUrl: string, workspaceId: string) {
+  const res = await fetch(`${apiUrl}/workspaces/${workspaceId}/members`, {
+    headers: getAuthHeaders(),
+  })
+
+  const json = await res.json().catch(() => ({}))
+  const members = Array.isArray(json?.members) ? json.members : []
+  return {
+    ok: res.ok,
+    items: members
+      .filter((item) => item?.status === 'active' && item?.user)
+      .map((item) => ({
+        id: String(item.user.id),
+        name: String(item.user.fullName || item.user.email || 'Workspace user'),
+        email: item.user.email ? String(item.user.email) : null,
+        role: String(item.role || 'member'),
+        status: String(item.status || 'active'),
+      })) as WorkspaceMemberOption[],
     error: json?.error ? String(json.error) : null,
   }
 }

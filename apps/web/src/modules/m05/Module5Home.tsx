@@ -29,7 +29,7 @@ export default function Module5Home() {
           {view === 'home' ? (
             <>
               <ModuleBackButton toSuffix="" label="Back" />
-              <h2 style={{ marginTop: 16 }}>Module 5</h2>
+              <h2 style={{ marginTop: 16 }}>Sales & Marketing Alignment</h2>
             </>
           ) : (
             <button type="button" className="btn-outline btn-sm" onClick={() => setModule5View('home')}>

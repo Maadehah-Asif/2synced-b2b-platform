@@ -15,7 +15,7 @@ export default function Module1Home(){
       <main className="page-root" style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix="" label="Back" />
-          <h2 style={{ marginTop: 16 }}>Module 1</h2>
+          <h2 style={{ marginTop: 16 }}>Lead Quality & Scoring</h2>
         </div>
 
         <section
@@ -31,11 +31,11 @@ export default function Module1Home(){
         >
           <div style={{ padding: 28 }}>
             <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              M01
+              Lead Quality & Scoring
             </div>
             <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>Lead Quality & Scoring</h1>
             <div style={{ maxWidth: 760, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
-              Module 1 is the quality-control layer for lead intake. Its job is to turn uploaded and merged lead records into cleaner, more usable lead scoring inputs so downstream modules can work from a stronger baseline.
+              Lead Quality & Scoring is the quality-control layer for lead intake. Its job is to turn uploaded and merged lead records into cleaner, more usable lead scoring inputs so downstream modules can work from a stronger baseline.
             </div>
           </div>
         </section>
@@ -68,8 +68,20 @@ export default function Module1Home(){
                 action="Open Lead View"
                 onClick={() => go(`#/workspace/:workspaceId/m01/leads`)}
               />
-              <InfoCard title="Lead intake quality" body="Use M01 when your priority is preparing reliable lead records before any intent, attribution, or funnel analysis happens." />
-              <InfoCard title="Scoring readiness" body="The scoring side of M01 depends on complete lead fields, cleaner duplicates, and correctly merged records." />
+              <ActionCard
+                title="Lead Quality Forecast"
+                desc="Project average lead score, high-quality share, and data hygiene pressure before future batches reach downstream modules."
+                action="Open Forecast"
+                onClick={() => go(`#/workspace/:workspaceId/m01/forecast`)}
+              />
+              <ActionCard
+                title="Report Center"
+                desc="Review intake quality, merged dataset readiness, and downloadable lead-processing reports."
+                action="Open Report"
+                onClick={() => go(`#/workspace/:workspaceId/m08/m01`)}
+              />
+              <InfoCard title="Lead intake quality" body="Use Lead Quality & Scoring when your priority is preparing reliable lead records before any intent, attribution, or funnel analysis happens." />
+              <InfoCard title="Scoring readiness" body="The scoring side of this module depends on complete lead fields, cleaner duplicates, and correctly merged records." />
             </div>
           </div>
 

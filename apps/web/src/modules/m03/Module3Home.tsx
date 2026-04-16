@@ -69,7 +69,7 @@ export default function Module3Home() {
       <main className="page-root" style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix="" label="Back" />
-          <h2 style={{ marginTop: 16 }}>Module 3</h2>
+          <h2 style={{ marginTop: 16 }}>Conversation Intelligence</h2>
         </div>
 
         <section
@@ -85,7 +85,7 @@ export default function Module3Home() {
         >
           <div style={{ padding: 28 }}>
             <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              M03
+              Conversation Intelligence
             </div>
             <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>Conversation Intelligence</h1>
             <div style={{ maxWidth: 780, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>

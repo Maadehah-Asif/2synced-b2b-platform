@@ -8,7 +8,7 @@ import { searchLeads } from './services/deals';
 import { useWorkspaceId } from '../../utils/workspace';
 
 function formatLeadOption(lead: any) {
-  const name = String(lead?.name || '').trim();
+  const name = String(lead?.full_name || lead?.name || '').trim();
   const email = String(lead?.email || '').trim();
   const leadId = String(lead?.lead_id || '').trim();
   return [name || (leadId ? `#${leadId}` : ''), email].filter(Boolean).join(' • ') || 'Unknown lead';

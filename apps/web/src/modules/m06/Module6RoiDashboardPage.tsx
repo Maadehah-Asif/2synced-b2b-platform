@@ -1,10 +1,11 @@
 import Layout from '../../components/Layout'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import './module6.css'
 import ModuleBackButton from '../../components/ModuleBackButton'
 import TimelineChart from './TimelineChart'
 import BarChart from './BarChart'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'
+import { fetchFromApi, parseApiJson } from '../../utils/api'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
@@ -16,7 +17,7 @@ function useWorkspaceContextFromHash() {
   return { workspaceId, runId }
 }
 
-export default function RoiDashboard() {
+export default function Module6RoiDashboardPage() {
   const { workspaceId, runId } = useWorkspaceContextFromHash()
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<any | null>(null)
@@ -28,7 +29,7 @@ export default function RoiDashboard() {
   const [endMonth, setEndMonth] = useState<string>('')
   const [minSpend, setMinSpend] = useState<string>('')
   const [minROI, setMinROI] = useState<string>('')
-  const [scopedRunId] = useState<string | null>(runId)
+  const scopedRunId = runId
 
   useEffect(() => {
     if (!workspaceId) return
@@ -37,11 +38,11 @@ export default function RoiDashboard() {
         const token = localStorage.getItem('token')
         const params = new URLSearchParams()
         params.set('projectId', workspaceId || '')
-        const res = await fetch(`${API_URL}/m06/runs?${params.toString()}`, {
+        const res = await fetchFromApi(`${API_URL}/m06/runs?${params.toString()}`, {
           headers: { Authorization: token ? `Bearer ${token}` : '' },
-        })
-        const j = await res.json()
-        if (res.ok && Array.isArray(j.runs)) {
+        }, API_URL)
+        const j = await parseApiJson<any>(res, 'Could not load attribution runs')
+        if (Array.isArray(j.runs)) {
           setRuns(j.runs)
         }
       } catch {}
@@ -64,17 +65,14 @@ export default function RoiDashboard() {
       if (minSpend) params.set('minSpend', minSpend)
       if (minROI) params.set('minROI', minROI)
 
-      const res = await fetch(`${API_URL}/m06/roi?${params.toString()}`, {
+      const res = await fetchFromApi(`${API_URL}/m06/roi?${params.toString()}`, {
         headers: { Authorization: token ? `Bearer ${token}` : '' }
-      })
+      }, API_URL)
 
-      const j = await res.json()
-      if (!res.ok) {
-        setError(j?.message || j?.error || 'error')
-        setData(null)
-      } else setData(j)
-    } catch {
-      setError('network error')
+      const j = await parseApiJson<any>(res, 'Could not load ROI dashboard')
+      setData(j)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load ROI dashboard')
       setData(null)
     }
     setLoading(false)
@@ -130,19 +128,16 @@ export default function RoiDashboard() {
     URL.revokeObjectURL(url)
   }
 
-  const recommendationText = useMemo(() => {
-    const notes: string[] = []
-    if (top5?.length > 0 && top5[0].roi !== null && top5[0].roi > 150) {
-      notes.push(`Top campaign ${top5[0].name} is delivering unusually strong ROI and may justify additional budget.`)
-    }
-    if (bottom5?.length > 0 && bottom5[0].roi !== null && bottom5[0].roi < 0) {
-      notes.push('Some campaigns are returning negative ROI, so targeting, spend level, or timing likely needs review.')
-    }
-    if (!notes.length) {
-      notes.push('ROI profile looks balanced. Use the filters above to inspect narrower segments before making allocation changes.')
-    }
-    return notes
-  }, [bottom5, top5])
+  const recommendationText: string[] = []
+  if (top5?.length > 0 && top5[0].roi !== null && top5[0].roi > 150) {
+    recommendationText.push(`Top campaign ${top5[0].name} is delivering unusually strong ROI and may justify additional budget.`)
+  }
+  if (bottom5?.length > 0 && bottom5[0].roi !== null && bottom5[0].roi < 0) {
+    recommendationText.push('Some campaigns are returning negative ROI, so targeting, spend level, or timing likely needs review.')
+  }
+  if (!recommendationText.length) {
+    recommendationText.push('ROI profile looks balanced. Use the filters above to inspect narrower segments before making allocation changes.')
+  }
 
   return (
     <Layout>

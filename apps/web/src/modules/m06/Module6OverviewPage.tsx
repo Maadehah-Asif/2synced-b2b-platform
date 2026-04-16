@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
+import { useWorkspaceId } from '../../utils/workspace'
+import { fetchFromApi, parseApiJson } from '../../utils/api'
 import './module6.css'
 import PieChart from './PieChart'
 import TimelineChart from './TimelineChart'
@@ -18,7 +20,8 @@ const MODEL_OPTIONS = ['first-touch', 'last-touch', 'linear']
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
-export default function Element1Page() {
+export default function Module6OverviewPage() {
+  const workspaceId = useWorkspaceId({ redirectToWorkspaces: true })
   const [dateRange, setDateRange] = useState<DateRangeKey>('90d')
   const [channels, setChannels] = useState<string[]>(['email', 'ads', 'linkedin', 'webinar'])
   const [model, setModel] = useState<string>('linear')
@@ -28,19 +31,24 @@ export default function Element1Page() {
   const [stats, setStats] = useState<any | null>(null)
 
   async function fetchStats() {
+    if (!workspaceId) {
+      setStats(null)
+      setError('Open a workspace to view Module 6 stats')
+      return
+    }
     setLoading(true)
     setError(null)
     try {
       const params = new URLSearchParams()
+      params.set('projectId', workspaceId)
       params.set('dateRange', dateRange)
       if (channels.length) params.set('channels', channels.join(','))
       if (model) params.set('model', model)
-      const res = await fetch(`${API_BASE}/m06/stats?${params.toString()}`)
-      const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || 'failed')
+      const res = await fetchFromApi(`${API_BASE}/m06/stats?${params.toString()}`, undefined, API_BASE)
+      const json = await parseApiJson<any>(res, 'Could not load Module 6 stats')
       setStats(json)
     } catch (e) {
-      setError('Could not load Module 6 stats')
+      setError(e instanceof Error ? e.message : 'Could not load Module 6 stats')
       setStats(null)
     } finally {
       setLoading(false)
@@ -49,7 +57,7 @@ export default function Element1Page() {
 
   useEffect(() => {
     fetchStats()
-  }, [])
+  }, [workspaceId])
 
   function applyFilters() {
     fetchStats()

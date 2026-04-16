@@ -7,7 +7,7 @@ export default function Module9Home() {
       <main className="page-root" style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix="" label="Back" />
-          <h2 style={{ marginTop: 16 }}>Module 9</h2>
+          <h2 style={{ marginTop: 16 }}>Campaign Performance Optimization</h2>
         </div>
 
         <section
@@ -23,11 +23,11 @@ export default function Module9Home() {
         >
           <div style={{ padding: 28 }}>
             <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              M09
+              Campaign Performance Optimization
             </div>
             <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>Campaign Performance Aggregation & Optimization</h1>
             <div style={{ maxWidth: 780, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
-              Module 9 is the centralized campaign performance layer. Its job is to combine campaign signals across channels, evaluate pacing and fatigue, and turn channel-level performance data into recommendations and export-ready optimization views.
+              Campaign Performance Optimization is the centralized campaign performance layer. Its job is to combine campaign signals across channels, evaluate pacing and fatigue, and turn channel-level performance data into recommendations and export-ready optimization views.
             </div>
           </div>
         </section>
@@ -54,7 +54,7 @@ export default function Module9Home() {
             </div>
             <h3 style={{ margin: '14px 0 12px', fontSize: 28, color: '#0B2540' }}>What this module should aggregate</h3>
             <div style={{ display: 'grid', gap: 12 }}>
-              <InfoCard title="Cross-channel performance" body="Use M09 to bring campaign results from different platforms into one place so teams can compare channels without switching tools." />
+              <InfoCard title="Cross-channel performance" body="Use Campaign Performance Optimization to bring campaign results from different platforms into one place so teams can compare channels without switching tools." />
               <InfoCard title="Fatigue and pacing checks" body="This is the right place to flag spend pacing issues, campaign fatigue, and channels that are underperforming against expectation." />
               <InfoCard title="Optimization recommendations" body="The module should summarize what needs to change next, whether that is budget reallocation, creative refresh, or channel-level adjustment." />
             </div>
@@ -72,10 +72,10 @@ export default function Module9Home() {
             <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(72,177,217,0.12)', color: '#0B2540', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               Current Status
             </div>
-            <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>How to use M09 for now</h3>
+            <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>How to use Campaign Performance Optimization for now</h3>
             <div style={{ display: 'grid', gap: 12 }}>
               <StepCard step="1" title="Treat this as the optimization landing" text="This page establishes the role of module 9 until the full aggregation dashboards and reports are introduced." />
-              <StepCard step="2" title="Read it with attribution context" text="M09 should eventually work alongside ROI and journey analysis so campaign decisions come from a fuller performance picture." />
+              <StepCard step="2" title="Read it with attribution context" text="This area should eventually work alongside ROI and journey analysis so campaign decisions come from a fuller performance picture." />
               <StepCard step="3" title="Expand toward reports and recommendations" text="When recommendation panels and exportable optimization reports are added, this is the right home for them." />
             </div>
           </div>

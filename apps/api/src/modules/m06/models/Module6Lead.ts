@@ -2,10 +2,9 @@ import mongoose, { Schema, Types, Model } from 'mongoose';
 
 export interface Module6LeadDoc {
   _id: Types.ObjectId;
-  project_id: Types.ObjectId;
+  project_id: string;
   row_number?: number | null;
   lead_id: string;
-  name?: string | null;
   full_name?: string | null;
   first_name?: string | null;
   last_name?: string | null;
@@ -27,10 +26,9 @@ export interface Module6LeadDoc {
 
 const Module6LeadSchema = new Schema<Module6LeadDoc>(
   {
-    project_id: { type: Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
+    project_id: { type: String, required: true, index: true },
     row_number: { type: Number, default: null },
     lead_id: { type: String, required: true },
-    name: { type: String, default: null },
     full_name: { type: String, default: null },
     first_name: { type: String, default: null },
     last_name: { type: String, default: null },

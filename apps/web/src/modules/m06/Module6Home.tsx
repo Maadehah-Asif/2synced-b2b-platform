@@ -15,7 +15,7 @@ export default function Module6Home(){
       <main className="page-root" style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton />
-          <h2 style={{ marginTop:16 }}>Module 6</h2>
+          <h2 style={{ marginTop:16 }}>Revenue Insight</h2>
         </div>
 
         <section
@@ -31,11 +31,11 @@ export default function Module6Home(){
         >
           <div style={{ padding: 28 }}>
             <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              M06
+              Revenue Insight
             </div>
             <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>Revenue Attribution & ROI</h1>
             <div style={{ maxWidth: 820, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
-              Module 6 is the analysis layer for campaigns, touches, deals, and journeys. Its purpose is to explain contribution, revenue impact, and allocation decisions once the operational data has already been prepared in Data Hub.
+              Revenue Insight is the analysis layer for campaigns, touches, deals, and journeys. Its purpose is to explain contribution, revenue impact, and allocation decisions once the operational data has already been prepared in Data Hub.
             </div>
           </div>
         </section>
@@ -75,6 +75,7 @@ export default function Module6Home(){
               <Card onClick={() => go(`#/workspace/:workspaceId/m06/journeys`)} title="Journey Preview" desc="Preview customer journeys built from touch data." />
               <Card onClick={() => go(`#/workspace/:workspaceId/m06/run-attribution`)} title="Run Attribution" desc="Analyze campaign contribution impact." />
               <Card onClick={() => go(`#/workspace/:workspaceId/m06/allocation`)} title="Allocation Dashboard" desc="Review budget allocation insights." />
+              <Card onClick={() => go(`#/workspace/:workspaceId/m08/m06`)} title="Report Center" desc="Download professional revenue, attribution, campaign, and deal reports." />
             </div>
           </div>
 
@@ -93,7 +94,7 @@ export default function Module6Home(){
             <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>What belongs here</h3>
             <div style={{ display: 'grid', gap: 12 }}>
               <MiniInfo title="Insight-side only" text="Campaign creation, touch input, lead tables, and deal management were intentionally moved to the workspace Data Hub." />
-              <MiniInfo title="Best use case" text="Use M06 when you want contribution analysis, forecast views, ROI interpretation, or budget allocation guidance." />
+              <MiniInfo title="Best use case" text="Use Revenue Insight when you want contribution analysis, forecast views, ROI interpretation, or budget allocation guidance." />
               <MiniInfo title="Recommended sequence" text="Prepare campaign, touch, and deal data first. Then come here to interpret revenue and attribution outcomes." />
             </div>
           </div>

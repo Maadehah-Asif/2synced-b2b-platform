@@ -15,7 +15,7 @@ export default function Module2Home() {
       <main className="page-root" style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix="" label="Back" />
-          <h2 style={{ marginTop: 16 }}>Module 2</h2>
+          <h2 style={{ marginTop: 16 }}>Intent Signals</h2>
         </div>
 
         <section
@@ -31,11 +31,11 @@ export default function Module2Home() {
         >
           <div style={{ padding: 28 }}>
             <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              M02
+              Intent Signals
             </div>
             <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>Intent Signals & Prioritization</h1>
             <div style={{ maxWidth: 760, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
-              Module 2 turns lead and behavior data into prioritization signals. Use it when the question is not just who exists in the pipeline, but who is most worth acting on next.
+              Intent Signals turns lead and behavior data into prioritization signals. Use it when the question is not just who exists in the pipeline, but who is most worth acting on next.
             </div>
           </div>
         </section>
@@ -60,11 +60,12 @@ export default function Module2Home() {
             <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(15,66,88,0.08)', color: 'var(--header-secondary)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               Insight Tools
             </div>
-            <h3 style={{ margin: '14px 0 12px', fontSize: 28, color: '#0B2540' }}>Where to work inside M02</h3>
+            <h3 style={{ margin: '14px 0 12px', fontSize: 28, color: '#0B2540' }}>Where to work inside Intent Signals</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
               <InsightCard title="Generate Intent Scores" desc="Run the scoring pipeline on prepared datasets before reviewing prioritization and forecast outputs." onClick={() => go(`#/workspace/:workspaceId/m02/generate`)} />
               <InsightCard title="Prioritization Dashboard" desc="Rank leads by conversion likelihood and identify who deserves immediate attention." onClick={() => go(`#/workspace/:workspaceId/m02/prioritization`)} />
               <InsightCard title="Intent Forecast" desc="Review projected engagement direction and anticipate where interest is increasing." onClick={() => go(`#/workspace/:workspaceId/m02/intent-forecast`)} />
+              <InsightCard title="Report Center" desc="Open the professional summary view for intent mix, urgency, and export-ready prioritization data." onClick={() => go(`#/workspace/:workspaceId/m08/m02`)} />
             </div>
           </div>
 
@@ -84,7 +85,7 @@ export default function Module2Home() {
             <div style={{ display: 'grid', gap: 12 }}>
               <MiniInfo title="Operational pages moved" text="Uploads, merged records, and raw lead-facing management now live in the workspace Data Hub." />
               <MiniInfo title="This page is for scoring and outputs" text="Stay here when you want to generate intent scores, review prioritization, and inspect forecast-oriented views." />
-              <MiniInfo title="Best use case" text="Use M02 after lead intake is stable and you want to decide where sales or marketing effort should focus next." />
+              <MiniInfo title="Best use case" text="Use Intent Signals after lead intake is stable and you want to decide where sales or marketing effort should focus next." />
             </div>
           </div>
         </section>

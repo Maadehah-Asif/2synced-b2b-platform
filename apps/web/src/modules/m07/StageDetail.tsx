@@ -36,20 +36,20 @@ export default function StageDetail(){
 
   if(!item) return (
     <Layout>
-      <div className="p-20"><ModuleBackButton toSuffix="/m07" /><div style={{ marginTop:12 }}>{message || 'Loading...'}</div></div>
+      <div className="p-20"><ModuleBackButton toSuffix="/m07/stages" /><div style={{ marginTop:12 }}>{message || 'Loading...'}</div></div>
     </Layout>
   );
 
   return (
     <Layout>
       <div className="p-20">
-        <div style={{ display:'flex', alignItems:'center', gap:12 }}><ModuleBackButton toSuffix="/m07" /><h2 style={{ margin:0 }}>Stage Record</h2></div>
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}><ModuleBackButton toSuffix="/m07/stages" /><h2 style={{ margin:0 }}>Stage Record</h2></div>
         <div style={{ marginTop:12, padding:20, background:'#fff', borderRadius:8 }}>
           <div style={{ display:'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap:12 }}>
             <div><label>Lead ID</label><input value={item.lead_id || ''} onChange={e=>setItem({...item, lead_id: e.target.value})} /></div>
             <div><label>Stage</label><input value={item.stage_name || ''} onChange={e=>setItem({...item, stage_name: e.target.value})} /></div>
-            <div><label>Entered At</label><input type="date" value={item.entered_at ? new Date(item.entered_at).toISOString().slice(0,10) : ''} onChange={e=>setItem({...item, entered_at: e.target.value})} /></div>
-            <div><label>Exited At</label><input type="date" value={item.exited_at ? new Date(item.exited_at).toISOString().slice(0,10) : ''} onChange={e=>setItem({...item, exited_at: e.target.value})} /></div>
+            <div><label>Entered At</label><input type="datetime-local" value={item.entered_at ? new Date(item.entered_at).toISOString().slice(0,16) : ''} onChange={e=>setItem({...item, entered_at: e.target.value})} /></div>
+            <div><label>Exited At</label><input type="datetime-local" value={item.exited_at ? new Date(item.exited_at).toISOString().slice(0,16) : ''} onChange={e=>setItem({...item, exited_at: e.target.value})} /></div>
           </div>
           <div style={{ marginTop:12, display:'flex', gap:8 }}>
             <button className="btn-primary" onClick={save}>Save</button>

@@ -1,29 +1,45 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
+import Autocomplete from '../../components/Autocomplete';
+import { CSV_UPLOAD_LIMIT_BYTES, CSV_UPLOAD_LIMIT_LABEL } from '../../utils/csvUpload';
 import { getWorkspaceIdFromHash } from '../../utils/workspace';
+import ImportPreviewStep from '../m06/components/ImportPreviewStep';
+import {
+  archiveStage,
+  createStage,
+  deleteStagePermanent,
+  importStagesCSV,
+  listStages,
+  searchLeads,
+  updateStage,
+  validateStagesCSV,
+  type StageImportSummary,
+  type StageRecord,
+  type StageValidationResult,
+} from './services/stages';
+import {
+  defaultStageMapping,
+  emptyStageForm,
+  STAGE_HEADER_ALIASES,
+  STAGE_FIELD_LABELS,
+  STAGE_NAME_OPTIONS,
+  STAGE_REQUIRED_FIELDS,
+  STAGE_STATUS_OPTIONS,
+  type StageFieldKey,
+  type StageFormState,
+  type StageMapping,
+} from './stageInputSchema';
 import './module7.css';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-
-type PreviewState = { columns: string[]; rows: string[][] } | null;
+type StageTab = 'list' | 'manual' | 'csv';
+type CsvRow = { rowNumber: number; original: Record<string, string> };
 
 function shell(title: string, subtitle: string) {
   return (
-    <section
-      style={{
-        borderRadius: 24,
-        overflow: 'hidden',
-        border: '1px solid rgba(15,66,88,0.08)',
-        boxShadow: '0 20px 46px rgba(13,30,60,0.08)',
-        background: 'linear-gradient(135deg, rgba(18,59,87,0.98) 0%, rgba(15,66,88,0.94) 52%, rgba(72,177,217,0.24) 100%)',
-        color: '#fff',
-      }}
-    >
+    <section style={{ borderRadius: 24, overflow: 'hidden', border: '1px solid rgba(15,66,88,0.08)', boxShadow: '0 20px 46px rgba(13,30,60,0.08)', background: 'linear-gradient(135deg, rgba(18,59,87,0.98) 0%, rgba(15,66,88,0.94) 52%, rgba(72,177,217,0.24) 100%)', color: '#fff' }}>
       <div style={{ padding: 28 }}>
-        <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          M07 Stage Workspace
-        </div>
+        <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>M07 Stage Workspace</div>
         <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>{title}</h1>
         <div style={{ maxWidth: 860, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>{subtitle}</div>
       </div>
@@ -31,144 +47,367 @@ function shell(title: string, subtitle: string) {
   );
 }
 
-export default function Module7StageWorkspace(){
-  const [workspace] = useState<string | null>(() => getWorkspaceIdFromHash());
-  const [activeTab, setActiveTab] = useState<'list'|'manual'|'csv'>('list');
-  const [message, setMessage] = useState<string | null>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<PreviewState>(null);
-  const [mapping, setMapping] = useState<{ lead_id: string; stage_name: string; entered_at: string; exited_at?: string }>({ lead_id: '', stage_name: '', entered_at: '' });
-  const [items, setItems] = useState<any[]>([]);
+function normalizeHeader(text: string) {
+  return text.toLowerCase().replace(/[\s_-]+/g, '').replace(/s$/, '');
+}
+
+function parseCsvText(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let value = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        value += '"';
+        i += 1;
+      } else inQuotes = !inQuotes;
+      continue;
+    }
+    if (char === ',' && !inQuotes) {
+      row.push(value.trim());
+      value = '';
+      continue;
+    }
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') i += 1;
+      row.push(value.trim());
+      rows.push(row);
+      row = [];
+      value = '';
+      continue;
+    }
+    value += char;
+  }
+  if (value.length > 0 || row.length > 0) {
+    row.push(value.trim());
+    rows.push(row);
+  }
+  return rows.filter((cells) => cells.some((cell) => cell.trim().length > 0));
+}
+
+function autoMapHeaders(headers: string[]): StageMapping {
+  const mapping = defaultStageMapping();
+  const used = new Set<string>();
+  (Object.keys(mapping) as StageFieldKey[]).forEach((field) => {
+    const aliases = STAGE_HEADER_ALIASES[field].map(normalizeHeader);
+    const match = headers.find((header) => !used.has(header) && aliases.includes(normalizeHeader(header)));
+    mapping[field] = match || '';
+    if (match) used.add(match);
+  });
+  return mapping;
+}
+
+function formatLeadOption(lead: any) {
+  const name = String(lead?.full_name || '').trim();
+  const email = String(lead?.email || '').trim();
+  const leadId = String(lead?.lead_id || '').trim();
+  return [leadId ? `#${leadId}` : '', name, email].filter(Boolean).join(' • ') || 'Unknown lead';
+}
+
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function formatLeadDisplay(lead: any) {
+  const name = String(lead?.full_name || '').trim();
+  const email = String(lead?.email || '').trim();
+  const leadId = String(lead?.lead_id || '').trim();
+  return [leadId ? `#${leadId}` : '', name, email].filter(Boolean).join(' | ') || 'Unknown lead';
+}
+
+export default function Module7StageWorkspace() {
+  const workspaceId = getWorkspaceIdFromHash();
+  const [activeTab, setActiveTab] = useState<StageTab>('list');
+  const [banner, setBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [rows, setRows] = useState<StageRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [filterLeadQuery, setFilterLeadQuery] = useState('');
+  const [filterLeadId, setFilterLeadId] = useState('');
+  const [filterStageName, setFilterStageName] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [includeArchived, setIncludeArchived] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editState, setEditState] = useState({ stage_status: 'active', exited_at: '', next_stage: '', exit_reason: '', notes: '' });
 
-  useEffect(() => { fetchList(); }, [workspace, search]);
+  const [leadQuery, setLeadQuery] = useState('');
+  const [form, setForm] = useState<StageFormState>(emptyStageForm);
+  const [formErrors, setFormErrors] = useState<Partial<Record<StageFieldKey, string>>>({});
+  const [saving, setSaving] = useState(false);
 
-  function getAuthHeaders(extra: Record<string,string> = {}){
-    try {
-      const token = localStorage.getItem('token');
-      return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
-    } catch {
-      return extra;
-    }
+  const [csvFileName, setCsvFileName] = useState('');
+  const [csvText, setCsvText] = useState('');
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
+  const [csvFileError, setCsvFileError] = useState<string | null>(null);
+  const [mapping, setMapping] = useState<StageMapping>(defaultStageMapping);
+  const [mappingErrors, setMappingErrors] = useState<string[]>([]);
+  const [startRow, setStartRow] = useState(1);
+  const [endRow, setEndRow] = useState<number | ''>('');
+  const [rangeError, setRangeError] = useState<string | null>(null);
+  const [overwriteMode, setOverwriteMode] = useState<'overwrite_existing' | 'skip_duplicates'>('overwrite_existing');
+  const [validationResult, setValidationResult] = useState<StageValidationResult | null>(null);
+  const [uploadSummary, setUploadSummary] = useState<StageImportSummary | null>(null);
+  const [validatingCsv, setValidatingCsv] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const formErrorList = useMemo(() => Object.values(formErrors).filter(Boolean) as string[], [formErrors]);
+  const shouldShowBanner = Boolean(banner && (banner.type === 'success' || activeTab !== 'list'));
+
+  function setError(message: string) {
+    setBanner({ type: 'error', message });
   }
 
-  async function fetchList(){
-    if(!workspace) return setMessage('workspace required');
+  function setSuccess(message: string) {
+    setBanner({ type: 'success', message });
+  }
+
+  function validateForm(nextForm: StageFormState) {
+    const errors: Partial<Record<StageFieldKey, string>> = {};
+    if (!nextForm.lead_id.trim()) errors.lead_id = 'Lead is required.';
+    if (!nextForm.stage_name.trim()) errors.stage_name = 'Stage name is required.';
+    else if (!STAGE_NAME_OPTIONS.includes(nextForm.stage_name.trim() as typeof STAGE_NAME_OPTIONS[number])) errors.stage_name = 'Select a valid stage name.';
+    if (!nextForm.entered_at.trim()) errors.entered_at = 'Entered at is required.';
+    else if (Number.isNaN(new Date(nextForm.entered_at).getTime())) errors.entered_at = 'Entered at must be a valid datetime.';
+    if (nextForm.exited_at && Number.isNaN(new Date(nextForm.exited_at).getTime())) errors.exited_at = 'Exited at must be a valid datetime.';
+    if (nextForm.entered_at && nextForm.exited_at && new Date(nextForm.exited_at).getTime() < new Date(nextForm.entered_at).getTime()) errors.exited_at = 'Exited at cannot be earlier than entered at.';
+    if (!STAGE_STATUS_OPTIONS.includes(nextForm.stage_status as typeof STAGE_STATUS_OPTIONS[number])) errors.stage_status = 'Select a valid stage status.';
+    if (nextForm.next_stage.trim() && !STAGE_NAME_OPTIONS.includes(nextForm.next_stage.trim() as typeof STAGE_NAME_OPTIONS[number])) errors.next_stage = 'Select a valid next stage.';
+    if (nextForm.stage_status === 'active' && nextForm.exited_at.trim()) errors.exited_at = 'Active stages cannot have exited at.';
+    if (nextForm.stage_status === 'completed' && !nextForm.exited_at.trim()) errors.exited_at = 'Completed stages require exited at.';
+    if (nextForm.stage_status === 'completed' && nextForm.stage_name !== 'Closed' && !nextForm.next_stage.trim()) errors.next_stage = 'Completed stages require next stage unless stage is Closed.';
+    if (nextForm.stage_status === 'dropped' && !nextForm.exit_reason.trim()) errors.exit_reason = 'Dropped stages require exit reason.';
+    if (nextForm.stage_status === 'dropped' && nextForm.next_stage.trim()) errors.next_stage = 'Dropped stages cannot have next stage.';
+    return errors;
+  }
+
+  function validateMappingState(nextMapping: StageMapping) {
+    const issues: string[] = [];
+    const counts = new Map<string, number>();
+    Object.values(nextMapping).forEach((value) => {
+      if (!value) return;
+      counts.set(value, (counts.get(value) || 0) + 1);
+    });
+    counts.forEach((count, header) => { if (count > 1) issues.push(`CSV column "${header}" is mapped more than once.`); });
+    STAGE_REQUIRED_FIELDS.forEach((field) => { if (!nextMapping[field]) issues.push(`Required field "${field}" is not mapped.`); });
+    return issues;
+  }
+
+  function validateRangeState(totalRows: number, start: number, end: number | '') {
+    if (!totalRows) return 'Upload a CSV file first.';
+    if (!Number.isInteger(start) || start < 1) return 'Start row must be 1 or greater.';
+    const safeEnd = end === '' ? totalRows : Number(end);
+    if (!Number.isInteger(safeEnd)) return 'End row must be a whole number.';
+    if (safeEnd < start) return 'End row cannot be earlier than start row.';
+    if (safeEnd > totalRows) return `End row cannot exceed ${totalRows}.`;
+    return null;
+  }
+
+  function setFormValue(key: StageFieldKey, value: string) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setFormErrors((prev) => ({ ...prev, [key]: undefined }));
+  }
+
+  function setMappingValue(key: StageFieldKey, value: string) {
+    const next = { ...mapping, [key]: value };
+    setMapping(next);
+    setMappingErrors(validateMappingState(next));
+    setValidationResult(null);
+    setUploadSummary(null);
+  }
+
+  async function load() {
     setLoading(true);
-    setMessage(null);
-    try{
-      const params = new URLSearchParams({ workspace, search });
-      const res = await fetch(`${API_URL}/m07/stages?${params.toString()}`);
-      const j = await res.json();
-      if(res.ok && j?.ok) setItems(j.items || []);
-      else setMessage(j?.error || 'failed');
-    }catch{
-      setMessage('network error');
+    try {
+      setRows(await listStages({ leadId: filterLeadId || undefined, stageName: filterStageName || undefined, status: filterStatus || undefined, includeArchived }));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to load stage records.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
-  async function saveManual(e: React.FormEvent){
-    e.preventDefault();
-    if(!workspace) return setMessage('workspace required');
-    const form = e.target as HTMLFormElement;
-    const data = Object.fromEntries(new FormData(form) as any);
-    try{
-      const res = await fetch(`${API_URL}/m07/stages`, {
-        method: 'POST',
-        headers: getAuthHeaders({'Content-Type':'application/json'}),
-        body: JSON.stringify({ workspaceId: workspace, ...data })
+  useEffect(() => { void load(); }, [filterLeadId, filterStageName, filterStatus, includeArchived]);
+
+  async function submitForm() {
+    const errors = validateForm(form);
+    setFormErrors(errors);
+    if (Object.keys(errors).length > 0) return setError('Please fix the highlighted form errors.');
+    if (!window.confirm('Are you sure you want to save this record?')) return;
+    setSaving(true);
+    try {
+      await createStage({ lead_id: form.lead_id.trim(), stage_name: form.stage_name.trim(), entered_at: form.entered_at, exited_at: form.exited_at || undefined, stage_status: form.stage_status, next_stage: form.next_stage || undefined, exit_reason: form.exit_reason || undefined, notes: form.notes || undefined });
+      setSuccess('Stage record saved successfully.');
+      setForm(emptyStageForm());
+      setLeadQuery('');
+      setActiveTab('list');
+      await load();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to create stage record.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function startEdit(row: StageRecord) {
+    setEditing(row._id || null);
+    setEditState({ stage_status: row.stage_status || 'active', exited_at: row.exited_at ? new Date(row.exited_at).toISOString().slice(0, 16) : '', next_stage: row.next_stage || '', exit_reason: row.exit_reason || '', notes: row.notes || '' });
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    try {
+      await updateStage(editing, { stage_status: editState.stage_status, exited_at: editState.exited_at || null, next_stage: editState.next_stage || null, exit_reason: editState.exit_reason || null, notes: editState.notes || null });
+      setEditing(null);
+      setSuccess('Stage record updated.');
+      await load();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to update stage record.');
+    }
+  }
+
+  function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    setCsvFileName('');
+    setCsvText('');
+    setCsvHeaders([]);
+    setCsvRows([]);
+    setCsvFileError(null);
+    setMapping(defaultStageMapping());
+    setMappingErrors([]);
+    setStartRow(1);
+    setEndRow('');
+    setValidationResult(null);
+    setUploadSummary(null);
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.csv')) return setCsvFileError('Only CSV files are supported.');
+    if (file.size <= 0) return setCsvFileError('Uploaded file is empty.');
+    if (file.size > CSV_UPLOAD_LIMIT_BYTES) return setCsvFileError(`File exceeds the ${CSV_UPLOAD_LIMIT_LABEL} size limit.`);
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = String(reader.result || '');
+        const parsed = parseCsvText(text);
+        if (parsed.length < 2) return setCsvFileError('The uploaded file does not contain any data rows.');
+        const headers = parsed[0];
+        const dataRows = parsed.slice(1).map((row, index) => ({ rowNumber: index + 1, original: Object.fromEntries(headers.map((header, columnIndex) => [header, row[columnIndex] ?? ''])) }));
+        const nextMapping = autoMapHeaders(headers);
+        setCsvFileName(file.name);
+        setCsvText(text);
+        setCsvHeaders(headers);
+        setCsvRows(dataRows);
+        setMapping(nextMapping);
+        setMappingErrors(validateMappingState(nextMapping));
+        setEndRow(dataRows.length);
+      } catch {
+        setCsvFileError('The uploaded file could not be parsed.');
+      }
+    };
+    reader.onerror = () => setCsvFileError('The uploaded file could not be read.');
+    reader.readAsText(file);
+  }
+
+  async function runCsvValidation() {
+    const nextMappingErrors = validateMappingState(mapping);
+    const nextRangeError = validateRangeState(csvRows.length, startRow, endRow);
+    setMappingErrors(nextMappingErrors);
+    setRangeError(nextRangeError);
+    if (!csvText.trim()) return setCsvFileError('Upload a CSV file first.');
+    if (nextMappingErrors.length > 0 || nextRangeError) return setError('Please fix the CSV mapping and row range errors first.');
+    setValidatingCsv(true);
+    try {
+      const result = await validateStagesCSV({
+        csv: csvText,
+        map: mapping,
+        startRow,
+        endRow: endRow === '' ? undefined : Number(endRow),
+        overwriteMode,
       });
-      const j = await res.json();
-      if(res.ok && j?.ok){
-        setMessage('Stage saved');
-        form.reset();
-        setActiveTab('list');
-        fetchList();
-      } else setMessage(j?.error || `save failed: HTTP ${res.status}`);
-    }catch(e){
-      setMessage('network error: ' + String((e as any).message || e));
+      setValidationResult(result);
+      setUploadSummary(null);
+      setSuccess(`Validation finished. ${result.summary.validRows} valid rows and ${result.summary.invalidRows} invalid rows found.`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'CSV validation failed.');
+    } finally {
+      setValidatingCsv(false);
     }
   }
 
-  async function uploadPreview(e: React.FormEvent){
-    e.preventDefault();
-    if(!workspace) return setMessage('workspace required');
-    if(!file) return setMessage('choose a CSV file');
-    setMessage('Uploading for preview...');
-    const fd = new FormData();
-    fd.append('file', file, file.name);
-    fd.append('workspace', workspace);
-    try{
-      const res = await fetch(`${API_URL}/m07/stages/upload/preview`, { method: 'POST', body: fd, headers: getAuthHeaders() });
-      const j = await res.json();
-      if(res.ok && j?.ok){
-        setPreview({ columns: j.columns || [], rows: j.previewRows || [] });
-        setMessage(null);
-      } else setMessage(j?.error || `preview failed: HTTP ${res.status}`);
-    }catch(e){
-      setMessage('network error: ' + String((e as any).message || e));
-    }
-  }
-
-  async function commitPreview(){
-    if(!workspace) return setMessage('workspace required');
-    if(!preview) return setMessage('no preview available');
-    const cols = preview.columns;
-    const rows = preview.rows;
-    if(!mapping.lead_id || !mapping.stage_name || !mapping.entered_at) return setMessage('map lead_id, stage_name and entered_at');
-    const leadIdx = cols.indexOf(mapping.lead_id);
-    const stageIdx = cols.indexOf(mapping.stage_name);
-    const enteredIdx = cols.indexOf(mapping.entered_at);
-    if(leadIdx === -1 || stageIdx === -1 || enteredIdx === -1) return setMessage('mapped columns not found');
-    const payloadRows = rows.map(r => ({
-      lead_id: r[leadIdx] || '',
-      stage_name: r[stageIdx] || '',
-      entered_at: r[enteredIdx] || '',
-      exited_at: mapping.exited_at ? r[cols.indexOf(mapping.exited_at)] : null
-    }));
-    try{
-      const res = await fetch(`${API_URL}/m07/stages/upload/commit`, {
-        method: 'POST',
-        headers: getAuthHeaders({'Content-Type':'application/json'}),
-        body: JSON.stringify({ workspaceId: workspace, rows: payloadRows, overwriteMode: 'overwrite_existing' })
+  async function submitCsvImport(allowPartial: boolean) {
+    if (!validationResult) return runCsvValidation();
+    const confirmMessage = validationResult.summary.invalidRows > 0 && allowPartial
+      ? `Some rows contain errors. ${validationResult.summary.invalidRows} rows will be skipped. Continue uploading ${validationResult.summary.validRows} valid rows only?`
+      : `Please confirm the field mapping and selected row range. You are about to upload ${validationResult.summary.validRows} valid rows. Continue?`;
+    if (!window.confirm(confirmMessage)) return;
+    setImporting(true);
+    try {
+      const summary = await importStagesCSV({
+        csv: csvText,
+        map: mapping,
+        startRow,
+        endRow: endRow === '' ? undefined : Number(endRow),
+        overwriteMode,
+        allowPartial,
       });
-      const j = await res.json();
-      if(res.ok && j?.ok){
-        setMessage(`Imported ${j.importedCount} updated ${j.updatedCount} skipped ${j.skippedCount}`);
-        setPreview(null);
-        setFile(null);
-        setActiveTab('list');
-        fetchList();
-      } else setMessage(j?.error || `commit failed: HTTP ${res.status}`);
-    }catch(e){
-      setMessage('network error: ' + String((e as any).message || e));
+      setUploadSummary(summary);
+      setSuccess(`${summary.importedCount} rows imported, ${summary.updatedCount} updated, ${summary.skippedCount} skipped.`);
+      setActiveTab('list');
+      await load();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to import stage CSV.');
+    } finally {
+      setImporting(false);
     }
   }
 
-  function computeDurationDays(item:any){
-    try{
+  function downloadInvalidRows() {
+    if (!validationResult || validationResult.summary.invalidRows === 0) return;
+    const invalidRows = validationResult.rowResults.filter((row) => !row.valid);
+    const lines = [['row_number', 'error_fields', 'error_messages', ...csvHeaders].join(',')];
+    invalidRows.forEach((row) => {
+      const errorFields = row.errors.map((issue) => issue.field).join('; ');
+      const errorMessages = row.errors.map((issue) => issue.message).join('; ');
+      const values = csvHeaders.map((header) => JSON.stringify(row.original[header] ?? ''));
+      lines.push([row.rowNumber, JSON.stringify(errorFields), JSON.stringify(errorMessages), ...values].join(','));
+    });
+    downloadTextFile('stage-invalid-rows.csv', lines.join('\n'));
+  }
+
+  function computeDurationDays(item: StageRecord) {
+    try {
       const entered = item.entered_at ? new Date(item.entered_at) : null;
       const exited = item.exited_at ? new Date(item.exited_at) : null;
       const now = new Date();
-      if(entered && exited) return Math.round((exited.getTime() - entered.getTime()) / (1000*60*60*24));
-      if(entered && !exited) return Math.round((now.getTime() - entered.getTime()) / (1000*60*60*24));
-    }catch{}
+      if (entered && exited) return Math.round((exited.getTime() - entered.getTime()) / (1000 * 60 * 60 * 24));
+      if (entered && !exited) return Math.round((now.getTime() - entered.getTime()) / (1000 * 60 * 60 * 24));
+    } catch {}
     return '';
   }
 
-  async function archive(id:string){
-    if(!confirm('Archive this stage record?')) return;
-    const res = await fetch(`${API_URL}/m07/stages/${id}/archive`, { method: 'POST' });
-    if(res.ok) setItems(s => s.filter(x => x._id !== id));
-  }
+  const visibleRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) =>
+      [row.lead_id, row.stage_name, row.stage_status, row.next_stage, row.exit_reason]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q))
+    );
+  }, [rows, search]);
 
-  async function remove(id:string){
-    if(!confirm('Delete permanently?')) return;
-    const res = await fetch(`${API_URL}/m07/stages/${id}/permanent`, { method: 'DELETE' });
-    if(res.ok) setItems(s => s.filter(x => x._id !== id));
-  }
+  const previewRows = useMemo(() => {
+    if (validationResult) return validationResult.rowResults;
+    return csvRows
+      .filter((row) => row.rowNumber >= startRow && row.rowNumber <= (endRow === '' ? csvRows.length : Number(endRow)))
+      .map((row) => ({ ...row, valid: true, errors: [], warnings: [] }));
+  }, [csvRows, endRow, startRow, validationResult]);
 
   return (
     <Layout>
@@ -179,28 +418,22 @@ export default function Module7StageWorkspace(){
 
         {shell(
           'Stage History Operations',
-          'Review stage transition records, add one stage record manually, or import stage history in bulk from CSV without switching between separate M07 pages.'
+          'Review stage transition records, add one stage record manually, or validate and import stage history in bulk from CSV through the shared reusable preview flow.'
         )}
 
         <section className="m07-workspace-panel m07-workspace-panel-soft">
-          <div className="m07-workspace-label">
-            Stage Actions
-          </div>
+          <div className="m07-workspace-label">Stage Actions</div>
           <h3 className="m07-workspace-title">Manage stage records from one screen</h3>
           <div className="m07-workspace-copy">
-            Switch between viewing funnel stage history, adding a single record, and importing batches from CSV.
+            Switch between viewing funnel stage history, adding a single record, and validating/importing mapped CSV batches.
           </div>
           <div className="m07-workspace-tabrow">
             {[
-              ['list', 'View stages', 'Search, inspect, archive, and open stage records'],
+              ['list', 'View stages', 'Search, inspect, archive, and update stage records'],
               ['manual', 'Add stage', 'Create one stage history entry manually'],
-              ['csv', 'CSV import', 'Preview and import mapped stage history rows'],
+              ['csv', 'CSV import', 'Map, preview, validate, and import batches'],
             ].map(([key, label, desc], idx) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key as any)}
-                className={`m07-workspace-tabbtn ${activeTab === key ? 'active' : ''}`}
-              >
+              <button key={key} onClick={() => setActiveTab(key as StageTab)} className={`m07-workspace-tabbtn ${activeTab === key ? 'active' : ''}`}>
                 <span className="m07-workspace-step">{idx + 1}</span>
                 <span className="m07-workspace-tabmeta">
                   <strong>{label}</strong>
@@ -211,48 +444,90 @@ export default function Module7StageWorkspace(){
           </div>
         </section>
 
+        {shouldShowBanner && banner && (
+          <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 10, background: banner.type === 'success' ? '#e9fff3' : '#fff1f1', color: banner.type === 'success' ? '#0a7' : '#a22', border: `1px solid ${banner.type === 'success' ? '#a6e7c3' : '#f3b6b6'}` }}>
+            {banner.message}
+          </div>
+        )}
+
         {activeTab === 'list' && (
           <section className="m07-workspace-panel">
             <h3 className="m07-workspace-title" style={{ marginTop: 0 }}>Stage Table</h3>
-            <div className="m07-workspace-toolbar">
-              <input className="m07-workspace-search" placeholder="Search by lead or stage" value={search} onChange={e=>setSearch(e.target.value)} />
-              <button className="btn-primary" onClick={fetchList}>Reload</button>
-              <button className="btn-ghost" onClick={()=>{ setSearch(''); fetchList(); }}>Reset</button>
+            <div className="m07-workspace-toolbar" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              <input className="m07-workspace-search" placeholder="Search visible rows" value={search} onChange={(event) => setSearch(event.target.value)} />
+              <Autocomplete
+                value={filterLeadQuery}
+                placeholder="Filter by lead"
+                fetchItems={async (query) => {
+                  const result = await searchLeads(query);
+                  return result.leads || [];
+                }}
+                formatItem={formatLeadDisplay}
+                getValue={formatLeadDisplay}
+                onChange={(value, item) => {
+                  setFilterLeadQuery(value);
+                  setFilterLeadId(item ? String(item.lead_id) : '');
+                }}
+              />
+              <input placeholder="Filter by stage name" value={filterStageName} onChange={(event) => setFilterStageName(event.target.value)} />
+              <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)}>
+                <option value="">All statuses</option>
+                {STAGE_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+              <label className="toggle" style={{ minHeight: 46 }}>
+                <input type="checkbox" checked={includeArchived} onChange={(event) => setIncludeArchived(event.target.checked)} />
+                Include archived
+              </label>
+              <button className="btn-primary" onClick={() => load()}>Reload</button>
             </div>
             <div className="m07-workspace-sectiongap">
               {loading && <div style={{ fontSize: 12 }}>Loading...</div>}
-              {message && <div className="muted">{message}</div>}
-              {!loading && items.length === 0 && <div style={{ fontSize: 12 }}>No stage records found.</div>}
-              {!loading && items.length > 0 && (
+              {!loading && visibleRows.length === 0 && <div style={{ fontSize: 12 }}>No stage records found.</div>}
+              {!loading && visibleRows.length > 0 && (
                 <div className="m07-workspace-tablewrap">
                   <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse', background: '#fff' }}>
                     <thead>
                       <tr style={{ background: '#f5f7fa' }}>
-                        <th style={{ padding:6, textAlign:'left' }}>Lead ID</th>
-                        <th style={{ padding:6, textAlign:'left' }}>Stage</th>
-                        <th style={{ padding:6, textAlign:'left' }}>Entered</th>
-                        <th style={{ padding:6, textAlign:'left' }}>Exited</th>
-                        <th style={{ padding:6, textAlign:'left' }}>Status</th>
-                        <th style={{ padding:6, textAlign:'left' }}>Duration (days)</th>
-                        <th style={{ padding:6, textAlign:'left' }}>Actions</th>
+                        <th style={{ padding: 6, textAlign: 'left' }}>Lead ID</th>
+                        <th style={{ padding: 6, textAlign: 'left' }}>Stage</th>
+                        <th style={{ padding: 6, textAlign: 'left' }}>Entered</th>
+                        <th style={{ padding: 6, textAlign: 'left' }}>Exited</th>
+                        <th style={{ padding: 6, textAlign: 'left' }}>Status</th>
+                        <th style={{ padding: 6, textAlign: 'left' }}>Next Stage</th>
+                        <th style={{ padding: 6, textAlign: 'left' }}>Duration (days)</th>
+                        <th style={{ padding: 6, textAlign: 'left' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {items.map(it => (
-                        <tr key={it._id} style={{ borderTop: '1px solid #eee' }}>
-                          <td style={{ padding:8 }}>{it.lead_id}</td>
-                          <td style={{ padding:8 }}>{it.stage_name}</td>
-                          <td style={{ padding:8 }}>{it.entered_at ? new Date(it.entered_at).toLocaleDateString() : ''}</td>
-                          <td style={{ padding:8 }}>{it.exited_at ? new Date(it.exited_at).toLocaleDateString() : ''}</td>
-                          <td style={{ padding:8 }}>{it.stage_status}</td>
-                          <td style={{ padding:8 }}>{computeDurationDays(it)}</td>
-                          <td style={{ padding:8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            <button className="btn-ghost" onClick={()=>{ if(workspace) window.location.hash = `#/workspace/${workspace}/m07/stages/${it._id}`; else window.location.hash = `#/m07/stages/${it._id}`; }}>View</button>
-                            <button className="btn-ghost" onClick={()=>archive(it._id)}>Archive</button>
-                            <button className="btn-danger" onClick={()=>remove(it._id)}>Delete</button>
-                          </td>
-                        </tr>
-                      ))}
+                      {visibleRows.map((row) => {
+                        const isEditing = editing === row._id;
+                        return (
+                          <tr key={row._id} style={{ borderTop: '1px solid #eee' }}>
+                            <td style={{ padding: 8 }}>{row.lead_id}</td>
+                            <td style={{ padding: 8 }}>{row.stage_name}</td>
+                            <td style={{ padding: 8 }}>{row.entered_at ? new Date(row.entered_at).toLocaleString() : ''}</td>
+                            <td style={{ padding: 8 }}>{isEditing ? <input type="datetime-local" value={editState.exited_at} onChange={(event) => setEditState((prev) => ({ ...prev, exited_at: event.target.value }))} /> : (row.exited_at ? new Date(row.exited_at).toLocaleString() : '-')}</td>
+                            <td style={{ padding: 8 }}>{isEditing ? <select value={editState.stage_status} onChange={(event) => setEditState((prev) => ({ ...prev, stage_status: event.target.value }))}>{STAGE_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}</select> : (row.stage_status || 'active')}</td>
+                            <td style={{ padding: 8 }}>{isEditing ? <input value={editState.next_stage} onChange={(event) => setEditState((prev) => ({ ...prev, next_stage: event.target.value }))} /> : (row.next_stage || '-')}</td>
+                            <td style={{ padding: 8 }}>{computeDurationDays(row)}</td>
+                            <td style={{ padding: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              {!isEditing ? (
+                                <>
+                                  <button className="btn-ghost" onClick={() => { if (!row._id) return; window.location.hash = workspaceId ? `#/workspace/${workspaceId}/m07/stages/${row._id}` : `#/m07/stages/${row._id}`; }}>View</button>
+                                  <button className="btn-ghost" onClick={() => startEdit(row)}>Edit</button>
+                                  <button className="btn-ghost" onClick={async () => { if (!row._id || !window.confirm('Archive this stage record?')) return; try { await archiveStage(row._id); setSuccess('Archived'); await load(); } catch (error) { setError(error instanceof Error ? error.message : 'Archive failed'); } }}>Archive</button>
+                                  <button className="btn-danger" onClick={async () => { if (!row._id) return; const confirmation = prompt(`Type the stage name (${row.stage_name}) to confirm permanent deletion:`, ''); if (confirmation !== row.stage_name) return; try { await deleteStagePermanent(row._id); setSuccess('Deleted'); await load(); } catch (error) { setError(error instanceof Error ? error.message : 'Delete failed'); } }}>Delete</button>
+                                </>
+                              ) : (
+                                <>
+                                  <button className="btn-primary" onClick={saveEdit}>Save</button>
+                                  <button className="btn-ghost" onClick={() => setEditing(null)}>Cancel</button>
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -264,69 +539,188 @@ export default function Module7StageWorkspace(){
         {activeTab === 'manual' && (
           <section className="m07-workspace-panel">
             <h3 className="m07-workspace-title" style={{ marginTop: 0 }}>Manual Add Stage Record</h3>
-            <div className="m07-workspace-copy m07-workspace-copy-tight">Each record represents a lead&apos;s time in a stage. Lead must already exist.</div>
-            <form onSubmit={saveManual} style={{ marginTop: 14 }}>
-              <div className="m07-workspace-formgrid">
-                <div><label style={{ fontSize:12, fontWeight:600 }}>Lead ID *</label><input name="lead_id" style={{ width: '100%' }} /></div>
-                <div><label style={{ fontSize:12, fontWeight:600 }}>Stage Name *</label><input name="stage_name" style={{ width: '100%' }} /></div>
-                <div><label style={{ fontSize:12, fontWeight:600 }}>Entered At *</label><input name="entered_at" type="date" style={{ width: '100%' }} /></div>
-                <div><label style={{ fontSize:12, fontWeight:600 }}>Exited At</label><input name="exited_at" type="date" style={{ width: '100%' }} /></div>
-                <div><label style={{ fontSize:12, fontWeight:600 }}>Stage Status</label><select name="stage_status" style={{ width: '100%' }}><option value="active">active</option><option value="completed">completed</option><option value="dropped">dropped</option></select></div>
-                <div><label style={{ fontSize:12, fontWeight:600 }}>Next Stage</label><input name="next_stage" style={{ width: '100%' }} /></div>
-                <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize:12, fontWeight:600 }}>Notes</label><textarea name="notes" rows={3} style={{ width: '100%' }} /></div>
+            <div className="m07-workspace-copy m07-workspace-copy-tight">Use the same schema rules as the CSV flow. Required fields are marked with *.</div>
+            {formErrorList.length > 0 && (
+              <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 12, background: '#fff7f7', border: '1px solid rgba(195,51,51,0.18)', color: '#8b1e1e' }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>Please fix these fields before saving</div>
+                <div style={{ display: 'grid', gap: 4, fontSize: 13 }}>
+                  {formErrorList.map((message) => <div key={message}>{message}</div>)}
+                </div>
               </div>
-              <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                <button className="btn-primary" type="submit">Save Stage Record</button>
-                <button className="btn-ghost" type="button" onClick={()=>setMessage(null)}>Reset</button>
+            )}
+            <div className="m07-workspace-formgrid" style={{ marginTop: 14 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600 }}>Lead *</label>
+                <Autocomplete
+                  value={leadQuery}
+                  placeholder="Lead id / name / email"
+                  fetchItems={async (query) => {
+                    const result = await searchLeads(query);
+                    return result.leads || [];
+                  }}
+                  formatItem={formatLeadDisplay}
+                  getValue={formatLeadDisplay}
+                  onChange={(value, item) => {
+                    setLeadQuery(value);
+                    setFormValue('lead_id', item ? String(item.lead_id) : '');
+                  }}
+                />
+                {formErrors.lead_id && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.lead_id}</div>}
               </div>
-            </form>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600 }}>Stage Name *</label>
+                <select value={form.stage_name} onChange={(event) => setFormValue('stage_name', event.target.value)} style={{ width: '100%' }}>
+                  <option value="">Select stage</option>
+                  {STAGE_NAME_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+                {formErrors.stage_name && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.stage_name}</div>}
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600 }}>Entered At *</label>
+                <input type="datetime-local" value={form.entered_at} onChange={(event) => setFormValue('entered_at', event.target.value)} style={{ width: '100%' }} />
+                {formErrors.entered_at && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.entered_at}</div>}
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600 }}>Exited At (optional)</label>
+                <input type="datetime-local" value={form.exited_at} onChange={(event) => setFormValue('exited_at', event.target.value)} style={{ width: '100%' }} />
+                {formErrors.exited_at && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.exited_at}</div>}
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600 }}>Stage Status (optional)</label>
+                <select value={form.stage_status} onChange={(event) => setFormValue('stage_status', event.target.value)} style={{ width: '100%' }}>
+                  {STAGE_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+                {formErrors.stage_status && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.stage_status}</div>}
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600 }}>Next Stage (optional)</label>
+                <select value={form.next_stage} onChange={(event) => setFormValue('next_stage', event.target.value)} style={{ width: '100%' }}>
+                  <option value="">Select next stage</option>
+                  {STAGE_NAME_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+                {formErrors.next_stage && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.next_stage}</div>}
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600 }}>Exit Reason (optional)</label>
+                <input value={form.exit_reason} onChange={(event) => setFormValue('exit_reason', event.target.value)} style={{ width: '100%' }} />
+                {formErrors.exit_reason && <div style={{ color: '#c33', fontSize: 11, marginTop: 4 }}>{formErrors.exit_reason}</div>}
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ fontSize: 12, fontWeight: 600 }}>Notes (optional)</label>
+                <textarea value={form.notes} onChange={(event) => setFormValue('notes', event.target.value)} rows={3} style={{ width: '100%' }} />
+              </div>
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+              <button className="btn-primary" type="button" disabled={saving} onClick={submitForm}>{saving ? 'Saving...' : 'Save Stage Record'}</button>
+            </div>
           </section>
         )}
 
         {activeTab === 'csv' && (
           <section className="m07-workspace-panel">
             <h3 className="m07-workspace-title" style={{ marginTop: 0 }}>CSV Upload (Stage History)</h3>
-            <div className="m07-workspace-copy m07-workspace-copy-tight">CSV must include at least `lead_id`, `stage_name`, and `entered_at`.</div>
-            <form onSubmit={uploadPreview} style={{ marginTop: 12 }}>
+            <div className="m07-workspace-copy m07-workspace-copy-tight">Upload a CSV, review auto-detected mappings, open the shared preview step, validate rows, inspect invalid rows, and confirm before import.</div>
+            <div style={{ marginTop: 12 }}>
               <div className="m07-workspace-uploaderow">
-                <input type="file" accept=".csv" onChange={(e)=> setFile(e.target.files ? e.target.files[0] : null)} />
+                <input type="file" accept=".csv" onChange={onFileChange} />
               </div>
-              <div className="m07-workspace-actionsrow">
-                <button className="btn-primary" type="submit">Preview CSV</button>
-                <button className="btn-ghost" type="button" style={{ marginLeft: 8 }} onClick={()=>{ setFile(null); setPreview(null); }}>Clear</button>
-              </div>
-            </form>
+              <div className="m07-workspace-inlinehint" style={{ marginTop: 8 }}>Only `.csv` files up to {CSV_UPLOAD_LIMIT_LABEL} are accepted.</div>
+              {csvFileName && <div className="m07-workspace-inlinehint" style={{ marginTop: 8 }}>Loaded file: {csvFileName}</div>}
+              {csvFileError && <div style={{ marginTop: 8, fontSize: 12, color: '#c33' }}>{csvFileError}</div>}
+            </div>
 
-            {preview && (
+            {csvHeaders.length > 0 && (
               <div className="m07-workspace-sectiongap">
-                <div className="m07-workspace-inlinehint">Detected columns: {preview.columns.join(', ')}</div>
+                <div className="m07-workspace-inlinehint">Detected columns: {csvHeaders.join(', ')}</div>
+                <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 12, background: '#f8fbff', border: '1px solid rgba(15,66,88,0.08)' }}>
+                  <div style={{ fontWeight: 700, marginBottom: 8 }}>Map CSV columns to stage fields</div>
+                  <div style={{ fontSize: 13, color: '#35516a', lineHeight: 1.6 }}>
+                    Required fields: {STAGE_REQUIRED_FIELDS.map((field) => STAGE_FIELD_LABELS[field]).join(', ')}.
+                  </div>
+                </div>
                 <div className="m07-workspace-formgrid m07-workspace-mappinggrid">
-                  <div><div style={{ fontSize:12 }}>Map lead_id *</div><input list="stage-headers" value={mapping.lead_id} onChange={e=>setMapping(m=>({ ...m, lead_id: e.target.value }))} /></div>
-                  <div><div style={{ fontSize:12 }}>Map stage_name *</div><input list="stage-headers" value={mapping.stage_name} onChange={e=>setMapping(m=>({ ...m, stage_name: e.target.value }))} /></div>
-                  <div><div style={{ fontSize:12 }}>Map entered_at *</div><input list="stage-headers" value={mapping.entered_at} onChange={e=>setMapping(m=>({ ...m, entered_at: e.target.value }))} /></div>
-                  <div><div style={{ fontSize:12 }}>Map exited_at</div><input list="stage-headers" value={mapping.exited_at || ''} onChange={e=>setMapping(m=>({ ...m, exited_at: e.target.value }))} /></div>
+                  {(Object.keys(mapping) as StageFieldKey[]).map((field) => {
+                    const usedElsewhere = new Set(Object.entries(mapping).filter(([key, value]) => key !== field && value).map(([, value]) => value));
+                    return (
+                      <div key={field}>
+                        <div style={{ fontSize: 12, fontWeight: 600 }}>{STAGE_FIELD_LABELS[field]}{STAGE_REQUIRED_FIELDS.includes(field) ? ' *' : ' (optional)'}</div>
+                        <select value={mapping[field]} onChange={(event) => setMappingValue(field, event.target.value)} style={{ width: '100%' }}>
+                          <option value="">{STAGE_REQUIRED_FIELDS.includes(field) ? 'Select CSV column' : 'Skip this field'}</option>
+                          {csvHeaders.filter((header) => !usedElsewhere.has(header) || header === mapping[field]).map((header) => <option key={header} value={header}>{header}</option>)}
+                        </select>
+                      </div>
+                    );
+                  })}
+                  <div>
+                    <div style={{ fontSize: 12 }}>Start row *</div>
+                    <input type="number" min={1} value={startRow} onChange={(event) => { setStartRow(Number(event.target.value || 1)); setValidationResult(null); }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12 }}>End row *</div>
+                    <input type="number" min={1} value={endRow} onChange={(event) => { setEndRow(event.target.value ? Number(event.target.value) : ''); setValidationResult(null); }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12 }}>Duplicate handling</div>
+                    <select value={overwriteMode} onChange={(event) => setOverwriteMode(event.target.value as 'overwrite_existing' | 'skip_duplicates')}>
+                      <option value="overwrite_existing">Overwrite existing</option>
+                      <option value="skip_duplicates">Skip duplicates</option>
+                    </select>
+                  </div>
                 </div>
-                <datalist id="stage-headers">{preview.columns.map(c=>(<option key={c} value={c}/>))}</datalist>
-                <div className="m07-workspace-tablewrap">
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: '#f8f9fb' }}>{preview.columns.map((c, idx)=>(<th key={idx} style={{ padding:8, borderBottom:'1px solid #e2e8f0' }}>{c}</th>))}</tr>
-                    </thead>
-                    <tbody>
-                      {preview.rows.map((r, i)=>(<tr key={i} style={{ background: i%2===0? '#fff':'#fafbff' }}>{preview.columns.map((_,j)=>(<td key={j} style={{ padding:8, borderBottom:'1px solid #edf2f7' }}>{r[j] ?? ''}</td>))}</tr>))}
-                    </tbody>
-                  </table>
-                </div>
+                {mappingErrors.length > 0 && (
+                  <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 12, background: '#fff7f7', border: '1px solid rgba(195,51,51,0.18)', color: '#8b1e1e' }}>
+                    <div style={{ fontWeight: 700, marginBottom: 6 }}>Mapping issues</div>
+                    <div style={{ display: 'grid', gap: 4, fontSize: 13 }}>
+                      {mappingErrors.map((issue) => <div key={issue}>{issue}</div>)}
+                    </div>
+                  </div>
+                )}
+                {rangeError && <div className="m07-workspace-inlinehint" style={{ color: '#900' }}>{rangeError}</div>}
                 <div className="m07-workspace-actionsrow">
-                  <button className="btn-primary" onClick={commitPreview}>Import Previewed Rows</button>
-                  <button className="btn-ghost" onClick={()=>{ setPreview(null); setFile(null); }}>Cancel</button>
+                  <button className="btn-primary" disabled={validatingCsv} onClick={runCsvValidation}>{validatingCsv ? 'Validating...' : 'Validate and Open Preview'}</button>
                 </div>
+
+                {previewRows.length > 0 && (
+                  <div style={{ marginTop: 18 }}>
+                    <ImportPreviewStep
+                      title="Stage History CSV Preview"
+                      subtitle="This reusable Module 6 preview step is shared across the M06 and M07 data hub ingestion flows."
+                      sourceHeaders={csvHeaders}
+                      rows={previewRows}
+                      currentStartRow={startRow}
+                      totalSelectedRows={previewRows.length}
+                    />
+                  </div>
+                )}
+
+                {validationResult && (
+                  <div className="m07-workspace-sectiongap">
+                    <div className="m07-workspace-inlinehint">Total rows checked: {validationResult.summary.checkedRows}</div>
+                    <div className="m07-workspace-inlinehint">Valid rows: {validationResult.summary.validRows}</div>
+                    <div className="m07-workspace-inlinehint">Invalid rows: {validationResult.summary.invalidRows}</div>
+                    <div className="m07-workspace-inlinehint">Warning rows: {validationResult.summary.warningRows}</div>
+                    <div className="m07-workspace-actionsrow">
+                      {validationResult.summary.invalidRows > 0 && <button className="btn-ghost" onClick={downloadInvalidRows}>Download Invalid Rows</button>}
+                      {validationResult.summary.validRows > 0 && (
+                        <button className="btn-primary" disabled={importing} onClick={() => submitCsvImport(validationResult.summary.invalidRows > 0)}>
+                          {importing ? 'Importing...' : validationResult.summary.invalidRows > 0 ? 'Proceed With Valid Rows Only' : 'Confirm and Import'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {uploadSummary && (
+                  <div className="m07-workspace-sectiongap">
+                    <div className="m07-workspace-inlinehint">Imported: {uploadSummary.importedCount}</div>
+                    <div className="m07-workspace-inlinehint">Updated: {uploadSummary.updatedCount}</div>
+                    <div className="m07-workspace-inlinehint">Skipped: {uploadSummary.skippedCount}</div>
+                  </div>
+                )}
               </div>
             )}
           </section>
         )}
-
-        {message && <div className="muted" style={{ marginTop: 12 }}>{message}</div>}
       </main>
     </Layout>
   );

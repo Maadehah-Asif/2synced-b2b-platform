@@ -151,10 +151,12 @@ export async function computeDealHealthFeaturesForThread(
   let days_since_last_inbound = 60; // Default high value if no inbound
   if (inboundMessages.length > 0) {
     const lastInbound = inboundMessages[inboundMessages.length - 1];
-    const daysDiff =
-      (now.getTime() - lastInbound.sentAt.getTime()) /
-      (1000 * 60 * 60 * 24);
-    days_since_last_inbound = Math.min(60, Math.max(0, daysDiff));
+    if (lastInbound) {
+      const daysDiff =
+        (now.getTime() - lastInbound.sentAt.getTime()) /
+        (1000 * 60 * 60 * 24);
+      days_since_last_inbound = Math.min(60, Math.max(0, daysDiff));
+    }
   }
 
   // 9. total_messages_log: Math.log1p(totalMessages)
@@ -275,9 +277,12 @@ export async function computeDealHealthFeaturesForThread(
     let totalGapDays = 0;
     let gapCount = 0;
     for (let i = 1; i < inboundMessages.length; i++) {
+      const currentInbound = inboundMessages[i];
+      const previousInbound = inboundMessages[i - 1];
+      if (!currentInbound || !previousInbound) continue;
       const gap =
-        (inboundMessages[i].sentAt.getTime() -
-          inboundMessages[i - 1].sentAt.getTime()) /
+        (currentInbound.sentAt.getTime() -
+          previousInbound.sentAt.getTime()) /
         (1000 * 60 * 60 * 24);
       totalGapDays += gap;
       gapCount++;

@@ -23,6 +23,7 @@ import {
   listOrganisationsController,
   getOrgTimelineController,
   listCompaniesController,
+  getLeadProfileController,
 } from "./controllers.js";
 import { attachOptionalUser } from "../core/auth/middleware.js";
 
@@ -190,5 +191,12 @@ m03Router.get("/orgs/:orgId/timeline", getOrgTimelineController);
 
 // GET /api/m03/companies
 m03Router.get("/companies", listCompaniesController);
+
+// -----------------------------------------------------------------------------
+// Lead profile
+// -----------------------------------------------------------------------------
+
+// GET /api/m03/leads/:leadId/profile
+m03Router.get("/leads/:leadId/profile", getLeadProfileController);
 
 export default m03Router;

@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import Layout from "../../components/Layout";
 import ModuleBackButton from "../../components/ModuleBackButton";
 import "./org-timeline.css";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+import { fetchModule3Json } from "./api";
 
 function getWorkspaceId() {
   const hash = window.location.hash || "";
@@ -55,33 +54,10 @@ export default function OrgTimelinePage() {
       setError(null);
 
       try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          setError("You are not logged in.");
-          setLoadingOrgs(false);
-          return;
-        }
-
-        const res = await fetch(
-          `${API_URL}/m03/orgs?workspaceId=${encodeURIComponent(activeWorkspaceId)}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        const data = await res.json();
-
-        if (!res.ok) {
-          if (res.status === 401 || res.status === 403) {
-            setError("You are not authorized. Please log in again.");
-          } else {
-            setError(data?.error || "Failed to load organisations.");
-          }
-        } else {
-          setOrgs(data.orgs || []);
-        }
+        const data = await fetchModule3Json<{ orgs: OrgItem[] }>("/orgs", {
+          workspaceId: activeWorkspaceId,
+        });
+        setOrgs(data.orgs || []);
       } catch (err: any) {
         setError(err?.message || "Unexpected error while loading organisations.");
       } finally {
@@ -106,36 +82,14 @@ export default function OrgTimelinePage() {
       setError(null);
 
       try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          setError("You are not logged in.");
-          setLoadingTimeline(false);
-          return;
-        }
-
-        const res = await fetch(
-          `${API_URL}/m03/orgs/${encodeURIComponent(activeOrgId)}/timeline?days=90&workspaceId=${encodeURIComponent(activeWorkspaceId)}`,
+        const data = await fetchModule3Json<OrgTimelineResponse>(
+          `/orgs/${encodeURIComponent(activeOrgId)}/timeline`,
           {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            days: 90,
+            workspaceId: activeWorkspaceId,
           }
         );
-
-        const data = await res.json();
-
-        if (!res.ok) {
-          if (res.status === 401 || res.status === 403) {
-            setError("You are not authorized. Please log in again.");
-          } else if (res.status === 404) {
-            setError("Organisation not found.");
-          } else {
-            setError(data?.error || "Failed to load timeline.");
-          }
-          setTimeline(null);
-        } else {
-          setTimeline(data);
-        }
+        setTimeline(data);
       } catch (err: any) {
         setError(err?.message || "Unexpected error while loading timeline.");
         setTimeline(null);

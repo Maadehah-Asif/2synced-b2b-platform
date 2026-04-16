@@ -14,6 +14,7 @@ import ConversationMessage, {
   type ConversationMessageDocument,
 } from "../models/ConversationMessage.js";
 import { resolveOrCreateCompanyForInput, extractDomainFromEmail } from "../utils/companyResolver.js";
+import { resolveLeadForConversation } from "./leadResolverService.js";
 
 export interface RawMessageRow {
   threadKey: string;
@@ -334,6 +335,13 @@ async function upsertThreadAndMessage(
     row.company || null,
     prospectEmail
   );
+
+  const inferredLeadId = await resolveLeadForConversation({
+    email: prospectEmail,
+    fullName: row.direction === "inbound" ? row.senderName : null,
+    companyName: row.company || company.name,
+    companyDomain: company.primaryDomain || extractDomainFromEmail(prospectEmail),
+  });
   
   // For meeting notes, use note_text for subject, otherwise use existing logic
   let subject: string;
@@ -401,6 +409,7 @@ async function upsertThreadAndMessage(
     thread = await ConversationThread.create({
       workspaceId,
       companyId: company._id,
+      ...(inferredLeadId && { leadId: inferredLeadId }),
       channel,
       subject,
       externalThreadId: threadKey,
@@ -409,6 +418,9 @@ async function upsertThreadAndMessage(
       source: "upload",
       createdBy: userId,
     });
+  } else if (!thread.leadId && inferredLeadId) {
+    // Backfill on existing upload threads only when the resolver is confident.
+    thread.leadId = inferredLeadId;
   }
 
   // Create message

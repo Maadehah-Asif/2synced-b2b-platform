@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import Layout from "../../components/Layout";
 import ModuleBackButton from "../../components/ModuleBackButton";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+import { fetchModule3Json } from "./api";
 
 function getWorkspaceId() {
   const hash = window.location.hash || "";
@@ -88,20 +87,11 @@ export default function ConversationExplorer() {
       }
 
       try {
-        const token = localStorage.getItem("token");
-        if (!token) return;
-
-        const res = await fetch(
-          `${API_URL}/m03/companies?workspaceId=${encodeURIComponent(workspaceId)}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
+        const data = await fetchModule3Json<{ companies: Array<{ id: string; name: string }> }>(
+          "/companies",
+          { workspaceId }
         );
-
-        const data: { companies: Array<{ id: string; name: string }> } | any = await res.json();
-        if (res.ok && data.companies) {
+        if (data.companies) {
           const company = data.companies.find((c: { id: string }) => c.id === currentCompanyId);
           if (company) {
             setCompanyName(company.name);
@@ -139,13 +129,6 @@ export default function ConversationExplorer() {
       setError(null);
 
       try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          setError("You are not logged in.");
-          setLoading(false);
-          return;
-        }
-
         const params = new URLSearchParams();
         params.set("page", String(page));
         params.set("pageSize", String(pageSize));
@@ -155,23 +138,17 @@ export default function ConversationExplorer() {
         if (band !== "all") params.set("band", band);
         if (currentCompanyId) params.set("companyId", currentCompanyId);
 
-        const res = await fetch(
-          `${API_URL}/m03/conversations?${params.toString()}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        const data: ConversationListResponse | any = await res.json();
-        if (!res.ok) {
-          setError(data?.error || "Failed to load conversations.");
-          setItems([]);
-        } else {
-          setItems(data.items || []);
-          setTotal(data.total || 0);
-        }
+        const data = await fetchModule3Json<ConversationListResponse>("/conversations", {
+          page,
+          pageSize,
+          workspaceId,
+          search: search.trim() || undefined,
+          channel: channel !== "all" ? channel : undefined,
+          band: band !== "all" ? band : undefined,
+          companyId: currentCompanyId || undefined,
+        });
+        setItems(data.items || []);
+        setTotal(data.total || 0);
       } catch (err: any) {
         setError(err?.message || "Unexpected error while loading conversations.");
         setItems([]);

@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import Layout from "../../components/Layout";
 import ModuleBackButton from "../../components/ModuleBackButton";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+import { fetchModule3Json } from "./api";
 
 function getWorkspaceId() {
   const hash = window.location.hash || "";
@@ -70,34 +69,11 @@ export default function AnalyticsPage() {
       setError(null);
 
       try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          setError("You are not logged in.");
-          setLoading(false);
-          return;
-        }
-
-        const params = new URLSearchParams();
-        params.set("workspaceId", workspaceId);
-        if (channelFilter !== "all") params.set("channel", channelFilter);
-
-        // endpoint: implement in backend as GET /m03/analytics/summary
-        const res = await fetch(
-          `${API_URL}/m03/analytics/summary?${params.toString()}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        const json: AnalyticsSummary | any = await res.json();
-        if (!res.ok) {
-          setError(json?.error || "Failed to load analytics.");
-          setSummary(null);
-        } else {
-          setSummary(json as AnalyticsSummary);
-        }
+        const json = await fetchModule3Json<AnalyticsSummary>("/analytics/summary", {
+          workspaceId,
+          channel: channelFilter !== "all" ? channelFilter : undefined,
+        });
+        setSummary(json);
       } catch (err: any) {
         setError(err?.message || "Unexpected error while loading analytics.");
         setSummary(null);

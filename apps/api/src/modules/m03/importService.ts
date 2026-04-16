@@ -15,6 +15,7 @@ import ConversationMessage, {
 } from "./models/ConversationMessage.js";
 import UploadFile from "../m01/models/UploadFile.js";
 import { resolveOrCreateCompanyForInput } from "./utils/companyResolver.js";
+import { resolveLeadForConversation } from "./services/leadResolverService.js";
 
 /**
  * Params for starting an import from an existing UploadFile
@@ -123,12 +124,12 @@ interface NormalizedRow {
 }
 
 function mapRowToMessageInput(row: Record<string, string>): NormalizedRow | null {
-  const subject = (row["thread_subject"] || "").trim();
+  const subject = (row["thread_subject"] || row["subject"] || "").trim();
   const channelRaw = (row["channel"] || "").toLowerCase();
   const directionRaw = (row["direction"] || "").toLowerCase();
   const sentAtStr = row["sent_at"] || "";
-  const senderName = (row["sender_name"] || "").trim();
-  const senderEmail = (row["sender_email"] || "").trim();
+  const senderName = (row["sender_name"] || row["from_name"] || "").trim();
+  const senderEmail = (row["sender_email"] || row["from_email"] || "").trim();
   const senderRoleRaw = (row["sender_role"] || "").toLowerCase();
   const bodyText = (row["body_text"] || "").toString();
   const company = (row["company"] || row["company_name"] || row["account"] || "").trim();
@@ -205,12 +206,36 @@ async function upsertThreadAndMessage(
 ): Promise<{ thread: ConversationThreadDocument; message: ConversationMessageDocument }> {
   const { threadSubject, channel, sentAt, sender, bodyText, direction, company, prospectEmail } = input;
 
+  console.info("[m03.import] lead-link candidate", {
+    workspaceId: workspaceId.toString(),
+    channel,
+    threadSubject,
+    direction,
+    senderEmail: sender.email || null,
+    prospectEmail: prospectEmail || null,
+  });
+
   // Resolve or create company
   const companyDoc = await resolveOrCreateCompanyForInput(
     workspaceId,
     company || null,
     prospectEmail || null
   );
+
+  const inferredLeadId = await resolveLeadForConversation({
+    email: prospectEmail || sender.email || null,
+    fullName:
+      sender.role === "prospect" || direction === "inbound"
+        ? sender.name
+        : null,
+    companyName: company || companyDoc.name,
+    companyDomain: companyDoc.primaryDomain,
+  });
+
+  console.info("[m03.import] lead-link result", {
+    threadSubject,
+    matchedLeadId: inferredLeadId?.toString() || null,
+  });
 
   const query: any = {
     workspaceId,
@@ -225,12 +250,16 @@ async function upsertThreadAndMessage(
     thread = await ConversationThread.create({
       workspaceId,
       companyId: companyDoc._id,
+      ...(inferredLeadId && { leadId: inferredLeadId }),
       channel,
       subject: threadSubject,
       participants: [],
       messageCount: 0,
       source: "upload",
     });
+  } else if (!thread.leadId && inferredLeadId) {
+    // Existing imported threads stay untouched unless we have one clear lead match.
+    thread.leadId = inferredLeadId;
   }
 
   const message = await ConversationMessage.create({

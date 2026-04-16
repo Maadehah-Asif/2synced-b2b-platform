@@ -28,6 +28,7 @@ import {
   getOrgTimeline,
 } from "./services/orgTimelineService.js";
 import { listCompaniesWithActivity } from "./services/companyListService.js";
+import { getLeadProfile } from "./services/leadProfileService.js";
 
 // -----------------------------------------------------------------------------
 // Auth request type helpers
@@ -926,6 +927,35 @@ export async function listCompaniesController(
     return res.status(200).json({ companies });
   } catch (err) {
     console.error("Error in listCompaniesController", err);
+    next(err);
+  }
+}
+
+/**
+ * Get a lead-centric Module 3 profile view.
+ * GET /m03/leads/:leadId/profile
+ */
+export async function getLeadProfileController(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const workspaceId = getWorkspaceIdFromRequest(req);
+    const { leadId } = req.params;
+
+    if (!leadId) {
+      return res.status(400).json({ error: "leadId is required." });
+    }
+
+    if (!Types.ObjectId.isValid(leadId)) {
+      return res.status(400).json({ error: "leadId must be a valid ObjectId." });
+    }
+
+    const profile = await getLeadProfile(workspaceId, leadId);
+    return res.status(200).json(profile);
+  } catch (err) {
+    console.error("Error in getLeadProfileController", err);
     next(err);
   }
 }

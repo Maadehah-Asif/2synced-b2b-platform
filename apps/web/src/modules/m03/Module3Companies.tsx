@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import Layout from "../../components/Layout";
 import ModuleBackButton from "../../components/ModuleBackButton";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+import { fetchModule3Json } from "./api";
 
 function getWorkspaceId() {
   const hash = window.location.hash || "";
@@ -35,29 +34,10 @@ export default function Module3Companies() {
       setError(null);
 
       try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          setError("You are not logged in.");
-          setLoading(false);
-          return;
-        }
-
-        const res = await fetch(
-          `${API_URL}/m03/companies?workspaceId=${encodeURIComponent(workspaceId)}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        const data: CompaniesResponse | any = await res.json();
-        if (!res.ok) {
-          setError(data?.error || "Failed to load companies.");
-          setCompanies([]);
-        } else {
-          setCompanies(data.companies || []);
-        }
+        const data = await fetchModule3Json<CompaniesResponse>("/companies", {
+          workspaceId,
+        });
+        setCompanies(data.companies || []);
       } catch (err: any) {
         setError(err?.message || "Unexpected error while loading companies.");
         setCompanies([]);

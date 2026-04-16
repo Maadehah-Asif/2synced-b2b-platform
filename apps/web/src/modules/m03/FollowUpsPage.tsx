@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import Layout from "../../components/Layout";
 import ModuleBackButton from "../../components/ModuleBackButton";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+import { fetchModule3Json } from "./api";
 
 function getWorkspaceId() {
   const hash = window.location.hash || "";
@@ -27,6 +26,7 @@ interface ThreadShape {
   subject: string;
   channel: string;
   lastMessageAt?: string;
+  leadId?: string;
 }
 
 interface HealthShape {
@@ -71,37 +71,14 @@ export default function FollowUpsPage() {
       setError(null);
 
       try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          setError("You are not logged in.");
-          setLoading(false);
-          return;
-        }
-
-        const params = new URLSearchParams();
-        params.set("status", statusFilter); // backend can interpret this
-        params.set("workspaceId", workspaceId);
-        if (search.trim()) params.set("search", search.trim());
-        if (onlyOverdue) params.set("overdue", "true");
-
-        // NOTE: endpoint name assumes /m03/followups on backend
-        const res = await fetch(
-          `${API_URL}/m03/followups?${params.toString()}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        const json: FollowUpListResponse | any = await res.json();
-        if (!res.ok) {
-          setError(json?.error || "Failed to load follow-ups.");
-          setItems([]);
-        } else {
-          setItems(json.items || []);
-          setTotal(json.total || (json.items ? json.items.length : 0));
-        }
+        const json = await fetchModule3Json<FollowUpListResponse>("/followups", {
+          status: statusFilter,
+          workspaceId,
+          search: search.trim() || undefined,
+          overdue: onlyOverdue ? true : undefined,
+        });
+        setItems(json.items || []);
+        setTotal(json.total || (json.items ? json.items.length : 0));
       } catch (err: any) {
         setError(err?.message || "Unexpected error while loading follow-ups.");
         setItems([]);
@@ -117,9 +94,9 @@ export default function FollowUpsPage() {
   // Helpers
   // ---------------------------------------------------------------------------
   function formatDate(iso?: string) {
-    if (!iso) return "—";
+    if (!iso) return "â€”";
     const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "—";
+    if (Number.isNaN(d.getTime())) return "â€”";
     return d.toLocaleString();
   }
 
@@ -143,7 +120,7 @@ export default function FollowUpsPage() {
     if (!wid) return;
     window.location.hash = `#/workspace/${wid}/m03/conversations/${threadId}`;
   }
-
+`r`
   // ---------------------------------------------------------------------------
   // Actions: mark done / snooze (optional but nice)
   // ---------------------------------------------------------------------------
@@ -157,7 +134,7 @@ export default function FollowUpsPage() {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        setActionError("You are not logged in.");
+        setActionError("Unauthorized or invalid session");
         setUpdatingId(null);
         return;
       }
@@ -166,9 +143,9 @@ export default function FollowUpsPage() {
       let body: any = undefined;
 
       if (action === "done") {
-        endpoint = `${API_URL}/m03/followups/${followUpId}/mark-done`;
+        endpoint = `${import.meta.env.VITE_API_URL || "http://localhost:4000"}/m03/followups/${followUpId}/mark-done`;
       } else {
-        endpoint = `${API_URL}/m03/followups/${followUpId}/snooze`;
+        endpoint = `${import.meta.env.VITE_API_URL || "http://localhost:4000"}/m03/followups/${followUpId}/snooze`;
         const now = new Date();
         const snoozeDate = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
         body = { snoozedUntil: snoozeDate.toISOString() };
@@ -183,30 +160,42 @@ export default function FollowUpsPage() {
         body: body ? JSON.stringify(body) : undefined,
       });
 
-      const json = await res.json();
-      if (!res.ok) {
-        setActionError(json?.error || "Failed to update follow-up.");
-      } else {
-        // refresh list
-        const params = new URLSearchParams();
-        params.set("status", statusFilter ?? "");
-        params.set("workspaceId", workspaceId ?? "");
-        if (search?.trim()) params.set("search", search.trim());
-        if (onlyOverdue) params.set("overdue", "true");
-
-        const res2 = await fetch(
-          `${API_URL}/m03/followups?${params.toString()}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-        const json2: FollowUpListResponse | any = await res2.json();
-        if (res2.ok) {
-          setItems(json2.items || []);
-          setTotal(json2.total || (json2.items ? json2.items.length : 0));
+      const rawText = await res.text();
+      const contentType = res.headers.get("content-type") || "";
+      const looksHtml =
+        rawText.trim().startsWith("<!DOCTYPE") ||
+        rawText.trim().startsWith("<html") ||
+        rawText.trim().startsWith("<");
+      let json: any = null;
+      if (rawText && contentType.toLowerCase().includes("application/json")) {
+        try {
+          json = JSON.parse(rawText);
+        } catch {
+          setActionError("Endpoint returned invalid JSON");
+          setUpdatingId(null);
+          return;
         }
+      }
+
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          setActionError("Unauthorized or invalid session");
+        } else if (res.status === 404) {
+          setActionError("Module 3 API route not found");
+        } else if (looksHtml) {
+          setActionError("Endpoint returned HTML instead of JSON");
+        } else {
+          setActionError(json?.error || "Failed to update follow-up.");
+        }
+      } else {
+        const json2 = await fetchModule3Json<FollowUpListResponse>("/followups", {
+          status: statusFilter ?? "",
+          workspaceId: workspaceId ?? "",
+          search: search?.trim() ? search.trim() : undefined,
+          overdue: onlyOverdue ? true : undefined,
+        });
+        setItems(json2.items || []);
+        setTotal(json2.total || (json2.items ? json2.items.length : 0));
       }
     } catch (err: any) {
       setActionError(
@@ -376,7 +365,7 @@ export default function FollowUpsPage() {
                       colSpan={8}
                       style={{ padding: "10px 12px", textAlign: "center" }}
                     >
-                      Loading follow-ups…
+                      Loading follow-upsâ€¦
                     </td>
                   </tr>
                 ) : items.length === 0 ? (
@@ -441,7 +430,7 @@ export default function FollowUpsPage() {
                           </span>
                         </td>
                         <td style={{ padding: "8px 12px" }}>
-                          {f.dueAt ? formatDate(f.dueAt) : "—"}
+                          {f.dueAt ? formatDate(f.dueAt) : "â€”"}
                           {f.snoozedUntil && (
                             <div className="muted" style={{ fontSize: 11 }}>
                               Snoozed until {formatDate(f.snoozedUntil)}
@@ -451,20 +440,20 @@ export default function FollowUpsPage() {
                         <td style={{ padding: "8px 12px" }}>
                           {typeof h?.score === "number"
                             ? Math.round(h.score)
-                            : "—"}
+                            : "â€”"}
                         </td>
                         <td style={{ padding: "8px 12px" }}>
                           <span className={bandBadgeClass(h?.band)} style={{ fontSize: 11 }}>
-                            {h?.band || "—"}
+                            {h?.band || "â€”"}
                           </span>
                         </td>
                         <td style={{ padding: "8px 12px" }}>
                           {t?.lastMessageAt
                             ? formatDate(t.lastMessageAt)
-                            : "—"}
+                            : "â€”"}
                         </td>
                         <td style={{ padding: "8px 12px" }}>
-                          {f.reason || "—"}
+                          {f.reason || "â€”"}
                         </td>
                         <td style={{ padding: "8px 12px" }}>
                           <div
@@ -484,7 +473,7 @@ export default function FollowUpsPage() {
                             >
                               {updatingId === f._id &&
                               f.status !== "done"
-                                ? "Updating…"
+                                ? "Updatingâ€¦"
                                 : "Mark done"}
                             </button>
                             <button
@@ -509,3 +498,4 @@ export default function FollowUpsPage() {
     </Layout>
   );
 }
+

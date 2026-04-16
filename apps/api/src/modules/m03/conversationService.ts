@@ -413,7 +413,10 @@ export async function getConversationDetail(
   const thread = await ConversationThread.findOne({
     _id: tId,
     workspaceId: wsId,
-  }).exec();
+  })
+    .populate("companyId", "name primaryDomain")
+    .populate("leadId", "First_Name Last_Name Job_Title Company")
+    .exec();
 
   if (!thread) {
     return null;
@@ -501,8 +504,21 @@ export async function getConversationDetail(
     }
   }
 
+  const primaryContact = thread.participants.find((p) => p.role === "prospect") || thread.participants[0];
+  const companyDoc = thread.companyId as any;
+  const leadDoc = thread.leadId as any;
+  const leadName = [leadDoc?.First_Name, leadDoc?.Last_Name].filter(Boolean).join(" ").trim();
+  const enrichedThread = {
+    ...thread.toObject(),
+    companyName: companyDoc?.name || leadDoc?.Company || undefined,
+    companyDomain: companyDoc?.primaryDomain || undefined,
+    contactName: primaryContact?.name || leadName || undefined,
+    contactRole: leadDoc?.Job_Title || undefined,
+    leadName: leadName || undefined,
+  };
+
   return {
-    thread,
+    thread: enrichedThread as any,
     messages,
     entities,
     sentiments: formattedSentiments,

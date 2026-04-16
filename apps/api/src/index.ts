@@ -22,6 +22,7 @@ app.use("/auth", authRouter);
 app.use("/workspaces", workspaceRouter);
 // Module 01 (ingestion) routes
 app.use("/m01", m01Router);
+app.use("/m03", m03Router);
 app.use("/m06", m06Router);
 // Module 02 (intent scoring)
 app.use("/m02", m02Router);

@@ -1,0 +1,105 @@
+.landing-shell {
+  --landing-navy: #091524;
+  --landing-navy-soft: #10263c;
+  --landing-teal: #0f6a69;
+  --landing-teal-strong: #0d7f82;
+  --landing-cyan: #6dd6dc;
+  --landing-surface: #f7f9fb;
+  --landing-surface-2: #eff3f6;
+  --landing-ink: #16202b;
+  --landing-muted: #5f6d79;
+  --landing-line: rgba(120, 142, 160, 0.16);
+  --landing-card-shadow: 0 22px 44px rgba(17, 25, 39, 0.08);
+  --landing-glass-shadow: 0 28px 70px rgba(2, 12, 27, 0.26);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.landing-shell h1,
+.landing-shell h2,
+.landing-shell h3,
+.landing-shell h4 {
+  font-family: 'Manrope', 'Inter', system-ui, sans-serif;
+}
+
+.landing-hero-bg {
+  background:
+    radial-gradient(circle at 14% 18%, rgba(109, 214, 220, 0.16), transparent 28%),
+    radial-gradient(circle at 88% 24%, rgba(75, 192, 200, 0.18), transparent 24%),
+    linear-gradient(135deg, #091524 0%, #0b2f43 42%, #0f6a69 100%);
+}
+
+.landing-surface-shift {
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 52%),
+    linear-gradient(180deg, #f7f9fb 0%, #eef2f5 100%);
+}
+
+.landing-grid-noise {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-position: center center;
+  background-size: 44px 44px;
+}
+
+.landing-glass {
+  background: rgba(255, 255, 255, 0.14);
+  border: 0.5px solid rgba(255, 255, 255, 0.24);
+  box-shadow: var(--landing-glass-shadow);
+  backdrop-filter: blur(18px);
+}
+
+.landing-card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(195, 205, 214, 0.32);
+  box-shadow: var(--landing-card-shadow);
+}
+
+.landing-card-soft {
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(195, 205, 214, 0.26);
+  box-shadow: 0 18px 34px rgba(17, 25, 39, 0.06);
+  backdrop-filter: blur(12px);
+}
+
+.landing-cta-bg {
+  background:
+    radial-gradient(circle at 15% 20%, rgba(109, 214, 220, 0.2), transparent 30%),
+    linear-gradient(135deg, #0a454b 0%, #0f6a69 62%, #118f93 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-shell {
+    scroll-behavior: auto;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+.landing-shell button {
+  box-shadow: none;
+}
+
+.landing-shell .landing-nav-link {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.landing-shell .landing-logo-button {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.landing-shell .landing-glass-button {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  box-shadow: none !important;
+}

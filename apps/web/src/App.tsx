@@ -3,6 +3,7 @@ import './App.css'
 import Login from './modules/core/auth/Login'
 import Signup from './modules/core/auth/Signup'
 import Landing from './modules/core/landing/Landing'
+import PublicLandingPage from './modules/public/landing/LandingPage'
 import CreateWorkspace from './modules/core/landing/CreateWorkspace'
 import JoinWorkspace from './modules/core/landing/JoinWorkspace'
 import WorkspacesList from './modules/core/landing/WorkspacesList'
@@ -60,15 +61,17 @@ import ForecastPage from './modules/m06/ForecastPage'
 import UploadWizardM02 from './modules/m02/UploadWizard'
 
 function App() {
-  const [route, setRoute] = useState<string>(window.location.hash || '#/login')
+  const [route, setRoute] = useState<string>(window.location.hash || '#/')
 
   useEffect(() => {
     function onHashChange() {
-      setRoute(window.location.hash || '#/login')
+      setRoute(window.location.hash || '#/')
     }
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
+
+  if (route === '' || route === '#' || route === '#/') return <PublicLandingPage />
 
   // Core auth + landing routes
   if (route.startsWith('#/login')) return <Login />

@@ -32,6 +32,9 @@ import OrgTimelinePage from './modules/m03/OrgTimelinePage'
 import Module5Home from './modules/m05/Module5Home'
 import Module7Home from './modules/m07/Module7Home'
 import Module9Home from './modules/m09/Module9Home'
+import Module9CampaignImportPage from './modules/m09/Module9CampaignImportPage'
+import Module9WhatIfBusinessPage from './modules/m09/Module9WhatIfBusinessPage'
+import Module9WhatIfDevToolsPage from './modules/m09/Module9WhatIfDevToolsPage'
 import FunnelOverview from './modules/m07/FunnelOverview'
 import Module7StageWorkspace from './modules/m07/Module7StageWorkspace'
 import StageDetail from './modules/m07/StageDetail'
@@ -136,6 +139,9 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m05') && !route.includes('/m05/')) return <Module5Home />
   // Module 7 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m07') && !route.includes('/m07/')) return <Module7Home />
+  if (route.startsWith('#/workspace/') && route.includes('/m09/import')) return <Module9CampaignImportPage />
+  if (route.startsWith('#/workspace/') && route.includes('/m09/simulator-dev')) return <Module9WhatIfDevToolsPage />
+  if (route.startsWith('#/workspace/') && route.includes('/m09/simulator')) return <Module9WhatIfBusinessPage />
   // Module 9 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m09') && !route.includes('/m09/')) return <Module9Home />
   if (route.startsWith('#/workspace/') && route.includes('/m07/overview')) return <FunnelOverview />

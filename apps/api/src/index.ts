@@ -10,6 +10,7 @@ import m06Router from "./modules/m06/routes.js";
 import m02Router from "./modules/m02/routes.js";
 import m07Router from "./modules/m07/routes.js";
 import m05Router from "./modules/m05/routes.js";
+import m09Router from "./modules/m09/routes.js";
 
 const app = express();
 app.use(cors());
@@ -28,6 +29,7 @@ app.use("/m06", m06Router);
 app.use("/m02", m02Router);
 app.use("/m07", m07Router);
 app.use("/m05", m05Router);
+app.use("/m09", m09Router);
 
 (async () => {
   await connectDB();

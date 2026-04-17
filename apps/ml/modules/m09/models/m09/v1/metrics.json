@@ -1,0 +1,62 @@
+{
+  "dataset_filename": "module9_traning_data_final.csv",
+  "dataset_path": "C:\\7th Semester\\2synced-b2b-platform\\apps\\ml\\modules\\m09\\data\\module9_traning_data_final.csv",
+  "row_count_used": 30000,
+  "train_test_split": "80/20",
+  "train_size": 24000,
+  "test_size": 6000,
+  "target_column": "roi",
+  "metrics": {
+    "mae": 18.658943,
+    "rmse": 46.993702,
+    "r2": 0.893437
+  },
+  "model": {
+    "type": "GradientBoostingRegressor",
+    "n_estimators": 350,
+    "learning_rate": 0.05,
+    "max_depth": 3,
+    "min_samples_split": 6,
+    "min_samples_leaf": 3,
+    "random_state": 42
+  },
+  "comparison": {
+    "RandomForestRegressor": {
+      "metrics": {
+        "mae": 17.972893,
+        "rmse": 48.005346,
+        "r2": 0.8888
+      },
+      "params": {
+        "n_estimators": 500,
+        "max_depth": 16,
+        "min_samples_split": 6,
+        "min_samples_leaf": 3,
+        "random_state": 42,
+        "n_jobs": 1
+      }
+    },
+    "GradientBoostingRegressor": {
+      "metrics": {
+        "mae": 18.658943,
+        "rmse": 46.993702,
+        "r2": 0.893437
+      },
+      "params": {
+        "n_estimators": 350,
+        "learning_rate": 0.05,
+        "max_depth": 3,
+        "min_samples_split": 6,
+        "min_samples_leaf": 3,
+        "random_state": 42
+      }
+    }
+  },
+  "previous_reference": {
+    "mae": 38.906367,
+    "rmse": 85.699883,
+    "r2": 0.290784,
+    "model_type": "RandomForestRegressor",
+    "dataset_filename": "campaign_roi_training_synthetic.csv"
+  }
+}

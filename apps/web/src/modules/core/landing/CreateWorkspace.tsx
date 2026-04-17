@@ -23,7 +23,7 @@ export default function CreateWorkspace() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Failed');
       // show created workspace id so user can share with teammates
-      setCreatedId(data?.workspace?._id || data?.workspaceId || null);
+      setCreatedId(data?.workspace?.shareId || data?.workspace?.id || data?.workspaceId || null);
       // navigate to workspace list after short delay
       setTimeout(() => window.location.hash = '#/workspaces', 1200);
     } catch (err: any) {
@@ -45,7 +45,7 @@ export default function CreateWorkspace() {
           <button className="btn-primary" disabled={loading}>{loading ? 'Creating...' : 'Create'}</button>
           {createdId && (
             <div style={{ marginTop: 12, padding: 12, background: 'var(--container-bg)', borderRadius: 6, border: 'var(--outline)', color: 'var(--text-primary)' }}>
-              Workspace created. ID: <strong>{createdId}</strong>
+              Workspace created. Share ID: <strong>{createdId}</strong>
               <button style={{ marginLeft: 8, background: 'var(--primary-1)' }} className="btn-primary btn-sm" onClick={() => navigator.clipboard?.writeText(createdId)}>Copy ID</button>
             </div>
           )}

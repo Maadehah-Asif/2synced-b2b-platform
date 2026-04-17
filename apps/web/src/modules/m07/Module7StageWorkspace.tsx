@@ -37,7 +37,7 @@ type CsvRow = { rowNumber: number; original: Record<string, string> };
 
 function shell(title: string, subtitle: string) {
   return (
-    <section style={{ borderRadius: 24, overflow: 'hidden', border: '1px solid rgba(15,66,88,0.08)', boxShadow: '0 20px 46px rgba(13,30,60,0.08)', background: 'linear-gradient(135deg, rgba(18,59,87,0.98) 0%, rgba(15,66,88,0.94) 52%, rgba(72,177,217,0.24) 100%)', color: '#fff' }}>
+    <section style={{ borderRadius: 24, overflow: 'hidden', border: '1px solid rgba(15,66,88,0.08)', boxShadow: '0 20px 46px rgba(13,30,60,0.08)', background: 'linear-gradient(135deg, rgba(18,59,87,0.98) 0%, rgba(15,66,88,0.94) 52%, rgba(154,190,201,0.24) 100%)', color: '#fff' }}>
       <div style={{ padding: 28 }}>
         <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>M07 Stage Workspace</div>
         <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>{title}</h1>
@@ -699,6 +699,7 @@ export default function Module7StageWorkspace() {
                       rows={previewRows}
                       currentStartRow={startRow}
                       totalSelectedRows={previewRows.length}
+                      startFullscreen
                     />
                   </div>
                 )}

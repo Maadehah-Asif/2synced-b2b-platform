@@ -21,15 +21,16 @@ type Props = {
   rows: PreviewRow[];
   currentStartRow: number;
   totalSelectedRows: number;
+  startFullscreen?: boolean;
 };
 
 const PAGE_SIZES = [10, 20, 50] as const;
 
-export default function ImportPreviewStep({ title, subtitle, sourceHeaders, rows, currentStartRow, totalSelectedRows }: Props) {
+export default function ImportPreviewStep({ title, subtitle, sourceHeaders, rows, currentStartRow, totalSelectedRows, startFullscreen = false }: Props) {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<number>(20);
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(startFullscreen);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / perPage));
   const safePage = Math.min(page, pageCount);
@@ -163,12 +164,12 @@ export default function ImportPreviewStep({ title, subtitle, sourceHeaders, rows
                 <label>Per page: <select value={perPage} onChange={(event) => { setPerPage(Number(event.target.value)); setPage(1); }}>
                   {PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
                 </select></label>
-                <button type="button" className="ml-8" disabled={safePage <= 1} onClick={() => setPage(Math.max(1, safePage - 1))}>Prev</button>
+                <button type="button" className="btn-ghost btn-sm ml-8" disabled={safePage <= 1} onClick={() => setPage(Math.max(1, safePage - 1))}>Prev</button>
                 <span className="mx-8">&nbsp;</span>
                 {renderPagination()}
                 <span className="mx-8">&nbsp;</span>
-                <button type="button" disabled={!hasMore} onClick={() => setPage(Math.min(pageCount, safePage + 1))}>Next</button>
-                <button type="button" className="ml-8" onClick={() => setIsFullscreen(false)}>Close</button>
+                <button type="button" className="btn-ghost btn-sm" disabled={!hasMore} onClick={() => setPage(Math.min(pageCount, safePage + 1))}>Next</button>
+                <button type="button" className="btn-outline btn-sm ml-8" onClick={() => setIsFullscreen(false)}>Close</button>
               </div>
             </div>
             <div className="fullscreen-body">

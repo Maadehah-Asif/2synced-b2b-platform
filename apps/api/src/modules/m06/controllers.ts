@@ -1169,7 +1169,6 @@ export async function stats(req: Request, res: Response) {
     if (!projectId) return res.status(400).json({ error: 'projectId_required' });
     const requestedRunId = (req.query.runId as string) || '';
     const requestedModel = sanitizeStringValue(req.query.model)?.replace('-', '_') || null;
-    const dateRangeBounds = getDateRangeBounds(req.query.dateRange);
     const requestedChannels = getRequestedChannels(req.query.channels);
     let runDoc: any = null;
 
@@ -1187,13 +1186,7 @@ export async function stats(req: Request, res: Response) {
           Campaign.find({ project_id: projectId }).lean(),
         ]);
 
-        const filteredDeals = deals.filter((deal) => {
-          const closedAt = deal.closed_at ? new Date(deal.closed_at) : null;
-          if (dateRangeBounds && (!closedAt || Number.isNaN(closedAt.getTime()) || closedAt < dateRangeBounds.start || closedAt > dateRangeBounds.end)) {
-            return false;
-          }
-          return true;
-        });
+        const filteredDeals = deals;
         const filteredCampaigns = campaigns.filter((campaign) => {
           const channel = String(campaign.channel || 'other').toLowerCase();
           return !requestedChannels || requestedChannels.has(channel);
@@ -1264,13 +1257,6 @@ export async function stats(req: Request, res: Response) {
     rows = rows.filter((row: any) => {
       const channel = String(row.channel || 'other').toLowerCase();
       if (requestedChannels && !requestedChannels.has(channel)) return false;
-
-      if (dateRangeBounds) {
-        const closedAt = row.deal?.closed_at ? new Date(row.deal.closed_at) : null;
-        if (!closedAt || Number.isNaN(closedAt.getTime()) || closedAt < dateRangeBounds.start || closedAt > dateRangeBounds.end) {
-          return false;
-        }
-      }
       return true;
     });
 
@@ -3278,9 +3264,6 @@ export async function previewDeals(req: Request, res: Response) {
     const from = (req.query.from as string) || '';
     const to = (req.query.to as string) || '';
     const statusParam = (req.query.status as string) || 'closed_won';
-    const minAmount = req.query.minAmount !== undefined ? Number(req.query.minAmount) : undefined;
-    const maxAmount = req.query.maxAmount !== undefined ? Number(req.query.maxAmount) : undefined;
-    const leadQuery = (req.query.lead as string) || '';
     const includeArchived = req.query.includeArchived === 'true';
     const page = Math.max(1, Number(req.query.page || 1));
     const limit = Math.min(100, Math.max(1, Number(req.query.limit || 25)));
@@ -3292,13 +3275,6 @@ export async function previewDeals(req: Request, res: Response) {
         .filter(ch => CHANNEL_SET.has(ch as any))
     );
 
-    const campaignInput = req.query.campaignIds ?? req.query.campaignId;
-    const rawCampaignIds = new Set(
-      toArray(campaignInput)
-        .map(id => id.trim())
-        .filter(Boolean)
-    );
-
     const match: any = { project_id: projectId };
     if (from || to) {
       match.closed_at = {};
@@ -3307,27 +3283,6 @@ export async function previewDeals(req: Request, res: Response) {
     }
     if (statusParam === 'closed_won') match.closed_won = true;
     else if (statusParam === 'closed_lost' || statusParam === 'open') match.closed_won = false;
-    if (minAmount !== undefined) match.revenue = { ...(match.revenue || {}), $gte: minAmount };
-    if (maxAmount !== undefined) match.revenue = { ...(match.revenue || {}), $lte: maxAmount };
-
-    let leadIdsFilter: string[] | null = null;
-    if (leadQuery) {
-      if (/^\d+$/.test(leadQuery)) {
-        const module6Lead = await Module6Lead.findOne({ project_id: projectId, lead_id: leadQuery }).select('lead_id').lean();
-        const lead = await (await import('../m01/models/Lead.js')).default.findOne({ lead_id: Number(leadQuery) }).select('_id').lean();
-        leadIdsFilter = [module6Lead?.lead_id, lead ? String(lead._id) : null].filter(Boolean) as string[];
-      } else {
-        const regex = new RegExp(sanitizeRegex(leadQuery), 'i');
-        const module6Leads = await Module6Lead.find({
-          project_id: projectId,
-          $or: [{ lead_id: regex }, { full_name: regex }, { email: regex }],
-        }).limit(200).select('lead_id').lean();
-        const LeadModel = (await import('../m01/models/Lead.js')).default as any;
-        const leads = await LeadModel.find({ $or: [{ First_Name: regex }, { Last_Name: regex }, { Company: regex }, { Email: regex }] }).limit(200).select('_id').lean();
-        leadIdsFilter = [...module6Leads.map((l: any) => String(l.lead_id)), ...leads.map((l: any) => String(l._id))];
-      }
-      if (leadIdsFilter) match.lead_id = { $in: leadIdsFilter };
-    }
 
     const deals = await Deal.find(match).sort({ closed_at: -1, createdAt: -1 }).lean();
     const leadIds = Array.from(new Set(deals.map(d => String(d.lead_id))));
@@ -3341,9 +3296,7 @@ export async function previewDeals(req: Request, res: Response) {
       projectCampaignIds.add(id);
     }
 
-    const requiredCampaignIds = Array.from(rawCampaignIds).filter(id => projectCampaignIds.has(id));
-    const requiredCampaignSet = new Set(requiredCampaignIds);
-    const filtersApplied = requiredChannelSet.size > 0 || requiredCampaignSet.size > 0;
+    const filtersApplied = requiredChannelSet.size > 0;
 
     const touches = await CampaignTouch.find({
       lead_id: { $in: leadIds },
@@ -3366,7 +3319,6 @@ export async function previewDeals(req: Request, res: Response) {
 
     const eligibleDeals: Array<{ deal: any; touches: any[] }> = [];
     let excludedByChannel = 0;
-    let excludedByCampaign = 0;
     let excludedNoTouches = 0;
 
     for (const deal of deals) {
@@ -3386,13 +3338,6 @@ export async function previewDeals(req: Request, res: Response) {
         || list.some(touch => requiredChannelSet.has(getTouchChannel(touch)));
       if (!hasChannel) {
         if (filtersApplied) excludedByChannel++;
-        continue;
-      }
-
-      const hasCampaign = requiredCampaignSet.size === 0
-        || list.some(touch => requiredCampaignSet.has(String(touch.campaign_id)));
-      if (!hasCampaign) {
-        if (filtersApplied) excludedByCampaign++;
         continue;
       }
 
@@ -3435,7 +3380,6 @@ export async function previewDeals(req: Request, res: Response) {
       rows,
       excluded_by_filters: filtersApplied ? {
         channels: excludedByChannel,
-        campaigns: excludedByCampaign,
         noTouches: excludedNoTouches
       } : undefined
     });

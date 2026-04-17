@@ -8,6 +8,18 @@ import { findFaqById, getAssistantPageConfig, matchFaqFromText } from "./faqCata
 
 const ADMIN_ROLES = new Set(["head_manager", "sales_manager", "marketing_manager"]);
 
+function normalizeRole(role: string | null | undefined) {
+  const value = (role || "").toString().trim().toLowerCase();
+  if (value === "admin") return "head_manager";
+  if (value === "manager") return "sales_manager";
+  if (value === "member") return "sales_team_member";
+  return value;
+}
+
+function isAdminRole(role: string | null | undefined) {
+  return ADMIN_ROLES.has(normalizeRole(role));
+}
+
 function getUserIdFromReq(req: Request) {
   const auth = req.header("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : undefined;
@@ -35,6 +47,7 @@ function serializeConversation(doc: any) {
     userId: String(doc.userId),
     pageKey: doc.pageKey,
     hasPendingAdminReply: !!doc.hasPendingAdminReply,
+    needsAdminForward: !!doc.needsAdminForward,
     messages: (doc.messages || []).map((message: any) => ({
       id: String(message._id),
       sender: message.sender,
@@ -52,7 +65,7 @@ async function getMembershipRole(workspaceId: string, userId: string) {
     userId,
     status: "active",
   }).lean();
-  return member?.role || null;
+  return normalizeRole(member?.role || null);
 }
 
 async function ensureConversation(workspaceId: string, userId: string, pageKey: string) {
@@ -71,6 +84,7 @@ async function ensureConversation(workspaceId: string, userId: string, pageKey: 
       userId: userOid,
       pageKey,
       hasPendingAdminReply: false,
+      needsAdminForward: false,
       messages: [],
     });
   }
@@ -119,13 +133,13 @@ export async function bootstrapAssistant(req: Request, res: Response) {
     const conversation = await ensureConversation(workspaceId, userId, pageKey);
     const role = await getMembershipRole(workspaceId, userId);
     const page = getAssistantPageConfig(pageKey);
-    const adminInbox = role && ADMIN_ROLES.has(role) ? await buildAdminInbox(workspaceId) : [];
+    const adminInbox = isAdminRole(role) ? await buildAdminInbox(workspaceId) : [];
 
     return res.json({
       ok: true,
       page,
       role,
-      isAdmin: !!(role && ADMIN_ROLES.has(role)),
+      isAdmin: isAdminRole(role),
       conversation: serializeConversation(conversation),
       adminInbox,
     });
@@ -155,6 +169,7 @@ export async function sendFaqMessage(req: Request, res: Response) {
       { sender: "user", kind: "faq_question", text: faq.label, faqId, createdAt: new Date() } as any,
       { sender: "assistant", kind: "faq_answer", text: faq.answer, faqId, createdAt: new Date() } as any,
     );
+    conversation.needsAdminForward = false;
     await conversation.save();
 
     return res.json({ ok: true, conversation: serializeConversation(conversation) });
@@ -185,6 +200,7 @@ export async function submitCustomQuestion(req: Request, res: Response) {
         { sender: "assistant", kind: "faq_answer", text: matchedFaq.answer, faqId: matchedFaq.id, createdAt: new Date() } as any,
       );
       conversation.hasPendingAdminReply = false;
+      conversation.needsAdminForward = false;
       await conversation.save();
 
       return res.json({
@@ -198,15 +214,111 @@ export async function submitCustomQuestion(req: Request, res: Response) {
     conversation.messages.push({
       sender: "assistant",
       kind: "faq_answer",
-      text: "I could not confidently map that question to one guided topic yet. Please choose one of the suggested options, or an admin can reply to your custom question.",
+      text: "I do not have a confident guided answer for that yet. If you want, I can forward this question to an admin so they can reply back here.",
       createdAt: new Date(),
     } as any);
-    conversation.hasPendingAdminReply = true;
+    conversation.hasPendingAdminReply = false;
+    conversation.needsAdminForward = true;
     await conversation.save();
 
     return res.json({ ok: true, matched: false, conversation: serializeConversation(conversation) });
   } catch (error) {
     console.error("[m04/submitCustomQuestion]", error);
+    return res.status(500).json({ error: "internal" });
+  }
+}
+
+export async function forwardQuestionToAdmin(req: Request, res: Response) {
+  try {
+    const userId = getUserIdFromReq(req);
+    const workspaceId = getWorkspaceId(req);
+    const conversationId = String(req.body?.conversationId || "").trim();
+
+    if (!userId) return res.status(401).json({ error: "missing_token" });
+    if (!workspaceId || !mongoose.isValidObjectId(workspaceId)) return res.status(400).json({ error: "workspaceId_required" });
+    if (!conversationId || !mongoose.isValidObjectId(conversationId)) return res.status(400).json({ error: "conversationId_required" });
+
+    const conversation = await GuidedAssistantConversation.findOne({
+      _id: new mongoose.Types.ObjectId(conversationId),
+      workspaceId: new mongoose.Types.ObjectId(workspaceId),
+      userId: new mongoose.Types.ObjectId(userId),
+    }).exec();
+
+    if (!conversation) return res.status(404).json({ error: "conversation_not_found" });
+    if (!conversation.needsAdminForward) {
+      return res.status(400).json({ error: "no_pending_forward_request" });
+    }
+
+    conversation.messages.push({
+      sender: "assistant",
+      kind: "faq_answer",
+      text: "Your question has been forwarded to an admin. You will see the reply here once someone responds.",
+      createdAt: new Date(),
+    } as any);
+    conversation.needsAdminForward = false;
+    conversation.hasPendingAdminReply = true;
+    await conversation.save();
+
+    return res.json({ ok: true, conversation: serializeConversation(conversation) });
+  } catch (error) {
+    console.error("[m04/forwardQuestionToAdmin]", error);
+    return res.status(500).json({ error: "internal" });
+  }
+}
+
+export async function dismissAdminForward(req: Request, res: Response) {
+  try {
+    const userId = getUserIdFromReq(req);
+    const workspaceId = getWorkspaceId(req);
+    const conversationId = String(req.body?.conversationId || "").trim();
+
+    if (!userId) return res.status(401).json({ error: "missing_token" });
+    if (!workspaceId || !mongoose.isValidObjectId(workspaceId)) return res.status(400).json({ error: "workspaceId_required" });
+    if (!conversationId || !mongoose.isValidObjectId(conversationId)) return res.status(400).json({ error: "conversationId_required" });
+
+    const conversation = await GuidedAssistantConversation.findOne({
+      _id: new mongoose.Types.ObjectId(conversationId),
+      workspaceId: new mongoose.Types.ObjectId(workspaceId),
+      userId: new mongoose.Types.ObjectId(userId),
+    }).exec();
+
+    if (!conversation) return res.status(404).json({ error: "conversation_not_found" });
+
+    conversation.messages.push({
+      sender: "assistant",
+      kind: "faq_answer",
+      text: "No problem. Your question was not forwarded. You can keep using the guided options here, or ask another question.",
+      createdAt: new Date(),
+    } as any);
+    conversation.needsAdminForward = false;
+    await conversation.save();
+
+    return res.json({ ok: true, conversation: serializeConversation(conversation) });
+  } catch (error) {
+    console.error("[m04/dismissAdminForward]", error);
+    return res.status(500).json({ error: "internal" });
+  }
+}
+
+export async function clearConversation(req: Request, res: Response) {
+  try {
+    const userId = getUserIdFromReq(req);
+    const workspaceId = getWorkspaceId(req);
+    const pageKey = String(req.body?.pageKey || "").trim();
+
+    if (!userId) return res.status(401).json({ error: "missing_token" });
+    if (!workspaceId || !mongoose.isValidObjectId(workspaceId)) return res.status(400).json({ error: "workspaceId_required" });
+    if (!pageKey) return res.status(400).json({ error: "pageKey_required" });
+
+    const conversation = await ensureConversation(workspaceId, userId, pageKey);
+    conversation.messages = [] as any;
+    conversation.hasPendingAdminReply = false;
+    conversation.needsAdminForward = false;
+    await conversation.save();
+
+    return res.json({ ok: true, conversation: serializeConversation(conversation) });
+  } catch (error) {
+    console.error("[m04/clearConversation]", error);
     return res.status(500).json({ error: "internal" });
   }
 }
@@ -224,7 +336,7 @@ export async function replyAsAdmin(req: Request, res: Response) {
     if (!text) return res.status(400).json({ error: "text_required" });
 
     const role = await getMembershipRole(workspaceId, userId);
-    if (!role || !ADMIN_ROLES.has(role)) return res.status(403).json({ error: "not_admin" });
+    if (!isAdminRole(role)) return res.status(403).json({ error: "not_admin" });
 
     const conversation = await GuidedAssistantConversation.findOne({
       _id: new mongoose.Types.ObjectId(conversationId),
@@ -243,6 +355,7 @@ export async function replyAsAdmin(req: Request, res: Response) {
       createdAt: new Date(),
     } as any);
     conversation.hasPendingAdminReply = false;
+    conversation.needsAdminForward = false;
     await conversation.save();
 
     return res.json({ ok: true, conversation: serializeConversation(conversation) });

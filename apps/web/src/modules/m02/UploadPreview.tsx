@@ -132,7 +132,7 @@ export default function UploadPreviewM02(){
               {kind === 'merged' ? 'Merged Preview' : (kind === 'leads' ? 'Intent Leads Preview' : 'Upload Preview')}
             </div>
             <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button type="button" className="btn-ghost" onClick={goBack}>Back</button>
+              <button type="button" className="btn-outline" onClick={goBack}>Back</button>
             </div>
             <h2 className="data-preview-title">Preview {previewTitle}</h2>
             <p className="data-preview-subtitle">
@@ -238,13 +238,13 @@ export default function UploadPreviewM02(){
                   <option value={20}>20</option>
                   <option value={50}>50</option>
                 </select></label>
-                <button type="button" className="ml-8" disabled={page <= 1} onClick={() => { const np = Math.max(1, page - 1); fetchPage(np, perPage); }}>Prev</button>
+                <button type="button" className="btn-ghost btn-sm ml-8" disabled={page <= 1} onClick={() => { const np = Math.max(1, page - 1); fetchPage(np, perPage); }}>Prev</button>
                 <span className="mx-8">&nbsp;</span>
                 <Pagination page={page} hasMore={hasMore} onPage={(np:number)=>fetchPage(np, perPage)} />
                 <span className="mx-8">&nbsp;</span>
-                <button type="button" disabled={!hasMore} onClick={() => { const np = page + 1; fetchPage(np, perPage); }}>Next</button>
-                <button type="button" className="ml-8" onClick={() => fetchPage(page, perPage)}>Retry</button>
-                <button type="button" className="ml-8" onClick={() => setIsFullscreen(false)}>Close</button>
+                <button type="button" className="btn-ghost btn-sm" disabled={!hasMore} onClick={() => { const np = page + 1; fetchPage(np, perPage); }}>Next</button>
+                <button type="button" className="btn-ghost btn-sm ml-8" onClick={() => fetchPage(page, perPage)}>Retry</button>
+                <button type="button" className="btn-outline btn-sm ml-8" onClick={() => setIsFullscreen(false)}>Close</button>
               </div>
             </div>
 

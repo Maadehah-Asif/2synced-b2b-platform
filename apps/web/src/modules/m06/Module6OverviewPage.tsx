@@ -9,7 +9,6 @@ import './module6.css'
 import PieChart from './PieChart'
 import TimelineChart from './TimelineChart'
 
-type DateRangeKey = '30d' | '90d' | 'year' | 'all'
 type RevenueByChannelRow = { channel: string; revenue?: number; attributedRevenue?: number; roi?: number; spend?: number }
 type RevenueOverTimeRow = { month?: string; period?: string; total?: number; revenue?: number }
 type CampaignSignal = { id?: string; campaign_id?: string; name?: string; attributedRevenue?: number; revenue?: number }
@@ -25,20 +24,12 @@ type Module6OverviewStats = {
   message?: string
 }
 
-const DATE_RANGE_OPTIONS: { key: DateRangeKey; label: string }[] = [
-  { key: '30d', label: 'Last 30 days' },
-  { key: '90d', label: 'Last 90 days' },
-  { key: 'year', label: 'This year' },
-  { key: 'all', label: 'All time' },
-]
-
 const CHANNEL_OPTIONS = ['email', 'ads', 'linkedin', 'webinar', 'other']
 const MODEL_OPTIONS = ['first-touch', 'last-touch', 'linear']
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
 export default function Module6OverviewPage() {
   const workspaceId = useWorkspaceId({ redirectToWorkspaces: true })
-  const [dateRange, setDateRange] = useState<DateRangeKey>('90d')
   const [channels, setChannels] = useState<string[]>(['email', 'ads', 'linkedin', 'webinar'])
   const [model, setModel] = useState<string>('linear')
   const [loading, setLoading] = useState(false)
@@ -57,7 +48,6 @@ export default function Module6OverviewPage() {
       try {
         const params = new URLSearchParams()
         params.set('projectId', workspaceId)
-        params.set('dateRange', dateRange)
         if (channels.length) params.set('channels', channels.join(','))
         if (model) params.set('model', model)
         const res = await fetchFromApi(`${API_BASE}/m06/stats?${params.toString()}`, undefined, API_BASE)
@@ -71,7 +61,7 @@ export default function Module6OverviewPage() {
       }
     }
     void load()
-  }, [workspaceId, dateRange, channels, model])
+  }, [workspaceId, channels, model])
 
   const revenueByChannel = useMemo(() => (stats?.revenueByChannel || []).filter((row) => channels.includes(String(row.channel).toLowerCase())), [stats, channels])
   const timelineData = useMemo(() => (stats?.revenueOverTime || []).map((point) => ({ month: point.month || point.period || 'Unknown', total: Number(point.total ?? point.revenue ?? 0) })), [stats])
@@ -98,12 +88,6 @@ export default function Module6OverviewPage() {
 
         <InsightPanel eyebrow="Filters" title="Control the reporting scope" soft rightMeta={<div style={{ fontSize: 13, color: '#5B6C8B' }}>{loading ? 'Refreshing data…' : 'Refreshes automatically when filters change'}</div>}>
           <div className="m06-filter-grid">
-            <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span>Date range</span>
-              <select value={dateRange} onChange={(e) => setDateRange(e.target.value as DateRangeKey)}>
-                {DATE_RANGE_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-              </select>
-            </label>
             <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span>Attribution model</span>
               <select value={model} onChange={(e) => setModel(e.target.value)}>

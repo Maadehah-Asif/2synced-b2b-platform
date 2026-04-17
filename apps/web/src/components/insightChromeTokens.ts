@@ -76,12 +76,12 @@ export const insightTokens = {
   } satisfies CSSProperties,
   twoCol: {
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1.45fr) minmax(320px, 0.95fr)',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
     gap: 18,
   } satisfies CSSProperties,
   equalCol: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
     gap: 18,
   } satisfies CSSProperties,
 } as const

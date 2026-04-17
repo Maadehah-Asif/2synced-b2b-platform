@@ -324,7 +324,7 @@ export default function ModuleReportPage() {
         <div className="report-screen">
         <div className="report-back" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix={getModuleHomeSuffix(moduleKey)} label="Back" />
-          <h2 style={{ marginTop: 16 }}>Report Center</h2>
+          <h2 style={{ marginTop: 16 }}>Report</h2>
         </div>
 
         <section
@@ -346,7 +346,7 @@ export default function ModuleReportPage() {
                   {getModuleBadge(moduleKey)}
                 </div>
                 <h1 style={{ margin: '16px 0 8px', fontSize: 36, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>
-                  {report?.title || 'Professional Report'}
+                  {report?.title || template.coverLabel}
                 </h1>
                 <div style={{ maxWidth: 760, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
                   {report?.subtitle || 'Loading report context.'}

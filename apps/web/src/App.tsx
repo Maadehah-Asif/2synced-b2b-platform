@@ -14,7 +14,6 @@ import UploadPreview from './modules/m01/UploadPreview'
 import MergedList from './modules/m01/MergedList'
 import LeadsList from './modules/m01/LeadsList'
 import MergeCSV from './modules/m01/MergeCSV'
-import Module6Dropdown from './modules/m06/Module6Dropdown'
 import Module6Main from './modules/m06/Module6Main'
 import Module6Home from './modules/m06/Module6Home'
 import Module1Home from './modules/m01/Module1Home'
@@ -200,12 +199,7 @@ function App() {
   if (route.startsWith('#/m01/upload')) return <Upload />
 
   // Fallback
-  return (
-    <>
-      <Module6Dropdown />
-      <Login />
-    </>
-  )
+  return <Login />
 }
 
 export default App

@@ -5,6 +5,8 @@ import { InsightHero, InsightKpiCard, InsightKpiGrid, InsightMiniStat, InsightNo
 import { insightTokens } from '../../components/insightChromeTokens'
 import TimelineChart from './TimelineChart'
 import BarChart from './BarChart'
+import PieChart from './PieChart'
+import Pagination from './components/Pagination'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'
 import { fetchFromApi, parseApiJson } from '../../utils/api'
 
@@ -57,15 +59,22 @@ export default function Module6RoiDashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [runs, setRuns] = useState<Array<Record<string, string>>>([])
 
-  const [channel, setChannel] = useState('')
-  const [startMonth, setStartMonth] = useState('')
-  const [endMonth, setEndMonth] = useState('')
-  const [minSpend, setMinSpend] = useState('')
-  const [minROI, setMinROI] = useState('')
-  const scopedRunId = runId
+  const [draftChannel, setDraftChannel] = useState('')
+  const [draftMinSpend, setDraftMinSpend] = useState('')
+  const [draftMinROI, setDraftMinROI] = useState('')
+  const [draftRunId, setDraftRunId] = useState(runId || '')
+
+  const [appliedChannel, setAppliedChannel] = useState('')
+  const [appliedMinSpend, setAppliedMinSpend] = useState('')
+  const [appliedMinROI, setAppliedMinROI] = useState('')
+  const [appliedRunId, setAppliedRunId] = useState(runId || '')
+
+  const [tablePage, setTablePage] = useState(1)
+  const tablePageSize = 10
 
   useEffect(() => {
     if (!workspaceId) return
+
     async function fetchRuns() {
       try {
         const token = localStorage.getItem('token')
@@ -80,23 +89,23 @@ export default function Module6RoiDashboardPage() {
         setRuns([])
       }
     }
-    fetchRuns()
+
+    void fetchRuns()
   }, [workspaceId])
 
   const fetchData = useCallback(async () => {
     if (!workspaceId) return
     setLoading(true)
     setError(null)
+
     try {
       const token = localStorage.getItem('token')
       const params = new URLSearchParams()
-      params.set('projectId', workspaceId || '')
-      if (scopedRunId) params.set('runId', scopedRunId)
-      if (channel) params.set('channel', channel)
-      if (startMonth) params.set('start', startMonth)
-      if (endMonth) params.set('end', endMonth)
-      if (minSpend) params.set('minSpend', minSpend)
-      if (minROI) params.set('minROI', minROI)
+      params.set('projectId', workspaceId)
+      if (appliedRunId) params.set('runId', appliedRunId)
+      if (appliedChannel) params.set('channel', appliedChannel)
+      if (appliedMinSpend) params.set('minSpend', appliedMinSpend)
+      if (appliedMinROI) params.set('minROI', appliedMinROI)
 
       const res = await fetchFromApi(`${API_URL}/m06/roi?${params.toString()}`, {
         headers: { Authorization: token ? `Bearer ${token}` : '' },
@@ -107,12 +116,13 @@ export default function Module6RoiDashboardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load ROI dashboard')
       setData(null)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
-  }, [channel, endMonth, minROI, minSpend, scopedRunId, startMonth, workspaceId])
+  }, [appliedChannel, appliedMinROI, appliedMinSpend, appliedRunId, workspaceId])
 
   useEffect(() => {
-    fetchData()
+    void fetchData()
   }, [fetchData])
 
   const sortedByROI = useMemo(() => {
@@ -144,10 +154,20 @@ export default function Module6RoiDashboardPage() {
       notes.push(`${largestChannel.channel} currently contributes the largest share of attributed revenue inside this ROI scope.`)
     }
     if (!notes.length) {
-      notes.push('Return is relatively balanced. Use the filters to isolate a narrower run, channel, or month range before changing budget.')
+      notes.push('Return is relatively balanced. Use the filters to isolate a narrower run or channel scope before changing budget.')
     }
     return notes
   }, [bestCampaign, worstCampaign, largestChannel])
+
+  const contributionPie = useMemo(
+    () => (data?.channelContribution || []).map((item) => ({ label: item.channel, value: item.attributed })),
+    [data?.channelContribution]
+  )
+
+  const tableRows = useMemo(() => {
+    const start = (tablePage - 1) * tablePageSize
+    return sortedByROI.slice(start, start + tablePageSize)
+  }, [sortedByROI, tablePage])
 
   function tr(v: number) {
     return `$${(Math.round(v) || 0).toLocaleString()}`
@@ -158,18 +178,27 @@ export default function Module6RoiDashboardPage() {
   }
 
   function updateRunScope(nextRunId: string) {
-    const value = nextRunId || null
     const hash = window.location.hash
     const workspace = getWorkspaceIdFromHash()
     if (!workspace) {
       window.location.hash = '#/workspaces'
       return
     }
+
     const base = hash.split('?')[0]
     const params = new URLSearchParams(hash.split('?')[1] || '')
-    if (value) params.set('runId', value)
+    if (nextRunId) params.set('runId', nextRunId)
     else params.delete('runId')
     window.location.hash = params.toString() ? `${base}?${params.toString()}` : base
+  }
+
+  function applyFilters() {
+    setAppliedChannel(draftChannel)
+    setAppliedMinSpend(draftMinSpend)
+    setAppliedMinROI(draftMinROI)
+    setAppliedRunId(draftRunId)
+    updateRunScope(draftRunId)
+    setTablePage(1)
   }
 
   function exportCSV() {
@@ -242,7 +271,7 @@ export default function Module6RoiDashboardPage() {
               title="Campaign ROI table"
               rightMeta={
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <button onClick={fetchData} className="btn-primary">Apply Filters</button>
+                  <button onClick={applyFilters} className="btn-primary">Apply Filters</button>
                   <button onClick={exportCSV} className="btn-ghost">Export CSV</button>
                 </div>
               }
@@ -250,7 +279,7 @@ export default function Module6RoiDashboardPage() {
               <div className="m06-filter-grid" style={{ marginTop: 4 }}>
                 <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <span>Channel</span>
-                  <select value={channel} onChange={(e) => setChannel(e.target.value)}>
+                  <select value={draftChannel} onChange={(e) => setDraftChannel(e.target.value)}>
                     <option value="">All channels</option>
                     <option value="email">Email</option>
                     <option value="ads">Ads</option>
@@ -260,24 +289,16 @@ export default function Module6RoiDashboardPage() {
                   </select>
                 </label>
                 <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span>Start month</span>
-                  <input value={startMonth} onChange={(e) => setStartMonth(e.target.value)} placeholder="2025-01" />
-                </label>
-                <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span>End month</span>
-                  <input value={endMonth} onChange={(e) => setEndMonth(e.target.value)} placeholder="2025-12" />
-                </label>
-                <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <span>Minimum spend</span>
-                  <input value={minSpend} onChange={(e) => setMinSpend(e.target.value)} placeholder="0" />
+                  <input value={draftMinSpend} onChange={(e) => setDraftMinSpend(e.target.value)} placeholder="0" />
                 </label>
                 <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <span>Minimum ROI %</span>
-                  <input value={minROI} onChange={(e) => setMinROI(e.target.value)} placeholder="-100" />
+                  <input value={draftMinROI} onChange={(e) => setDraftMinROI(e.target.value)} placeholder="-100" />
                 </label>
                 <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <span>Attribution run</span>
-                  <select value={scopedRunId || ''} onChange={(e) => updateRunScope(e.target.value)}>
+                  <select value={draftRunId} onChange={(e) => setDraftRunId(e.target.value)}>
                     <option value="">All runs</option>
                     {runs.map((run) => (
                       <option key={run.id || run._id || run.run_id} value={run.id || run._id || run.run_id}>
@@ -301,7 +322,7 @@ export default function Module6RoiDashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedByROI.map((campaign) => (
+                    {tableRows.map((campaign) => (
                       <tr key={campaign.campaign_id} style={insightTokens.row}>
                         <td style={insightTokens.tdStrong}>{campaign.name || campaign.campaign_id}</td>
                         <td style={insightTokens.td}>{campaign.channel || '—'}</td>
@@ -314,23 +335,38 @@ export default function Module6RoiDashboardPage() {
                   </tbody>
                 </table>
               </div>
+
+              <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={insightTokens.mutedText}>
+                  Showing {(tablePage - 1) * tablePageSize + 1} to {Math.min(tablePage * tablePageSize, sortedByROI.length)} of {sortedByROI.length} campaigns in the current ROI scope.
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <button type="button" className="btn-ghost btn-sm" disabled={tablePage <= 1} onClick={() => setTablePage((value) => Math.max(1, value - 1))}>Prev</button>
+                  <Pagination page={tablePage} total={sortedByROI.length} limit={tablePageSize} onPage={setTablePage} />
+                  <button type="button" className="btn-ghost btn-sm" disabled={tablePage * tablePageSize >= sortedByROI.length} onClick={() => setTablePage((value) => value + 1)}>Next</button>
+                </div>
+              </div>
             </InsightPanel>
 
             <section style={insightTokens.equalCol}>
               <InsightPanel eyebrow="Trend" title="Attributed revenue over time">
-                <TimelineChart data={(data.monthlySeries || []).map((item) => ({ month: item.month, total: item.attributed }))} />
+                <TimelineChart data={(data.monthlySeries || []).map((item) => ({ month: item.month, total: item.attributed }))} height={210} valueFormatter={(value) => tr(value)} />
               </InsightPanel>
 
               <InsightPanel eyebrow="Channel mix" title="Channel contribution" soft>
-                <BarChart data={(data.channelContribution || []).map((item) => ({ label: item.channel, value: item.attributed }))} />
+                <BarChart data={(data.channelContribution || []).map((item) => ({ label: item.channel, value: item.attributed }))} height={210} valueFormatter={(value) => tr(value)} />
               </InsightPanel>
             </section>
           </div>
 
           <div style={{ display: 'grid', gap: 18 }}>
+            <InsightPanel eyebrow="Contribution split" title="Visible attributed revenue by channel" soft>
+              <PieChart data={contributionPie} size={170} />
+            </InsightPanel>
+
             <InsightPanel eyebrow="Top return" title="Best-performing campaigns" soft>
               <div style={{ display: 'grid', gap: 12 }}>
-                {top5.map((item) => (
+                {top5.slice(0, 4).map((item) => (
                   <div key={item.campaign_id} style={{ display: 'grid', gap: 8, borderBottom: '1px solid rgba(15,66,88,0.08)', paddingBottom: 12 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                       <strong style={{ color: '#0B2540' }}>{item.name || item.campaign_id}</strong>
@@ -344,7 +380,7 @@ export default function Module6RoiDashboardPage() {
 
             <InsightPanel eyebrow="Margin risk" title="Underperforming campaigns">
               <div style={{ display: 'grid', gap: 12 }}>
-                {bottom5.map((item) => (
+                {bottom5.slice(0, 4).map((item) => (
                   <div key={item.campaign_id} style={{ display: 'grid', gap: 8, borderBottom: '1px solid rgba(15,66,88,0.08)', paddingBottom: 12 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                       <strong style={{ color: '#0B2540' }}>{item.name || item.campaign_id}</strong>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
+import { ForecastGroupedBarChart, ForecastLineChart } from '../../components/ForecastCharts'
 import { InsightHero, InsightKpiCard, InsightKpiGrid, InsightNoteCard, InsightPanel } from '../../components/InsightChrome'
 import { insightTokens } from '../../components/insightChromeTokens'
 
@@ -91,6 +92,54 @@ export default function FunnelForecast() {
 
   const historyRows = useMemo(() => result?.history || [], [result])
   const forecastRows = useMemo(() => result?.forecast || [], [result])
+  const trendLabels = useMemo(() => {
+    if (!result) return []
+    return [...historyRows.map((row) => row.month), ...forecastRows.map((row) => row.month)]
+  }, [forecastRows, historyRows, result])
+  const conversionTrendSeries = useMemo(() => {
+    if (!result) return []
+    return [
+      {
+        label: 'Historical Conversion',
+        color: '#4C956C',
+        values: [...historyRows.map((row) => row.conversionRate), ...forecastRows.map(() => Number.NaN)],
+      },
+      {
+        label: 'Projected Conversion',
+        color: '#4F6D9A',
+        values: [...historyRows.map(() => Number.NaN), ...forecastRows.map((row) => row.projectedConversionRate)],
+      },
+      {
+        label: 'Projected Drop Rate',
+        color: '#C98C3A',
+        values: [...historyRows.map(() => Number.NaN), ...forecastRows.map((row) => row.projectedDropRate)],
+      },
+    ]
+  }, [forecastRows, historyRows, result])
+  const stagePressureLabels = useMemo(() => (result ? ['Conversion', 'Drop Rate', 'Avg Days'] : []), [result])
+  const stagePressureSeries = useMemo(() => {
+    if (!result) return []
+    return [
+      {
+        label: 'Latest',
+        color: '#4F6D9A',
+        values: [
+          result.kpis.latestConversionRate,
+          result.kpis.latestDropRate,
+          result.kpis.latestAvgDaysInStage,
+        ],
+      },
+      {
+        label: 'Projected',
+        color: '#4C956C',
+        values: [
+          forecastRows[forecastRows.length - 1]?.projectedConversionRate ?? result.kpis.projectedConversionRate,
+          forecastRows[forecastRows.length - 1]?.projectedDropRate ?? 0,
+          forecastRows[forecastRows.length - 1]?.projectedAvgDaysInStage ?? 0,
+        ],
+      },
+    ]
+  }, [forecastRows, result])
 
   return (
     <Layout>
@@ -99,11 +148,11 @@ export default function FunnelForecast() {
           <ModuleBackButton toSuffix="/m07" />
         </div>
 
-        <InsightHero eyebrow="Funnel Insight Forecast" title="Funnel Forecast Explorer" subtitle="Project conversion, drop pressure, and stage delay so funnel owners can anticipate health changes before leakage compounds." />
+        <InsightHero eyebrow="Funnel Insight Forecast" title="Funnel Forecast" subtitle="Project conversion, drop pressure, and stage delay so funnel owners can anticipate health changes before leakage compounds." />
 
         <section style={{ ...insightTokens.twoCol, marginTop: 18 }}>
           <InsightPanel eyebrow="Scenario setup" title="Choose the funnel forecast scope">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
               <select value={source} onChange={(e) => setSource(e.target.value)}>
                 <option value="">All sources</option>
                 {sources.map((item) => <option key={item}>{item}</option>)}
@@ -140,6 +189,16 @@ export default function FunnelForecast() {
               <InsightKpiCard label="Latest Avg Days" value={`${result.kpis.latestAvgDaysInStage}d`} note="Most recent visible delay across the historical view." tone="slate" />
               <InsightKpiCard label="Projected Conversion" value={`${result.kpis.projectedConversionRate}%`} note="Headline conversion outcome at the end of the scenario horizon." tone="navy" />
             </InsightKpiGrid>
+
+            <section style={{ ...insightTokens.equalCol, marginTop: 18 }}>
+              <InsightPanel eyebrow="Trend view" title="Conversion and pressure trend">
+                <ForecastLineChart labels={trendLabels} series={conversionTrendSeries} suffix="%" height={300} />
+              </InsightPanel>
+
+              <InsightPanel eyebrow="Latest vs projected" title="Current funnel pressure compared to forecast" soft>
+                <ForecastGroupedBarChart labels={stagePressureLabels} series={stagePressureSeries} height={300} />
+              </InsightPanel>
+            </section>
 
             <section style={{ ...insightTokens.equalCol, marginTop: 18 }}>
               <InsightPanel eyebrow="History" title="Observed monthly funnel behavior">

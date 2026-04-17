@@ -282,8 +282,8 @@
 }
 
 .btn-ghost.btn-sm.active {
-  background: rgba(1, 8, 114, 0.1);
-  color: var(--header-primary, #010872);
+  background: rgba(15, 66, 88, 0.1);
+  color: var(--header-secondary, #0f4258);
 }
 
 .allocation-subtable {
@@ -423,6 +423,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-bottom: -2px;
 }
 
 .m07-workspace-panel {
@@ -534,8 +535,13 @@
   flex-wrap: wrap;
 }
 
+.m07-workspace-toolbar > * {
+  min-width: 0;
+}
+
 .m07-workspace-search {
   min-width: 320px;
+  width: 100%;
 }
 
 .m07-workspace-sectiongap {
@@ -553,6 +559,10 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
+}
+
+.m07-workspace-formgrid > * {
+  min-width: 0;
 }
 
 .m07-workspace-mappinggrid {

@@ -1,20 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
-import Autocomplete from '../../components/Autocomplete'
 import { InsightHero, InsightKpiCard, InsightKpiGrid, InsightMiniStat, InsightNoteCard, InsightPanel } from '../../components/InsightChrome'
 import { insightTokens } from '../../components/insightChromeTokens'
 import { previewJourneys, getJourney } from './services/journeys'
-import { searchCampaigns } from './services/campaigns'
-import { searchLeads } from './services/deals'
 import { useWorkspaceId } from '../../utils/workspace'
-
-type SearchLead = {
-  full_name?: string
-  name?: string
-  email?: string
-  lead_id?: string
-}
 
 type JourneyPreviewRow = {
   deal_id: string
@@ -50,13 +40,6 @@ type JourneyResponse = {
   journey?: JourneyTouch[]
 }
 
-function formatLeadOption(lead: SearchLead) {
-  const name = String(lead?.full_name || lead?.name || '').trim()
-  const email = String(lead?.email || '').trim()
-  const leadId = String(lead?.lead_id || '').trim()
-  return [name || (leadId ? `#${leadId}` : ''), email].filter(Boolean).join(' • ') || 'Unknown lead'
-}
-
 function formatDateTime(value?: string | null) {
   if (!value) return '—'
   const date = new Date(value)
@@ -70,19 +53,12 @@ export default function JourneyPreview() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [status, setStatus] = useState('closed_won')
-  const [minAmount, setMinAmount] = useState('')
-  const [maxAmount, setMaxAmount] = useState('')
-  const [leadQuery, setLeadQuery] = useState('')
-  const [leadFilter, setLeadFilter] = useState('')
   const [channel, setChannel] = useState('')
-  const [campaignQuery, setCampaignQuery] = useState('')
-  const [campaignId, setCampaignId] = useState('')
 
   const [page, setPage] = useState(1)
   const [limit] = useState(25)
 
   const [dateError, setDateError] = useState<string | undefined>(undefined)
-  const [amountError, setAmountError] = useState<string | undefined>(undefined)
   const [rows, setRows] = useState<JourneyPreviewRow[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -101,7 +77,6 @@ export default function JourneyPreview() {
 
   const validate = useCallback(() => {
     setDateError(undefined)
-    setAmountError(undefined)
     if (from && to) {
       const a = new Date(from).getTime()
       const b = new Date(to).getTime()
@@ -110,16 +85,8 @@ export default function JourneyPreview() {
         return false
       }
     }
-    if (minAmount && Number.isNaN(Number(minAmount))) {
-      setAmountError('Minimum amount must be numeric.')
-      return false
-    }
-    if (maxAmount && Number.isNaN(Number(maxAmount))) {
-      setAmountError('Maximum amount must be numeric.')
-      return false
-    }
     return true
-  }, [from, maxAmount, minAmount, to])
+  }, [from, to])
 
   const load = useCallback(async (nextPage = page) => {
     if (!workspaceId) {
@@ -136,11 +103,7 @@ export default function JourneyPreview() {
         from,
         to,
         status,
-        minAmount,
-        maxAmount,
-        lead: leadFilter,
         channel,
-        campaignId,
         page: nextPage,
         limit,
       })
@@ -150,11 +113,11 @@ export default function JourneyPreview() {
       setError(e instanceof Error ? e.message : 'Failed to load journey preview.')
     }
     setLoading(false)
-  }, [campaignId, channel, from, leadFilter, limit, maxAmount, minAmount, page, status, to, validate, workspaceId])
+  }, [channel, from, limit, page, status, to, validate, workspaceId])
 
   useEffect(() => {
     if (from && to) load()
-  }, [from, to, status, minAmount, maxAmount, leadFilter, channel, campaignId, page, limit, workspaceId, load])
+  }, [from, to, status, channel, page, limit, workspaceId, load])
 
   async function onPickDeal(row: JourneyPreviewRow) {
     setJourney(null)
@@ -173,12 +136,6 @@ export default function JourneyPreview() {
     past.setDate(past.getDate() - 90)
     setStatus('closed_won')
     setChannel('')
-    setCampaignQuery('')
-    setCampaignId('')
-    setLeadQuery('')
-    setLeadFilter('')
-    setMinAmount('')
-    setMaxAmount('')
     setFrom(past.toISOString().slice(0, 10))
     setTo(now.toISOString().slice(0, 10))
     setPage(1)
@@ -267,49 +224,9 @@ export default function JourneyPreview() {
                     <option value="other">Other</option>
                   </select>
                 </label>
-                <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span>Campaign</span>
-                  <Autocomplete
-                    value={campaignQuery}
-                    placeholder="Search campaigns"
-                    fetchItems={async (q) => searchCampaigns(q)}
-                    formatItem={(item: { name?: string; channel?: string }) => `${item.name} (${item.channel || 'other'})`}
-                    getValue={(item: { name?: string }) => String(item.name || '')}
-                    onChange={(value, item) => {
-                      setCampaignQuery(value)
-                      setCampaignId(item && 'id' in item ? String(item.id) : '')
-                    }}
-                  />
-                </label>
-                <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span>Minimum amount</span>
-                  <input value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
-                </label>
-                <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span>Maximum amount</span>
-                  <input value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
-                </label>
-                <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span>Lead</span>
-                  <Autocomplete
-                    value={leadQuery}
-                    placeholder="Lead id, name, or company"
-                    fetchItems={async (q) => {
-                      const result = await searchLeads(q)
-                      return result.leads || []
-                    }}
-                    formatItem={formatLeadOption}
-                    getValue={formatLeadOption}
-                    onChange={(value, item) => {
-                      setLeadQuery(value)
-                      setLeadFilter(item ? String(item.lead_id) : '')
-                    }}
-                  />
-                </label>
               </div>
 
               {dateError ? <div style={{ marginTop: 12, color: '#b91c1c', fontSize: 13 }}>{dateError}</div> : null}
-              {amountError ? <div style={{ marginTop: 8, color: '#b91c1c', fontSize: 13 }}>{amountError}</div> : null}
             </InsightPanel>
 
             <InsightPanel eyebrow="Visible deals" title="Journey list" soft>
@@ -367,9 +284,9 @@ export default function JourneyPreview() {
             <InsightPanel eyebrow="Executive readout" title="What this window indicates">
               <div style={{ display: 'grid', gap: 12 }}>
                 <InsightNoteCard title="Journey quality" body={interpretation} />
-                <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                <div style={{ display: 'grid', gap: 10, gridTemplateColumns: '1fr' }}>
                   <InsightMiniStat label="Selected date span" value={from && to ? `${from} to ${to}` : '—'} />
-                  <InsightMiniStat label="Active status filter" value={status || 'All'} />
+                  <InsightMiniStat label="Active filters" value={`${status || 'All'}${channel ? ` • ${channel}` : ''}`} />
                 </div>
               </div>
             </InsightPanel>

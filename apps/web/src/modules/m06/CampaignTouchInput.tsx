@@ -497,7 +497,7 @@ export default function CampaignTouchInput(){
               <div className="m06-section-label">View</div>
               <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Touch Table</h3>
               <div className="m06-helper">Choose whether you want to inspect touches by campaign or by lead, then narrow the result set by type, channel, and archive state before editing rows.</div>
-              <div className="m06-leads-toolbar-grid" style={{ marginTop: 16, gridTemplateColumns: 'auto auto minmax(240px,1fr) auto auto auto' }}>
+              <div className="m06-leads-toolbar-grid" style={{ marginTop: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                 <button className={mode === 'campaign' ? 'btn-primary' : 'btn-ghost'} onClick={() => { setMode('campaign'); setSelectedEntityId(''); }}>By Campaign</button>
                 <button className={mode === 'lead' ? 'btn-primary' : 'btn-ghost'} onClick={() => { setMode('lead'); setSelectedEntityId(''); }}>By Lead</button>
                 <select value={selectedEntityId} onChange={(event) => setSelectedEntityId(event.target.value)}>
@@ -666,7 +666,7 @@ export default function CampaignTouchInput(){
                     <button className="btn-ghost" onClick={resetCsvState}>Reset Upload</button>
                   </div>
                   {validationResult && <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}><button className="btn-ghost" onClick={() => setShowPreview((prev) => !prev)}>{showPreview ? 'Hide Preview' : 'Open Preview'}</button></div>}
-                  {showPreview && previewRows.length > 0 && <div style={{ marginTop: 18 }}><ImportPreviewStep title="Touch CSV Preview" subtitle="This reusable Module 6 preview step is shared across data-hub ingestion flows." sourceHeaders={csvHeaders} rows={previewRows} currentStartRow={startRow} totalSelectedRows={previewRows.length} /></div>}
+                  {showPreview && previewRows.length > 0 && <div style={{ marginTop: 18 }}><ImportPreviewStep title="Touch CSV Preview" subtitle="This reusable Module 6 preview step is shared across data-hub ingestion flows." sourceHeaders={csvHeaders} rows={previewRows} currentStartRow={startRow} totalSelectedRows={previewRows.length} startFullscreen /></div>}
                   {validationResult && (
                     <div className="m06-summary-box" style={{ marginTop: 16 }}>
                       <div style={{ fontWeight:600, marginBottom:4 }}>Validation Summary</div>

@@ -45,15 +45,6 @@ export default function Prioritization() {
   const [timeline, setTimeline] = useState<any | null>(null);
   const [timelineFilters, setTimelineFilters] = useState<{ range: '30' | '60' | '90' | 'all'; types: string[] }>({ range: '30', types: [] });
 
-  const btnBlue = {
-    background: "#0f4258",
-    color: "white",
-    border: "none",
-    padding: "8px 14px",
-    borderRadius: 6,
-    cursor: "pointer"
-  };
-
   useEffect(() => {
     fetchData();
   }, [workspace, page, segment, intentRange]);
@@ -132,7 +123,7 @@ export default function Prioritization() {
 
           {/* RIGHT BUTTONS */}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <button style={btnBlue} onClick={() => {
+            <button type="button" className="btn-primary" onClick={() => {
               const wid = getWorkspaceIdFromHash();
               if (wid) window.location.hash = `#/workspace/${wid}/m02/upload-wizard`;
               else window.location.hash = '#/workspaces';
@@ -140,11 +131,11 @@ export default function Prioritization() {
               Open Upload Wizard
             </button>
 
-            <button style={btnBlue} onClick={() => leadsRef.current?.click()}>
+            <button type="button" className="btn-primary" onClick={() => leadsRef.current?.click()}>
               Quick upload leads
             </button>
 
-            <button style={btnBlue} onClick={() => behaviorsRef.current?.click()}>
+            <button type="button" className="btn-primary" onClick={() => behaviorsRef.current?.click()}>
               Quick upload behaviors
             </button>
           </div>
@@ -211,10 +202,7 @@ export default function Prioritization() {
             borderRadius: 8
           }}>
             <div>{uploadToast.msg}</div>
-            <button
-              style={{ ...btnBlue, background: '#fff', color: '#333', marginTop: 6 }}
-              onClick={() => setUploadToast(null)}
-            >
+            <button type="button" className="btn-outline btn-sm" style={{ marginTop: 6 }} onClick={() => setUploadToast(null)}>
               Close
             </button>
           </div>
@@ -252,13 +240,13 @@ export default function Prioritization() {
             <div>
               <div style={{ fontSize: 12 }}>Page</div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <button style={btnBlue} disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
+                <button type="button" className="btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
                   Prev
                 </button>
 
                 <span style={{ fontSize: 12 }}>Page {page} / {totalPages}</span>
 
-                <button style={btnBlue} disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
+                <button type="button" className="btn-ghost btn-sm" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
                   Next
                 </button>
               </div>
@@ -331,7 +319,7 @@ export default function Prioritization() {
                     <td style={{ maxWidth: 240 }}>{r.topDriverSummary || '-'}</td>
 
                     <td>
-                      <button style={btnBlue} onClick={() => openTimeline(r)}>
+                      <button type="button" className="btn-primary btn-sm" onClick={() => openTimeline(r)}>
                         View timeline
                       </button>
                     </td>
@@ -406,7 +394,7 @@ export default function Prioritization() {
                 </div>
 
                 <div style={{ marginLeft: 'auto' }}>
-                  <button style={btnBlue} onClick={() => activeLead && openTimeline(activeLead)}>
+                  <button type="button" className="btn-primary btn-sm" onClick={() => activeLead && openTimeline(activeLead)}>
                     Apply filters
                   </button>
                 </div>
@@ -522,7 +510,7 @@ export default function Prioritization() {
               )}
 
               <div style={{ marginTop: 16, textAlign: 'right' }}>
-                <button style={btnBlue} onClick={() => { setActiveLead(null); setTimeline(null); }}>
+                <button type="button" className="btn-outline" onClick={() => { setActiveLead(null); setTimeline(null); }}>
                   Close
                 </button>
               </div>

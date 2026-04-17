@@ -286,6 +286,11 @@ export default function WorkspaceDetail() {
     window.location.hash = path;
   }
 
+  function openMembers() {
+    if (!id) return;
+    window.location.hash = `#/workspace/${id}/members`;
+  }
+
   const entityOptions = ["All data", ...Array.from(new Set(dataHubCards.map((card) => card.entity)))];
   const moduleOptions = [
     "All modules",
@@ -401,6 +406,24 @@ export default function WorkspaceDetail() {
                 <div style={{ fontSize: 30, fontWeight: 900, color: palette.ink, marginTop: 8 }}>
                   {loading ? "..." : memberCount}
                 </div>
+                <button
+                  type="button"
+                  onClick={openMembers}
+                  style={{
+                    marginTop: 12,
+                    border: "1px solid rgba(15,66,88,0.12)",
+                    background: "#ffffff",
+                    color: palette.accent,
+                    borderRadius: 999,
+                    padding: "8px 12px",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    letterSpacing: "0.04em",
+                    boxShadow: "0 8px 18px rgba(13,30,60,0.06)",
+                  }}
+                >
+                  Manage members
+                </button>
               </div>
               <div
                 style={{

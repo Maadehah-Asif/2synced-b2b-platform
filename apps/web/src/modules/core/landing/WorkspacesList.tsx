@@ -35,6 +35,10 @@ export default function WorkspacesList() {
     window.location.hash = "#/create-workspace";
   };
 
+  const onJoin = () => {
+    window.location.hash = "#/join-workspace";
+  };
+
   const onCopyId = (shareId?: string | null) => {
     if (!shareId) return;
     navigator.clipboard?.writeText(shareId);
@@ -157,6 +161,21 @@ export default function WorkspacesList() {
                     >
                       Create workspace
                     </button>
+                    <button
+                      className="btn-ghost"
+                      onClick={onJoin}
+                      style={{
+                        borderRadius: 999,
+                        padding: "12px 22px",
+                        backgroundColor: "rgba(255,255,255,0.12)",
+                        color: "#ffffff",
+                        fontWeight: 700,
+                        border: "1px solid rgba(255,255,255,0.20)",
+                        fontSize: 14,
+                      }}
+                    >
+                      Join workspace
+                    </button>
                   </div>
                 </div>
               </section>
@@ -211,20 +230,36 @@ export default function WorkspacesList() {
                       <div style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16, maxWidth: 460, marginInline: "auto", lineHeight: 1.7 }}>
                         Create your first workspace to start organizing modules, team members, and workspace-level activity.
                       </div>
-                      <button
-                        className="btn-primary"
-                        onClick={onCreate}
-                        style={{
-                          borderRadius: 999,
-                          padding: "10px 20px",
-                          backgroundColor: PRIMARY,
-                          color: "#ffffff",
-                          border: "none",
-                          fontWeight: 600,
-                        }}
-                      >
-                        Create workspace
-                      </button>
+                      <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+                        <button
+                          className="btn-primary"
+                          onClick={onCreate}
+                          style={{
+                            borderRadius: 999,
+                            padding: "10px 20px",
+                            backgroundColor: PRIMARY,
+                            color: "#ffffff",
+                            border: "none",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Create workspace
+                        </button>
+                        <button
+                          className="btn-ghost"
+                          onClick={onJoin}
+                          style={{
+                            borderRadius: 999,
+                            padding: "10px 20px",
+                            border: "1px solid rgba(15, 66, 88, 0.18)",
+                            backgroundColor: "#ffffff",
+                            color: PRIMARY,
+                            fontWeight: 600,
+                          }}
+                        >
+                          Join workspace
+                        </button>
+                      </div>
                     </section>
                   ) : (
                     <section style={{ display: "grid", gap: 14 }}>

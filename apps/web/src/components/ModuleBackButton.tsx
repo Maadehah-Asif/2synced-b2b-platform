@@ -19,7 +19,7 @@ export default function ModuleBackButton({ toSuffix = '', label = 'Back' }: Prop
   }
 
   return (
-    <button className="btn-outline btn-sm" onClick={go} style={{ marginRight: 8, whiteSpace: 'nowrap' }}>
+    <button className="btn-outline btn-sm module-back-button" onClick={go} style={{ minHeight: 38, marginRight: 8, whiteSpace: 'nowrap' }}>
       {'\u2190'} {label}
     </button>
   )

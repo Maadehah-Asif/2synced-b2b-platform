@@ -99,7 +99,7 @@
   padding: 12px 14px;
   text-align: left;
   transition: border 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
-  cursor: pointer;
+  cursor: default;
   font: inherit;
 }
 
@@ -137,6 +137,14 @@
   gap: 8px;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.run-history-statuses,
+.run-history-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -283,8 +291,8 @@
 }
 
 .btn-ghost.btn-sm.active {
-  background: rgba(1, 8, 114, 0.1);
-  color: var(--header-primary, #010872);
+  background: rgba(15, 66, 88, 0.1);
+  color: var(--header-secondary, #0f4258);
 }
 
 .allocation-subtable {
@@ -708,6 +716,18 @@
   box-shadow: 0 10px 24px rgba(13, 30, 60, 0.05);
 }
 
+.m06-summary-panel {
+  width: min(1220px, 96vw);
+  height: min(92vh, 900px);
+}
+
+.m06-summary-panel-body {
+  padding: 18px;
+  overflow: auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+
 .m06-page table {
   width: 100%;
   border-collapse: collapse;
@@ -758,6 +778,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-bottom: -2px;
 }
 
 .m06-leads-hero-grid {
@@ -847,6 +868,10 @@
   grid-template-columns: minmax(280px, 1fr) auto auto;
   gap: 12px;
   align-items: center;
+}
+
+.m06-leads-toolbar-grid > * {
+  min-width: 0;
 }
 
 .m06-leads-toolbar-grid .toggle {

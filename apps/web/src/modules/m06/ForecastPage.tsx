@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
 import { InsightHero, InsightKpiCard, InsightKpiGrid, InsightNoteCard, InsightPanel } from '../../components/InsightChrome'
+import { ForecastGroupedBarChart, ForecastLineChart } from '../../components/ForecastCharts'
 import { insightTokens } from '../../components/insightChromeTokens'
 import { useWorkspaceId } from '../../utils/workspace'
 import './module6.css'
 import BarChart from './BarChart'
 import TimelineChart from './TimelineChart'
+import Pagination from './components/Pagination'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
@@ -48,6 +50,8 @@ export default function ForecastPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<AgentResult | null>(null)
+  const [forecastPage, setForecastPage] = useState(1)
+  const forecastPageSize = 6
 
   useEffect(() => {
     fetch(`${API_BASE}/m06/forecast/options`)
@@ -109,6 +113,7 @@ export default function ForecastPage() {
         seasonality: typeof raw.seasonality === 'number' ? raw.seasonality : 0,
         explanation: typeof raw.explanation === 'string' ? raw.explanation : 'Forecast results from the forecasting agent.',
       })
+      setForecastPage(1)
     } catch {
       setError('Network error while calling the forecast agent.')
     } finally {
@@ -131,8 +136,30 @@ export default function ForecastPage() {
   }
 
   const timelineData = useMemo(() => result?.history.map((row) => ({ month: row.month, total: row.roi })) || [], [result])
-  const comparisonData = useMemo(() => result ? [{ label: 'Baseline', value: result.baselineROI }, { label: 'Scenario', value: result.scenarioROI }] : [], [result])
+  const forecastTrendLabels = useMemo(() => result?.forecast.map((row) => row.month) || [], [result])
+  const forecastTrendSeries = useMemo(() => {
+    if (!result) return []
+    return [
+      { label: 'Baseline ROI', color: '#4F6D9A', values: result.forecast.map((row) => row.baseline_roi) },
+      { label: 'Scenario ROI', color: '#4C956C', values: result.forecast.map((row) => row.scenario_roi) },
+      { label: 'Confidence High', color: '#C98C3A', values: result.forecast.map((row) => row.confidence_high) },
+    ]
+  }, [result])
   const selectedChannel = channels.find((item) => item.id === selectedChannelId)?.name || selectedChannelId || 'No channel'
+  const forecastTableRows = useMemo(() => {
+    const rows = result?.forecast || []
+    const start = (forecastPage - 1) * forecastPageSize
+    return rows.slice(start, start + forecastPageSize)
+  }, [forecastPage, result])
+  const scenarioBars = useMemo(
+    () => ({
+      labels: ['Baseline', 'Scenario'],
+      series: [
+        { label: 'ROI', color: '#0f4258', values: result ? [result.baselineROI, result.scenarioROI] : [] },
+      ],
+    }),
+    [result]
+  )
 
   return (
     <Layout>
@@ -141,7 +168,7 @@ export default function ForecastPage() {
           <ModuleBackButton toSuffix="/m06" />
         </div>
 
-        <InsightHero eyebrow="Revenue Insight Forecast" title="ROI Forecast Explorer" subtitle="Test spend scenarios by channel, compare expected ROI shifts, and export projected revenue-performance outputs without changing attribution records." />
+        <InsightHero eyebrow="Revenue Insight Forecast" title="ROI Forecast" subtitle="Test spend scenarios by channel, compare expected ROI shifts, and export projected revenue-performance outputs without changing attribution records." />
 
         <section style={{ ...insightTokens.twoCol, marginTop: 18 }}>
           <InsightPanel eyebrow="Scenario setup" title="Choose the forecast configuration">
@@ -190,20 +217,33 @@ export default function ForecastPage() {
 
             <section style={{ ...insightTokens.equalCol, marginTop: 18 }}>
               <InsightPanel eyebrow="History" title="Historical ROI">
-                <div style={{ height: 240 }}>
-                  <TimelineChart data={timelineData} />
+                <div style={{ minHeight: 220 }}>
+                  <TimelineChart data={timelineData} height={210} />
                 </div>
               </InsightPanel>
 
               <InsightPanel eyebrow="Scenario comparison" title="Baseline versus scenario" soft>
-                <div style={{ height: 240 }}>
-                  <BarChart data={comparisonData} height={180} />
+                <div style={{ minHeight: 220 }}>
+                  <ForecastGroupedBarChart labels={scenarioBars.labels} series={scenarioBars.series} height={210} suffix="%" />
                 </div>
               </InsightPanel>
             </section>
 
+            <InsightPanel eyebrow="Forecast trend" title="Projected monthly ROI movement" soft>
+              <div style={{ minHeight: 260 }}>
+                <ForecastLineChart labels={forecastTrendLabels} series={forecastTrendSeries} suffix="%" height={250} />
+              </div>
+            </InsightPanel>
+
             <section style={{ ...insightTokens.twoCol, marginTop: 18 }}>
               <InsightPanel eyebrow="Forecast table" title="Projected monthly outcome">
+                <div style={{ marginBottom: 14 }}>
+                  <BarChart
+                    data={(result.forecast || []).slice(0, 6).map((row) => ({ label: row.month.slice(2), value: row.scenario_roi }))}
+                    height={180}
+                    valueFormatter={(value) => `${Math.round(value)}%`}
+                  />
+                </div>
                 <div style={insightTokens.tableWrap}>
                   <table style={insightTokens.table}>
                     <thead>
@@ -216,7 +256,7 @@ export default function ForecastPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {result.forecast.map((row) => (
+                      {forecastTableRows.map((row) => (
                         <tr key={row.month} style={insightTokens.row}>
                           <td style={insightTokens.tdStrong}>{row.month}</td>
                           <td style={insightTokens.td}>{formatPct(row.baseline_roi)}</td>
@@ -227,6 +267,17 @@ export default function ForecastPage() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+
+                <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={insightTokens.mutedText}>
+                    Showing {(forecastPage - 1) * forecastPageSize + 1} to {Math.min(forecastPage * forecastPageSize, result.forecast.length)} of {result.forecast.length} forecast rows.
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button type="button" className="btn-ghost btn-sm" disabled={forecastPage <= 1} onClick={() => setForecastPage((value) => Math.max(1, value - 1))}>Prev</button>
+                    <Pagination page={forecastPage} total={result.forecast.length} limit={forecastPageSize} onPage={setForecastPage} />
+                    <button type="button" className="btn-ghost btn-sm" disabled={forecastPage * forecastPageSize >= result.forecast.length} onClick={() => setForecastPage((value) => value + 1)}>Next</button>
+                  </div>
                 </div>
               </InsightPanel>
 

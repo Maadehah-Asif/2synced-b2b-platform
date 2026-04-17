@@ -18,6 +18,7 @@ export interface GuidedAssistantConversationDoc {
   userId: Types.ObjectId;
   pageKey: string;
   hasPendingAdminReply: boolean;
+  needsAdminForward: boolean;
   messages: Types.DocumentArray<GuidedAssistantMessageDoc>;
   createdAt: Date;
   updatedAt: Date;
@@ -40,6 +41,7 @@ const GuidedAssistantConversationSchema = new Schema<GuidedAssistantConversation
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     pageKey: { type: String, required: true, trim: true, index: true },
     hasPendingAdminReply: { type: Boolean, default: false, index: true },
+    needsAdminForward: { type: Boolean, default: false, index: true },
     messages: { type: [GuidedAssistantMessageSchema], default: [] },
   },
   {

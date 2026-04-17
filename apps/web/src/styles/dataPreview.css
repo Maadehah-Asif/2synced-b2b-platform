@@ -4,7 +4,7 @@
   padding: 28px 24px 44px;
   display: grid;
   gap: 20px;
-  background: linear-gradient(180deg, #f3f8fb 0%, #f8fbfd 24%, #fcfdff 100%);
+  background: linear-gradient(180deg, #f4f8fb 0%, #f8fbfd 24%, #fcfdff 100%);
   min-width: 0;
   overflow-x: hidden;
 }
@@ -21,7 +21,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(240px, 0.65fr);
   overflow: hidden;
-  background: linear-gradient(135deg, rgba(18, 59, 87, 0.98) 0%, rgba(15, 66, 88, 0.96) 44%, rgba(72, 177, 217, 0.24) 100%);
+  background: linear-gradient(135deg, rgba(18, 59, 87, 0.98) 0%, rgba(15, 66, 88, 0.96) 50%, rgba(154, 190, 201, 0.26) 100%);
   min-width: 0;
 }
 
@@ -249,23 +249,28 @@
 }
 
 .data-preview-fullscreen .fullscreen-panel {
-  width: min(96vw, 1680px);
-  height: min(92vh, 980px);
+  width: min(98vw, 1760px);
+  height: min(94vh, 1040px);
   border-radius: 26px;
   border: 1px solid rgba(15,66,88,0.1);
-  box-shadow: 0 28px 70px rgba(13,30,60,0.25);
+  box-shadow: 0 36px 90px rgba(13,30,60,0.3);
   overflow: hidden;
 }
 
 .data-preview-fullscreen .fullscreen-header {
   padding: 18px 22px;
-  background: linear-gradient(135deg, rgba(18, 59, 87, 0.98) 0%, rgba(15, 66, 88, 0.94) 58%, rgba(72, 177, 217, 0.2) 100%);
+  background: linear-gradient(135deg, rgba(18, 59, 87, 0.98) 0%, rgba(15, 66, 88, 0.94) 58%, rgba(154, 190, 201, 0.22) 100%);
   color: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .data-preview-fullscreen .fullscreen-body {
   padding: 20px;
   background: linear-gradient(180deg, #f3f8fb 0%, #f8fbfd 100%);
+  height: calc(100% - 78px);
+  overflow: auto;
 }
 
 .data-preview-fullscreen .preview-table-container {

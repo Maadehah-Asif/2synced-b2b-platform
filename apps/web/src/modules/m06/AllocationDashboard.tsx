@@ -3,6 +3,9 @@ import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
 import { InsightHero, InsightKpiCard, InsightKpiGrid, InsightMiniStat, InsightNoteCard, InsightPanel } from '../../components/InsightChrome'
 import { insightTokens } from '../../components/insightChromeTokens'
+import BarChart from './BarChart'
+import PieChart from './PieChart'
+import Pagination from './components/Pagination'
 import '../m06/module6.css'
 import { useWorkspaceId } from '../../utils/workspace'
 
@@ -66,33 +69,14 @@ type RunsApiResponse = {
   runs?: RunApiRecord[]
 }
 
-function Pagination({ page, total, limit, onPage }: { page: number; total: number; limit: number; onPage: (n: number) => void }) {
-  if (!total || total <= limit) return null
-  const totalPages = Math.max(1, Math.ceil(total / Math.max(1, limit)))
-  const windowSize = 5
-  let start = Math.max(1, page - Math.floor(windowSize / 2))
-  if (start + windowSize - 1 > totalPages) start = Math.max(1, totalPages - windowSize + 1)
-  const pages: number[] = []
-  for (let i = 0; i < windowSize && start + i <= totalPages; i += 1) pages.push(start + i)
-
-  return (
-    <span className="pagination">
-      {start > 1 ? <button type="button" className="page-btn" onClick={() => onPage(1)}>1</button> : null}
-      {start > 2 ? <span className="mx-8 muted">...</span> : null}
-      {pages.map((item) => (
-        <button key={item} type="button" className={`page-btn ${item === page ? 'active' : ''}`} onClick={() => onPage(item)}>
-          {item}
-        </button>
-      ))}
-      {pages[pages.length - 1] < totalPages ? (
-        <>
-          <span className="mx-8 muted">...</span>
-          <button type="button" className="page-btn" onClick={() => onPage(totalPages)}>{totalPages}</button>
-        </>
-      ) : null}
-    </span>
-  )
-}
+const CHANNEL_OPTIONS = [
+  { value: '', label: 'All channels' },
+  { value: 'email', label: 'Email' },
+  { value: 'ads', label: 'Ads' },
+  { value: 'linkedin', label: 'LinkedIn' },
+  { value: 'webinar', label: 'Webinar' },
+  { value: 'other', label: 'Other' },
+]
 
 function formatCurrency(value?: number | null) {
   if (value === undefined || value === null || Number.isNaN(value)) return '—'
@@ -122,51 +106,49 @@ function mapError(err: unknown): string {
 }
 
 export default function AllocationDashboard() {
+  const projectId = useWorkspaceId({ redirectToWorkspaces: true })
   const [runs, setRuns] = useState<RunOption[]>([])
   const [runsLoading, setRunsLoading] = useState(false)
   const [runsError, setRunsError] = useState<string | null>(null)
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
 
   const [mode, setMode] = useState<Mode>('campaign')
+  const [draftRunId, setDraftRunId] = useState<string | null>(null)
+  const [draftChannel, setDraftChannel] = useState('')
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [channelFilter, setChannelFilter] = useState('')
-  const [minShare, setMinShare] = useState<number | ''>('')
-  const [leadSearch, setLeadSearch] = useState('')
-  const [closedFrom, setClosedFrom] = useState('')
-  const [closedTo, setClosedTo] = useState('')
-  const [minDealAmount, setMinDealAmount] = useState<number | ''>('')
-  const [maxDealAmount, setMaxDealAmount] = useState<number | ''>('')
+
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([])
   const [deals, setDeals] = useState<DealSummary[]>([])
   const [loadingMain, setLoadingMain] = useState(false)
   const [mainError, setMainError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(25)
+  const [limit, setLimit] = useState(10)
   const [total, setTotal] = useState(0)
-  const [statusFilter, setStatusFilter] = useState<'all' | 'closed_won' | 'open'>('all')
 
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
   const [campaignAllocations, setCampaignAllocations] = useState<CampaignAllocationRow[]>([])
   const [campaignAllocLoading, setCampaignAllocLoading] = useState(false)
   const [campaignAllocError, setCampaignAllocError] = useState<string | null>(null)
+  const [campaignAllocPage, setCampaignAllocPage] = useState(1)
+  const drillPageSize = 8
 
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null)
   const [dealAllocations, setDealAllocations] = useState<DealAllocationRow[]>([])
   const [dealAllocLoading, setDealAllocLoading] = useState(false)
   const [dealAllocError, setDealAllocError] = useState<string | null>(null)
-
-  const hasRuns = runs.length > 0
-  const projectId = useWorkspaceId({ redirectToWorkspaces: true })
+  const [dealAllocPage, setDealAllocPage] = useState(1)
 
   useEffect(() => {
     if (!projectId) return
+
     async function fetchRuns() {
       setRunsLoading(true)
       setRunsError(null)
       try {
-        const pid = projectId as string
-        const res = await fetch(`${API_URL}/m06/runs?projectId=${encodeURIComponent(pid)}`)
+        const res = await fetch(`${API_URL}/m06/runs?projectId=${encodeURIComponent(projectId || '')}`)
         const data = await res.json() as RunsApiResponse
         if (!res.ok) throw data as ApiErrorShape
+
         const options: RunOption[] = (data.runs || [])
           .filter((item: RunApiRecord) => item.status === 'success')
           .map((item: RunApiRecord) => ({
@@ -175,15 +157,20 @@ export default function AllocationDashboard() {
             model_type: item.model_type,
             status: item.status,
           }))
+
         setRuns(options)
-        if (!selectedRunId && options.length) setSelectedRunId(options[0].id)
+        if (!selectedRunId && options.length) {
+          setSelectedRunId(options[0].id)
+          setDraftRunId(options[0].id)
+        }
       } catch (err) {
         setRunsError(mapError(err))
       } finally {
         setRunsLoading(false)
       }
     }
-    fetchRuns()
+
+    void fetchRuns()
   }, [projectId, selectedRunId])
 
   useEffect(() => {
@@ -191,18 +178,8 @@ export default function AllocationDashboard() {
     setLoadingMain(true)
     setMainError(null)
 
-    const runId = selectedRunId
-    const params = new URLSearchParams({ projectId, runId, page: String(page), limit: String(limit) })
+    const params = new URLSearchParams({ projectId, runId: selectedRunId, page: String(page), limit: String(limit) })
     if (channelFilter) params.set('channel', channelFilter)
-    if (leadSearch.trim()) params.set('lead', leadSearch.trim())
-    if (closedFrom) params.set('closedFrom', closedFrom)
-    if (closedTo) params.set('closedTo', closedTo)
-    if (statusFilter) params.set('status', statusFilter)
-    if (minShare !== '' && !Number.isNaN(minShare)) params.set('minShare', String(minShare))
-    if (mode === 'deal') {
-      if (minDealAmount !== '' && !Number.isNaN(minDealAmount)) params.set('minDealAmount', String(minDealAmount))
-      if (maxDealAmount !== '' && !Number.isNaN(maxDealAmount)) params.set('maxDealAmount', String(maxDealAmount))
-    }
 
     const controller = new AbortController()
 
@@ -233,9 +210,9 @@ export default function AllocationDashboard() {
       }
     }
 
-    fetchData()
+    void fetchData()
     return () => controller.abort()
-  }, [projectId, selectedRunId, mode, channelFilter, leadSearch, closedFrom, closedTo, minShare, minDealAmount, maxDealAmount, statusFilter, page, limit])
+  }, [projectId, selectedRunId, channelFilter, mode, page, limit])
 
   useEffect(() => {
     if (!projectId || !selectedRunId || !selectedCampaignId || mode !== 'campaign') {
@@ -243,8 +220,10 @@ export default function AllocationDashboard() {
       setCampaignAllocError(null)
       return
     }
+
     const params = new URLSearchParams({ projectId, runId: selectedRunId, campaignId: selectedCampaignId })
     const controller = new AbortController()
+
     async function load() {
       setCampaignAllocLoading(true)
       setCampaignAllocError(null)
@@ -253,6 +232,7 @@ export default function AllocationDashboard() {
         const data = await res.json()
         if (!res.ok) throw data as ApiErrorShape
         setCampaignAllocations(data.allocations || [])
+        setCampaignAllocPage(1)
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === 'AbortError') return
         setCampaignAllocError(mapError(err))
@@ -261,7 +241,8 @@ export default function AllocationDashboard() {
         setCampaignAllocLoading(false)
       }
     }
-    load()
+
+    void load()
     return () => controller.abort()
   }, [projectId, selectedRunId, selectedCampaignId, mode])
 
@@ -271,8 +252,10 @@ export default function AllocationDashboard() {
       setDealAllocError(null)
       return
     }
+
     const params = new URLSearchParams({ projectId, runId: selectedRunId, dealId: selectedDealId })
     const controller = new AbortController()
+
     async function load() {
       setDealAllocLoading(true)
       setDealAllocError(null)
@@ -281,6 +264,7 @@ export default function AllocationDashboard() {
         const data = await res.json()
         if (!res.ok) throw data as ApiErrorShape
         setDealAllocations(data.allocations || [])
+        setDealAllocPage(1)
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === 'AbortError') return
         setDealAllocError(mapError(err))
@@ -289,20 +273,62 @@ export default function AllocationDashboard() {
         setDealAllocLoading(false)
       }
     }
-    load()
+
+    void load()
     return () => controller.abort()
   }, [projectId, selectedRunId, selectedDealId, mode])
 
+  function applyFilters() {
+    setSelectedRunId(draftRunId)
+    setChannelFilter(draftChannel)
+    setPage(1)
+    setSelectedCampaignId(null)
+    setSelectedDealId(null)
+  }
+
+  const hasRuns = runs.length > 0
   const runLabel = useMemo(() => runs.find((run) => run.id === selectedRunId)?.label || 'Select run', [runs, selectedRunId])
   const showEmptyState = !loadingMain && !mainError && selectedRunId && ((mode === 'campaign' && campaigns.length === 0) || (mode === 'deal' && deals.length === 0))
+
   const visibleCampaignRevenue = campaigns.reduce((sum, item) => sum + item.total_revenue, 0)
   const visibleDealValue = deals.reduce((sum, item) => sum + item.amount, 0)
   const visibleAttributed = deals.reduce((sum, item) => sum + item.total_attributed, 0)
   const avgSharePerCampaign = campaigns.length ? visibleCampaignRevenue / campaigns.length : 0
 
-  const interpretation = mode === 'campaign'
-    ? 'Use campaign view to understand where revenue concentration is clustering. Strong skew usually means a few campaigns are carrying most of the credited outcome.'
-    : 'Deal view is better for checking whether revenue is being over-concentrated into a small number of campaigns or remaining partially unattributed.'
+  const campaignChart = useMemo(
+    () =>
+      campaigns.slice(0, 6).map((item) => ({
+        label: (item.name || item.campaign_id).slice(0, 14),
+        value: item.total_revenue,
+      })),
+    [campaigns]
+  )
+
+  const allocationPie = useMemo(() => {
+    if (mode === 'campaign') {
+      const totals = new Map<string, number>()
+      for (const item of campaigns) {
+        const key = item.channel || 'other'
+        totals.set(key, (totals.get(key) || 0) + item.total_revenue)
+      }
+      return Array.from(totals.entries()).map(([label, value]) => ({ label, value }))
+    }
+
+    return [
+      { label: 'Attributed', value: visibleAttributed },
+      { label: 'Unattributed', value: Math.max(0, visibleDealValue - visibleAttributed) },
+    ]
+  }, [campaigns, mode, visibleAttributed, visibleDealValue])
+
+  const paginatedCampaignAllocations = useMemo(() => {
+    const start = (campaignAllocPage - 1) * drillPageSize
+    return campaignAllocations.slice(start, start + drillPageSize)
+  }, [campaignAllocPage, campaignAllocations])
+
+  const paginatedDealAllocations = useMemo(() => {
+    const start = (dealAllocPage - 1) * drillPageSize
+    return dealAllocations.slice(start, start + drillPageSize)
+  }, [dealAllocPage, dealAllocations])
 
   return (
     <Layout>
@@ -326,7 +352,11 @@ export default function AllocationDashboard() {
 
         <section style={{ ...insightTokens.twoCol, marginTop: 18 }}>
           <div style={{ display: 'grid', gap: 18 }}>
-            <InsightPanel eyebrow="Setup" title="Run scope and filters">
+            <InsightPanel
+              eyebrow="Setup"
+              title="Run scope and filters"
+              rightMeta={<button type="button" className="btn-primary" onClick={applyFilters} disabled={!draftRunId}>Apply Filters</button>}
+            >
               {!projectId ? <div style={{ color: '#b91c1c', fontSize: 13 }}>Open a workspace to explore allocations.</div> : null}
               {runsLoading ? <div style={insightTokens.mutedText}>Loading attribution runs...</div> : null}
               {runsError ? <div style={{ color: '#b91c1c', fontSize: 13 }}>{runsError}</div> : null}
@@ -354,61 +384,28 @@ export default function AllocationDashboard() {
                   <div className="m06-filter-grid">
                     <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <span>Select attribution run</span>
-                      <select className="input" value={selectedRunId || ''} onChange={(e) => setSelectedRunId(e.target.value || null)}>
+                      <select className="input" value={draftRunId || ''} onChange={(e) => setDraftRunId(e.target.value || null)}>
                         <option value="">Select run...</option>
                         {runs.map((run) => <option key={run.id} value={run.id}>{run.label}</option>)}
                       </select>
                     </label>
+
                     <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <span>Channel</span>
-                      <input className="input" value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)} placeholder="Any" />
-                    </label>
-                    <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <span>Lead search</span>
-                      <input className="input" value={leadSearch} onChange={(e) => setLeadSearch(e.target.value)} placeholder="Name, company, email" />
-                    </label>
-                    <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <span>Closed from</span>
-                      <input className="input" type="date" value={closedFrom} onChange={(e) => setClosedFrom(e.target.value)} />
-                    </label>
-                    <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <span>Closed to</span>
-                      <input className="input" type="date" value={closedTo} onChange={(e) => setClosedTo(e.target.value)} />
-                    </label>
-                    <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <span>Deal status</span>
-                      <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'all' | 'closed_won' | 'open')}>
-                        <option value="all">Any</option>
-                        <option value="closed_won">Closed won</option>
-                        <option value="open">Open / not won</option>
+                      <select className="input" value={draftChannel} onChange={(e) => setDraftChannel(e.target.value)}>
+                        {CHANNEL_OPTIONS.map((option) => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}
                       </select>
                     </label>
-                    <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <span>Min revenue share</span>
-                      <input className="input" type="number" min={0} value={minShare === '' ? '' : minShare} onChange={(e) => setMinShare(e.target.value ? Number(e.target.value) : '')} />
-                    </label>
-                    {mode === 'deal' ? (
-                      <>
-                        <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <span>Min deal amount</span>
-                          <input className="input" type="number" min={0} value={minDealAmount === '' ? '' : minDealAmount} onChange={(e) => setMinDealAmount(e.target.value ? Number(e.target.value) : '')} />
-                        </label>
-                        <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <span>Max deal amount</span>
-                          <input className="input" type="number" min={0} value={maxDealAmount === '' ? '' : maxDealAmount} onChange={(e) => setMaxDealAmount(e.target.value ? Number(e.target.value) : '')} />
-                        </label>
-                      </>
-                    ) : null}
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button type="button" className={`btn-ghost btn-sm ${mode === 'campaign' ? 'active' : ''}`} onClick={() => setMode('campaign')}>View by Campaign</button>
-                      <button type="button" className={`btn-ghost btn-sm ${mode === 'deal' ? 'active' : ''}`} onClick={() => setMode('deal')}>View by Deal</button>
+                      <button type="button" className={`btn-ghost btn-sm ${mode === 'campaign' ? 'active' : ''}`} onClick={() => { setMode('campaign'); setSelectedDealId(null) }}>View by Campaign</button>
+                      <button type="button" className={`btn-ghost btn-sm ${mode === 'deal' ? 'active' : ''}`} onClick={() => { setMode('deal'); setSelectedCampaignId(null) }}>View by Deal</button>
                     </div>
                     <label className="label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span>Rows per page</span>
-                      <select className="input" style={{ width: 84 }} value={limit} onChange={(e) => { setPage(1); setLimit(Number(e.target.value) || 25) }}>
+                      <select className="input" style={{ width: 84 }} value={limit} onChange={(e) => { setPage(1); setLimit(Number(e.target.value) || 10) }}>
                         <option value={10}>10</option>
                         <option value={25}>25</option>
                         <option value={50}>50</option>
@@ -462,32 +459,40 @@ export default function AllocationDashboard() {
                         {campaignAllocLoading ? <div style={insightTokens.mutedText}>Loading campaign drill-down...</div> : null}
                         {campaignAllocError ? <div style={{ color: '#b91c1c', fontSize: 13 }}>{campaignAllocError}</div> : null}
                         {!campaignAllocLoading && !campaignAllocError && campaignAllocations.length ? (
-                          <div style={insightTokens.tableWrap}>
-                            <table style={insightTokens.table}>
-                              <thead>
-                                <tr>
-                                  <th style={insightTokens.th}>Deal</th>
-                                  <th style={insightTokens.th}>Lead</th>
-                                  <th style={insightTokens.th}>Deal amount</th>
-                                  <th style={insightTokens.th}>Revenue share</th>
-                                  <th style={insightTokens.th}>% of deal</th>
-                                  <th style={insightTokens.th}>Closed at</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {campaignAllocations.map((row) => (
-                                  <tr key={row.deal_id} style={insightTokens.row}>
-                                    <td style={insightTokens.tdStrong}>{row.deal_id}</td>
-                                    <td style={insightTokens.td}>{row.lead_name || row.lead_email || '—'}</td>
-                                    <td style={insightTokens.td}>{formatCurrency(row.deal_amount)}</td>
-                                    <td style={insightTokens.td}>{formatCurrency(row.revenue_share)}</td>
-                                    <td style={insightTokens.td}>{row.deal_amount ? `${((row.revenue_share / row.deal_amount) * 100).toFixed(1)}%` : '—'}</td>
-                                    <td style={insightTokens.td}>{formatDate(row.closed_at)}</td>
+                          <>
+                            <div style={insightTokens.tableWrap}>
+                              <table style={insightTokens.table}>
+                                <thead>
+                                  <tr>
+                                    <th style={insightTokens.th}>Deal</th>
+                                    <th style={insightTokens.th}>Lead</th>
+                                    <th style={insightTokens.th}>Deal amount</th>
+                                    <th style={insightTokens.th}>Revenue share</th>
+                                    <th style={insightTokens.th}>% of deal</th>
+                                    <th style={insightTokens.th}>Closed at</th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
+                                </thead>
+                                <tbody>
+                                  {paginatedCampaignAllocations.map((row) => (
+                                    <tr key={`${row.deal_id}-${row.closed_at || 'row'}`} style={insightTokens.row}>
+                                      <td style={insightTokens.tdStrong}>{row.deal_id}</td>
+                                      <td style={insightTokens.td}>{row.lead_name || row.lead_email || '—'}</td>
+                                      <td style={insightTokens.td}>{formatCurrency(row.deal_amount)}</td>
+                                      <td style={insightTokens.td}>{formatCurrency(row.revenue_share)}</td>
+                                      <td style={insightTokens.td}>{row.deal_amount ? `${((row.revenue_share / row.deal_amount) * 100).toFixed(1)}%` : '—'}</td>
+                                      <td style={insightTokens.td}>{formatDate(row.closed_at)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <button type="button" className="btn-ghost btn-sm" disabled={campaignAllocPage <= 1} onClick={() => setCampaignAllocPage((value) => Math.max(1, value - 1))}>Prev</button>
+                              <Pagination page={campaignAllocPage} total={campaignAllocations.length} limit={drillPageSize} onPage={setCampaignAllocPage} />
+                              <button type="button" className="btn-ghost btn-sm" disabled={campaignAllocPage * drillPageSize >= campaignAllocations.length} onClick={() => setCampaignAllocPage((value) => value + 1)}>Next</button>
+                            </div>
+                          </>
                         ) : null}
                       </div>
                     ) : null}
@@ -535,31 +540,39 @@ export default function AllocationDashboard() {
                         {dealAllocLoading ? <div style={insightTokens.mutedText}>Loading deal drill-down...</div> : null}
                         {dealAllocError ? <div style={{ color: '#b91c1c', fontSize: 13 }}>{dealAllocError}</div> : null}
                         {!dealAllocLoading && !dealAllocError && dealAllocations.length ? (
-                          <div style={insightTokens.tableWrap}>
-                            <table style={insightTokens.table}>
-                              <thead>
-                                <tr>
-                                  <th style={insightTokens.th}>Campaign</th>
-                                  <th style={insightTokens.th}>Channel</th>
-                                  <th style={insightTokens.th}>Revenue share</th>
-                                  <th style={insightTokens.th}>% of deal</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {dealAllocations.map((row) => {
-                                  const base = deals.find((deal) => deal.deal_id === selectedDealId)?.amount
-                                  return (
-                                    <tr key={row.campaign_id} style={insightTokens.row}>
-                                      <td style={insightTokens.tdStrong}>{row.campaign_name || row.campaign_id}</td>
-                                      <td style={insightTokens.td}>{row.channel || 'other'}</td>
-                                      <td style={insightTokens.td}>{formatCurrency(row.revenue_share)}</td>
-                                      <td style={insightTokens.td}>{base ? `${((row.revenue_share / base) * 100).toFixed(1)}%` : '—'}</td>
-                                    </tr>
-                                  )
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
+                          <>
+                            <div style={insightTokens.tableWrap}>
+                              <table style={insightTokens.table}>
+                                <thead>
+                                  <tr>
+                                    <th style={insightTokens.th}>Campaign</th>
+                                    <th style={insightTokens.th}>Channel</th>
+                                    <th style={insightTokens.th}>Revenue share</th>
+                                    <th style={insightTokens.th}>% of deal</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {paginatedDealAllocations.map((row) => {
+                                    const base = deals.find((deal) => deal.deal_id === selectedDealId)?.amount
+                                    return (
+                                      <tr key={`${row.campaign_id}-${row.revenue_share}`} style={insightTokens.row}>
+                                        <td style={insightTokens.tdStrong}>{row.campaign_name || row.campaign_id}</td>
+                                        <td style={insightTokens.td}>{row.channel || 'other'}</td>
+                                        <td style={insightTokens.td}>{formatCurrency(row.revenue_share)}</td>
+                                        <td style={insightTokens.td}>{base ? `${((row.revenue_share / base) * 100).toFixed(1)}%` : '—'}</td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <button type="button" className="btn-ghost btn-sm" disabled={dealAllocPage <= 1} onClick={() => setDealAllocPage((value) => Math.max(1, value - 1))}>Prev</button>
+                              <Pagination page={dealAllocPage} total={dealAllocations.length} limit={drillPageSize} onPage={setDealAllocPage} />
+                              <button type="button" className="btn-ghost btn-sm" disabled={dealAllocPage * drillPageSize >= dealAllocations.length} onClick={() => setDealAllocPage((value) => value + 1)}>Next</button>
+                            </div>
+                          </>
                         ) : null}
                       </div>
                     ) : null}
@@ -581,10 +594,22 @@ export default function AllocationDashboard() {
           </div>
 
           <div style={{ display: 'grid', gap: 18 }}>
+            <InsightPanel eyebrow="Visible mix" title={mode === 'campaign' ? 'Revenue concentration by campaign' : 'Attributed versus unattributed value'} soft>
+              {mode === 'campaign' ? (
+                <BarChart data={campaignChart} height={220} valueFormatter={(value) => formatCurrency(value)} />
+              ) : (
+                <PieChart data={allocationPie} size={170} />
+              )}
+            </InsightPanel>
+
+            <InsightPanel eyebrow="Channel split" title="Current allocation mix" soft>
+              <PieChart data={allocationPie} size={170} />
+            </InsightPanel>
+
             <InsightPanel eyebrow="Operating readout" title="How to use this allocation view" soft>
               <div style={{ display: 'grid', gap: 12 }}>
-                <InsightNoteCard title="Read concentration first" body={interpretation} />
-                <InsightNoteCard title="Switch views deliberately" body="Campaign view is stronger for budget discussions. Deal view is stronger for diagnosing attribution completeness and credit distribution fairness." />
+                <InsightNoteCard title="Read concentration first" body={mode === 'campaign' ? 'Campaign view shows where attributed revenue is clustering. Strong skew usually means a small number of campaigns are carrying most of the credited outcome.' : 'Deal view shows how much value is being credited versus left unattributed at row level, which is the better way to inspect attribution completeness.'} />
+                <InsightNoteCard title="Switch views deliberately" body="Campaign view is stronger for budget conversations. Deal view is stronger when checking whether credit is reasonably distributed across the underlying revenue rows." />
                 <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
                   <InsightMiniStat label="Selected run" value={selectedRunId ? runLabel : '—'} />
                   <InsightMiniStat label="Avg revenue / campaign" value={formatCurrency(avgSharePerCampaign)} />

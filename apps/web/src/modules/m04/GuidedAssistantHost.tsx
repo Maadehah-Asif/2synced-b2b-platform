@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { getAssistantConfigFromHash, getAssistantPageTitle } from "./assistantConfig";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
@@ -25,6 +25,7 @@ type ConversationPayload = {
   userId: string;
   pageKey: string;
   hasPendingAdminReply: boolean;
+  needsAdminForward: boolean;
   messages: AssistantMessage[];
 };
 
@@ -85,6 +86,7 @@ export default function GuidedAssistantHost() {
   const [draft, setDraft] = useState("");
   const [replyDraft, setReplyDraft] = useState("");
   const [replyConversationId, setReplyConversationId] = useState<string | null>(null);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
 
   const page = useMemo(() => getAssistantConfigFromHash(hash), [hash]);
 
@@ -103,9 +105,14 @@ export default function GuidedAssistantHost() {
     setReplyConversationId(null);
   }, [page?.workspaceId, page?.pageKey]);
 
-  async function loadAssistant() {
+  useEffect(() => {
     if (!page) return;
-    setLoading(true);
+    void loadAssistant();
+  }, [page?.workspaceId, page?.pageKey]);
+
+  async function loadAssistant(showLoading = true) {
+    if (!page) return;
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const query = new URLSearchParams({
@@ -118,7 +125,7 @@ export default function GuidedAssistantHost() {
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Failed to load assistant");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }
 
@@ -142,6 +149,48 @@ export default function GuidedAssistantHost() {
       }
     })();
   }, [open, page, replyConversationId]);
+
+  useEffect(() => {
+    if (!page || !bootstrap?.isAdmin) return;
+    const interval = window.setInterval(() => {
+      void loadAssistant(false);
+    }, 10000);
+    const onFocus = () => void loadAssistant(false);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [page?.workspaceId, page?.pageKey, bootstrap?.isAdmin]);
+
+  const messages = useMemo(() => bootstrap?.conversation.messages || [], [bootstrap]);
+  const faqLookup = useMemo(() => new Map((bootstrap?.page.faqs || []).map((faq) => [faq.id, faq])), [bootstrap]);
+  const lastFaqId = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index]?.faqId) return messages[index].faqId || null;
+    }
+    return null;
+  }, [messages]);
+  const currentFaqIds = useMemo(() => {
+    const selected = lastFaqId ? faqLookup.get(lastFaqId) : null;
+    if (selected?.followUpIds?.length) return selected.followUpIds;
+    return bootstrap?.page.rootFaqIds || [];
+  }, [bootstrap, faqLookup, lastFaqId]);
+  const visibleFaqs = useMemo(
+    () => currentFaqIds.map((id) => faqLookup.get(id)).filter(Boolean) as AssistantFaq[],
+    [currentFaqIds, faqLookup],
+  );
+  const showingFollowUps = currentFaqIds.length > 0 && JSON.stringify(currentFaqIds) !== JSON.stringify(bootstrap?.page.rootFaqIds || []);
+  const adminInboxCount = bootstrap?.adminInbox.length || 0;
+
+  useEffect(() => {
+    if (!open) return;
+    const container = messagesRef.current;
+    if (!container) return;
+    window.requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight;
+    });
+  }, [open, messages.length, bootstrap?.conversation.needsAdminForward, bootstrap?.conversation.hasPendingAdminReply, replyConversationId]);
 
   async function sendFaq(faqId: string) {
     if (!page) return;
@@ -209,24 +258,71 @@ export default function GuidedAssistantHost() {
     }
   }
 
-  const messages = useMemo(() => bootstrap?.conversation.messages || [], [bootstrap]);
-  const faqLookup = useMemo(() => new Map((bootstrap?.page.faqs || []).map((faq) => [faq.id, faq])), [bootstrap]);
-  const lastFaqId = useMemo(() => {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      if (messages[index]?.faqId) return messages[index].faqId || null;
+  async function forwardToAdmin() {
+    if (!page || !bootstrap?.conversation.id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiFetch<{ conversation: ConversationPayload }>("/m04/assistant/forward", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: page.workspaceId,
+          conversationId: bootstrap.conversation.id,
+        }),
+      });
+      setBootstrap((prev) => prev ? { ...prev, conversation: data.conversation } : prev);
+      await loadAssistant();
+    } catch (forwardError) {
+      setError(forwardError instanceof Error ? forwardError.message : "Failed to forward question to admin");
+    } finally {
+      setLoading(false);
     }
-    return null;
-  }, [messages]);
-  const currentFaqIds = useMemo(() => {
-    const selected = lastFaqId ? faqLookup.get(lastFaqId) : null;
-    if (selected?.followUpIds?.length) return selected.followUpIds;
-    return bootstrap?.page.rootFaqIds || [];
-  }, [bootstrap, faqLookup, lastFaqId]);
-  const visibleFaqs = useMemo(
-    () => currentFaqIds.map((id) => faqLookup.get(id)).filter(Boolean) as AssistantFaq[],
-    [currentFaqIds, faqLookup],
-  );
-  const showingFollowUps = currentFaqIds.length > 0 && JSON.stringify(currentFaqIds) !== JSON.stringify(bootstrap?.page.rootFaqIds || []);
+  }
+
+  async function dismissForwardPrompt() {
+    if (!page || !bootstrap?.conversation.id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiFetch<{ conversation: ConversationPayload }>("/m04/assistant/dismiss-forward", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: page.workspaceId,
+          conversationId: bootstrap.conversation.id,
+        }),
+      });
+      setBootstrap((prev) => prev ? { ...prev, conversation: data.conversation } : prev);
+    } catch (dismissError) {
+      setError(dismissError instanceof Error ? dismissError.message : "Failed to dismiss admin forward");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function clearChat() {
+    if (!page) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiFetch<{ conversation: ConversationPayload }>("/m04/assistant/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: page.workspaceId,
+          pageKey: page.pageKey,
+        }),
+      });
+      setBootstrap((prev) => prev ? { ...prev, conversation: data.conversation } : prev);
+      setDraft("");
+      setReplyDraft("");
+    } catch (clearError) {
+      setError(clearError instanceof Error ? clearError.message : "Failed to clear chat");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   if (!page) return null;
 
@@ -241,11 +337,12 @@ export default function GuidedAssistantHost() {
             right: 20,
             bottom: 20,
             zIndex: 2100,
-            width: 58,
-            height: 58,
-            borderRadius: 18,
+            width: 68,
+            height: 68,
+            borderRadius: 20,
             border: "none",
             cursor: "pointer",
+            overflow: "visible",
             background: "linear-gradient(135deg, rgba(15,66,88,1) 0%, rgba(72,177,217,0.94) 100%)",
             color: "#fff",
             boxShadow: "0 18px 34px rgba(15,66,88,0.26)",
@@ -253,6 +350,28 @@ export default function GuidedAssistantHost() {
           aria-label="Open guided assistant"
         >
           <ChatGlyph />
+          {bootstrap?.isAdmin && adminInboxCount > 0 && (
+            <span
+              style={{
+                position: "absolute",
+                top: -4,
+                right: -4,
+                minWidth: 20,
+                height: 20,
+                borderRadius: 999,
+                background: "#BE123C",
+                color: "#fff",
+                fontSize: 11,
+                fontWeight: 800,
+                display: "grid",
+                placeItems: "center",
+                padding: "0 6px",
+                border: "2px solid #fff",
+              }}
+            >
+              {adminInboxCount}
+            </span>
+          )}
         </button>
       )}
 
@@ -281,11 +400,35 @@ export default function GuidedAssistantHost() {
               <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "#0f4258" }}>
                 Guided Assistant
               </div>
-              <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900, color: "#0B2540" }}>
+              <div style={{ marginTop: 6, fontSize: 26, fontWeight: 900, color: "#0B2540" }}>
                 {bootstrap?.page.title || page.title}
               </div>
             </div>
-            <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>Close</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {bootstrap?.isAdmin && adminInboxCount > 0 && (
+                <div
+                  style={{
+                    borderRadius: 999,
+                    padding: "6px 10px",
+                    background: "rgba(190,24,93,0.10)",
+                    color: "#9D174D",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {adminInboxCount} pending
+                </div>
+              )}
+              <button type="button" onClick={() => void sendFaq("conversation-restart")} style={toolbarButtonStyle}>
+                Start over
+              </button>
+              <button type="button" onClick={() => void clearChat()} style={toolbarButtonStyle}>
+                Clear chat
+              </button>
+              <button type="button" onClick={() => setOpen(false)} style={toolbarButtonStyle}>Close</button>
+            </div>
           </div>
           <div style={{ marginTop: 10, fontSize: 13, color: "#415274", lineHeight: 1.6 }}>
             {bootstrap?.page.intro || "Choose a guided topic or type your own question below."}
@@ -300,9 +443,8 @@ export default function GuidedAssistantHost() {
             {showingFollowUps && (
               <button
                 type="button"
-                className="btn-ghost"
                 onClick={() => void sendFaq("conversation-restart")}
-                style={{ fontSize: 11, padding: "6px 10px" }}
+                style={{ ...miniButtonStyle, fontSize: 11 }}
               >
                 Start over
               </button>
@@ -315,13 +457,7 @@ export default function GuidedAssistantHost() {
                 type="button"
                 onClick={() => void sendFaq(faq.id)}
                 style={{
-                  borderRadius: 999,
-                  border: "1px solid rgba(15,66,88,0.12)",
-                  padding: "8px 12px",
-                  background: "#fff",
-                  color: "#0f4258",
-                  fontSize: 12,
-                  fontWeight: 700,
+                  ...topicButtonStyle,
                   cursor: "pointer",
                 }}
               >
@@ -331,12 +467,27 @@ export default function GuidedAssistantHost() {
           </div>
         </div>
 
-        <div style={{ overflowY: "auto", padding: "18px 18px 14px", display: "grid", gap: 12 }}>
+        <div ref={messagesRef} style={{ overflowY: "auto", padding: "18px 18px 14px", display: "grid", gap: 12 }}>
           {loading && messages.length === 0 && <div style={{ fontSize: 12, color: "#415274" }}>Loading assistant…</div>}
           {error && <div style={{ fontSize: 12, color: "#b42318" }}>{error}</div>}
           {messages.length === 0 && !loading && (
             <div style={{ fontSize: 12, color: "#667085", lineHeight: 1.7 }}>
               No messages yet. Pick a topic above to start the guided conversation, or type your own question below.
+            </div>
+          )}
+          {!!bootstrap?.conversation.hasPendingAdminReply && (
+            <div
+              style={{
+                borderRadius: 14,
+                padding: 12,
+                background: "rgba(245,158,11,0.10)",
+                border: "1px solid rgba(245,158,11,0.18)",
+                color: "#92400E",
+                fontSize: 12,
+                lineHeight: 1.7,
+              }}
+            >
+              Your question has been sent to an admin. Their reply will appear here when available.
             </div>
           )}
           {messages.map((message) => {
@@ -368,6 +519,42 @@ export default function GuidedAssistantHost() {
               </div>
             );
           })}
+          {!!bootstrap?.conversation.needsAdminForward && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-start",
+              }}
+            >
+              <div
+                style={{
+                  maxWidth: "86%",
+                  borderRadius: 18,
+                  border: "1px solid rgba(15,66,88,0.12)",
+                  background: "#ffffff",
+                  padding: 14,
+                  display: "grid",
+                  gap: 10,
+                  boxShadow: "0 8px 18px rgba(13,30,60,0.05)",
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 800, color: "#0B2540" }}>
+                  This question needs admin help
+                </div>
+                <div style={{ fontSize: 12, color: "#415274", lineHeight: 1.7 }}>
+                  I do not have a reliable guided answer for your last question. If you want, I can forward it to an admin and their reply will appear here in this conversation.
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
+                  <button type="button" onClick={() => void dismissForwardPrompt()} disabled={loading} style={secondaryActionButtonStyle}>
+                    Not now
+                  </button>
+                  <button type="button" onClick={() => void forwardToAdmin()} disabled={loading} style={primaryActionButtonStyle}>
+                    Send question to admin
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {bootstrap?.isAdmin && bootstrap.adminInbox.length > 0 && (
             <div style={{ marginTop: 8, paddingTop: 12, borderTop: "1px solid rgba(15,66,88,0.08)" }}>
@@ -397,7 +584,7 @@ export default function GuidedAssistantHost() {
                             placeholder="Reply as admin"
                             style={{ width: "100%", resize: "vertical" }}
                           />
-                          <button type="button" className="btn-primary" onClick={() => void sendAdminReply()}>
+                          <button type="button" onClick={() => void sendAdminReply()} style={primaryActionButtonStyle}>
                             Send reply
                           </button>
                         </div>
@@ -421,9 +608,9 @@ export default function GuidedAssistantHost() {
           />
           <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
             <div style={{ fontSize: 11, color: "#667085" }}>
-              Clear questions may be answered automatically. Unclear ones can still be sent for admin follow-up.
+              Clear questions may be answered automatically. If not, you can choose to forward the question to an admin.
             </div>
-            <button type="button" className="btn-primary" onClick={() => void submitQuestion()} disabled={!draft.trim() || loading}>
+            <button type="button" onClick={() => void submitQuestion()} disabled={!draft.trim() || loading} style={sendButtonStyle(!draft.trim() || loading)}>
               Send
             </button>
           </div>
@@ -435,10 +622,81 @@ export default function GuidedAssistantHost() {
 
 function ChatGlyph() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M6 8.5C6 6.57 7.57 5 9.5 5H14.5C16.43 5 18 6.57 18 8.5V12.5C18 14.43 16.43 16 14.5 16H11.8L8.2 19V16H9.5C7.57 16 6 14.43 6 12.5V8.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
       <path d="M9 9.75H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <path d="M9 12.25H13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
+}
+
+const toolbarButtonStyle: CSSProperties = {
+  borderRadius: 12,
+  border: "1px solid rgba(15,66,88,0.14)",
+  padding: "10px 14px",
+  background: "linear-gradient(180deg, #ffffff 0%, #eef5fb 100%)",
+  color: "#0B3C5D",
+  fontSize: 13,
+  fontWeight: 800,
+  cursor: "pointer",
+  boxShadow: "0 8px 18px rgba(13,30,60,0.06)",
+};
+
+const miniButtonStyle: CSSProperties = {
+  borderRadius: 999,
+  border: "1px solid rgba(15,66,88,0.14)",
+  padding: "7px 12px",
+  background: "#f7fbff",
+  color: "#0B3C5D",
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const topicButtonStyle: CSSProperties = {
+  borderRadius: 999,
+  border: "1px solid rgba(15,66,88,0.12)",
+  padding: "10px 14px",
+  background: "linear-gradient(180deg, #ffffff 0%, #f2f8fc 100%)",
+  color: "#0f4258",
+  fontSize: 12,
+  fontWeight: 800,
+  boxShadow: "0 8px 16px rgba(13,30,60,0.05)",
+};
+
+const secondaryActionButtonStyle: CSSProperties = {
+  borderRadius: 12,
+  border: "1px solid rgba(15,66,88,0.14)",
+  padding: "10px 14px",
+  background: "#ffffff",
+  color: "#0B3C5D",
+  fontSize: 12,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const primaryActionButtonStyle: CSSProperties = {
+  borderRadius: 12,
+  border: "1px solid rgba(10,59,92,0.12)",
+  padding: "10px 15px",
+  background: "linear-gradient(135deg, #0f4258 0%, #1e6c88 100%)",
+  color: "#ffffff",
+  fontSize: 12,
+  fontWeight: 800,
+  cursor: "pointer",
+  boxShadow: "0 12px 22px rgba(15,66,88,0.18)",
+};
+
+function sendButtonStyle(disabled: boolean): CSSProperties {
+  return {
+    borderRadius: 14,
+    border: "none",
+    minWidth: 92,
+    padding: "12px 18px",
+    background: disabled ? "linear-gradient(135deg, #a8bfcc 0%, #96aebb 100%)" : "linear-gradient(135deg, #0f4258 0%, #195d79 100%)",
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: 900,
+    cursor: disabled ? "not-allowed" : "pointer",
+    boxShadow: disabled ? "none" : "0 14px 24px rgba(15,66,88,0.20)",
+  };
 }

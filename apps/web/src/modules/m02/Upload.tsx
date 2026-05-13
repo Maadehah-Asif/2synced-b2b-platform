@@ -377,13 +377,13 @@ export default function UploadM02(){
 return (
   <Layout>
     <div className="p-20 m02-upload-page">
+      <div className="m02-upload-toprow">
+        <ModuleBackButton toSuffix="" />
+      </div>
       <div className="m02-upload-header">
         <div className="m02-upload-header-row">
           <div className="m02-upload-header-copy">
             <div className="m02-upload-kicker">Intent Input</div>
-            <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <ModuleBackButton toSuffix="" />
-            </div>
             <h2 style={{ margin: 0 }}>Module 02 Uploads</h2>
             <p className="m02-upload-subtitle">
               Add source intent and behavior CSV files, review active batches, and prepare shared records
@@ -571,7 +571,7 @@ return (
             <div><strong>Workspace:</strong> {detailsItem.workspace}</div>
             <div><strong>Created at:</strong> {new Date(detailsItem.createdAt).toLocaleString()}</div>
             <div className="mt-12">
-              <button type="button" onClick={() => setDetailsItem(null)}>Close</button>
+              <button type="button" className="btn-outline" onClick={() => setDetailsItem(null)}>Close</button>
             </div>
           </div>
         </div>
@@ -676,6 +676,8 @@ return (
 
                       <div style={{ marginTop: 10 }}>
                         <button
+                          type="button"
+                          className="btn-primary"
                           onClick={() => setStep(2)}
                           disabled={!matchingKeysCompatible()}
                         >
@@ -771,12 +773,13 @@ return (
                         </div>
 
                         <div style={{ display: "flex", gap: 8 }}>
-                          <button onClick={() => setStep(1)}>Back</button>
-                          <button onClick={submitMerge}>Merge and Save</button>
+                          <button type="button" className="btn-outline" onClick={() => setStep(1)}>Back</button>
+                          <button type="button" className="btn-primary" onClick={submitMerge}>Merge and Save</button>
 
                           {mergedResultId && (
                             <button
                               type="button"
+                              className="btn-ghost"
                               onClick={() => {
                                 if (workspace)
                                   window.location.hash = `#/workspace/${workspace}/m02/merged?open=${mergedResultId}`;

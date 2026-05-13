@@ -17,6 +17,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import fs from 'fs';
+import { getM01ForecastFilters, runM01Forecast } from './forecasting.js';
 
 // __dirname is not available in ESM; synthesize it from import.meta.url
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1374,5 +1375,40 @@ export async function generateLeadsCode(req: Request, res: Response) {
   } catch (e) {
     console.error('[m01.generateLeadsCode]', e);
     return res.status(500).json({ error: 'internal' });
+  }
+}
+
+export async function getForecastOptions(_req: Request, res: Response) {
+  try {
+    return res.json({ ok: true, ...getM01ForecastFilters() });
+  } catch (e) {
+    console.error('[m01.getForecastOptions]', e);
+    return res.status(500).json({ error: 'forecast_options_failed' });
+  }
+}
+
+export async function forecastLeadQuality(req: Request, res: Response) {
+  try {
+    const body = (req.body || {}) as Record<string, unknown>;
+    const source = typeof body.source === 'string' && body.source.trim() ? body.source.trim() : undefined;
+    const segment = typeof body.segment === 'string' && body.segment.trim() ? body.segment.trim() : undefined;
+    const industry = typeof body.industry === 'string' && body.industry.trim() ? body.industry.trim() : undefined;
+    const owner = typeof body.owner === 'string' && body.owner.trim() ? body.owner.trim() : undefined;
+    const horizonMonths = Number.isFinite(Number(body.horizonMonths)) ? Number(body.horizonMonths) : 3;
+    const request = {
+      ...(source ? { source } : {}),
+      ...(segment ? { segment } : {}),
+      ...(industry ? { industry } : {}),
+      ...(owner ? { owner } : {}),
+      horizonMonths,
+    };
+    return res.json(runM01Forecast(request));
+  } catch (e: any) {
+    console.error('[m01.forecastLeadQuality]', e);
+    const message = typeof e?.message === 'string' ? e.message : 'internal';
+    if (message.startsWith('missing_dataset:')) {
+      return res.status(400).json({ error: 'missing_dataset', path: message.replace('missing_dataset:', '') });
+    }
+    return res.status(500).json({ error: 'forecast_failed' });
   }
 }

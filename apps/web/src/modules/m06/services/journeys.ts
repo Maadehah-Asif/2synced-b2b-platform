@@ -2,12 +2,22 @@ import { getWorkspaceIdFromHash } from '../../../utils/workspace';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-export async function previewJourneys(params: any){
+type JourneyPreviewParams = {
+  from?: string
+  to?: string
+  status?: string
+  channel?: string
+  page?: number
+  limit?: number
+}
+
+export async function previewJourneys(params: JourneyPreviewParams){
   const workspaceId = getWorkspaceIdFromHash();
   const usp = new URLSearchParams();
   if(workspaceId) usp.set('projectId', workspaceId);
-  Object.keys(params||{}).forEach(k=>{
-    const v = (params as any)[k];
+  Object.keys(params || {}).forEach((k) => {
+    const key = k as keyof JourneyPreviewParams
+    const v = params[key]
     if(v!==undefined && v!==null && v!=='') usp.set(k, String(v));
   });
   const res = await fetch(`${API_BASE}/m06/preview?${usp.toString()}`);

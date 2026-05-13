@@ -17,8 +17,9 @@ export default function Signup(){
     e.preventDefault();
     setLoading(true); setError(null);
     try{
+      const normalizedEmail = email.trim();
       // empty-field validation
-      if (!email) {
+      if (!normalizedEmail) {
         setError('Email is required.');
         setLoading(false);
         return;
@@ -38,7 +39,11 @@ export default function Signup(){
         setError('Passwords do not match. Please re-enter them.');
         return;
       }
-      const res = await fetch(`${API_URL}/auth/signup`,{ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+      const res = await fetch(`${API_URL}/auth/signup`,{
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, password, confirmPassword }),
+      });
       const data = await res.json();
       if(!res.ok) throw new Error(data?.error || 'Signup failed');
       if(data?.token) localStorage.setItem('token', data.token);

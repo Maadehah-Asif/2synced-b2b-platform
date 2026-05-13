@@ -1,1 +1,1 @@
-export { default } from './Element3Page';
+export { default } from './Module6RoiDashboardPage';

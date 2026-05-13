@@ -7,6 +7,13 @@
   background: linear-gradient(180deg, #eef5fb 0%, #f7fbfe 24%, #fcfdff 100%);
 }
 
+.m01-upload-toprow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: -2px;
+}
+
 .m01-upload-header,
 .m01-upload-toolbar,
 .m01-upload-list-shell {
@@ -19,7 +26,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.7fr);
   overflow: hidden;
-  background: linear-gradient(135deg, rgba(18, 59, 87, 0.98) 0%, rgba(15, 66, 88, 0.96) 44%, rgba(72, 177, 217, 0.24) 100%);
+  background: linear-gradient(135deg, rgba(18, 59, 87, 0.98) 0%, rgba(15, 66, 88, 0.96) 50%, rgba(154, 190, 201, 0.24) 100%);
 }
 
 .m01-upload-header-row {

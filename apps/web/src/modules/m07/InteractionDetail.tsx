@@ -16,7 +16,8 @@ export default function InteractionDetail(){
     try{
       const res = await fetch(`${API_URL}/m07/interactions/${id}`);
       const j = await res.json();
-      setDoc(j);
+      if(res.ok && j?.ok && j?.item) setDoc(j.item);
+      else setMessage(j?.error || 'failed');
     }catch(e){ setMessage('network error'); }
   }
 
@@ -25,7 +26,8 @@ export default function InteractionDetail(){
     try{
       const res = await fetch(`${API_URL}/m07/interactions/${doc._id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(doc) });
       const j = await res.json();
-      if(j?.error) setMessage(j.error); else setMessage('Saved');
+      if(res.ok && j?.ok){ setDoc(j.item || doc); setMessage('Saved'); }
+      else setMessage(j?.error || 'save failed');
     }catch(e){ setMessage('network error'); }
   }
 
@@ -62,7 +64,7 @@ export default function InteractionDetail(){
             <input value={doc.lead_id || ''} onChange={e => setDoc((d:any)=>({ ...d, lead_id: e.target.value }))} />
 
             <label>Timestamp</label>
-            <input value={doc.timestamp ? new Date(doc.timestamp).toISOString().slice(0,19).replace('T',' ') : ''} onChange={e => setDoc((d:any)=>({ ...d, timestamp: e.target.value }))} />
+            <input type="datetime-local" value={doc.timestamp ? new Date(doc.timestamp).toISOString().slice(0,16) : ''} onChange={e => setDoc((d:any)=>({ ...d, timestamp: e.target.value }))} />
 
             <label>Interaction Type</label>
             <input value={doc.interaction_type || ''} onChange={e => setDoc((d:any)=>({ ...d, interaction_type: e.target.value }))} />

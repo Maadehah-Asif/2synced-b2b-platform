@@ -163,6 +163,7 @@ export default function RunAttributionScreen() {
   const [summary, setSummary] = useState<RunSummaryResponse | null>(null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [storedDefaultRunId, setStoredDefaultRunId] = useState<string | null>(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [openAllocDealId, setOpenAllocDealId] = useState<string | null>(null);
   const [message, setMessage] = useState<MessageState>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -184,7 +185,7 @@ export default function RunAttributionScreen() {
     [config.requiredChannels]
   );
 
-  const selectedCampaignIds = config.requiredCampaignIds || [];
+  const selectedCampaignIds = useMemo(() => config.requiredCampaignIds || [], [config.requiredCampaignIds]);
 
   const filteredCampaignOptions = useMemo(() => {
     if (!campaignSearch.trim()) return campaignOptions;
@@ -214,6 +215,8 @@ export default function RunAttributionScreen() {
     if (previewExclusions.noTouches) parts.push(`${previewExclusions.noTouches} without touches`);
     return parts.join(', ');
   }, [previewExclusions]);
+
+  const showLegacySummary = false;
 
   useEffect(() => {
     activeRunIdRef.current = activeRunId;
@@ -465,6 +468,7 @@ export default function RunAttributionScreen() {
         activeRunIdRef.current = newRunId;
         await fetchSummaryForRun(projectId, newRunId);
         await refreshRuns(projectId, { preferRunId: newRunId, silent: true, skipIfSummaryMatches: true });
+        setSummaryOpen(true);
       } else {
         await refreshRuns(projectId, { silent: true });
       }
@@ -484,6 +488,21 @@ export default function RunAttributionScreen() {
       setActiveRunId(runId);
       activeRunIdRef.current = runId;
       await fetchSummaryForRun(projectId, runId);
+    },
+    [fetchSummaryForRun, projectId]
+  );
+
+  const openSummaryForRun = useCallback(
+    async (runId: string) => {
+      if (!projectId) return;
+      setMessage(null);
+      setOpenAllocDealId(null);
+      if (runId !== activeRunIdRef.current) {
+        setActiveRunId(runId);
+        activeRunIdRef.current = runId;
+        await fetchSummaryForRun(projectId, runId);
+      }
+      setSummaryOpen(true);
     },
     [fetchSummaryForRun, projectId]
   );
@@ -526,6 +545,222 @@ export default function RunAttributionScreen() {
       </div>
     );
   };
+
+  const renderSummaryContent = (summaryData: RunSummaryResponse) => (
+    <>
+      <div className="summary-metrics">
+        <div className="summary-card">
+          <h5>Deals processed</h5>
+          <div className="value">{formatNumber(summaryData.run.deal_count)}</div>
+        </div>
+        <div className="summary-card">
+          <h5>With journeys</h5>
+          <div className="value">{formatNumber(summaryData.run.deals_with_journeys)}</div>
+        </div>
+        <div className="summary-card">
+          <h5>Without journeys</h5>
+          <div className="value">{formatNumber(summaryData.run.deals_without_journeys)}</div>
+        </div>
+        <div className="summary-card">
+          <h5>Total revenue</h5>
+          <div className="value">{formatCurrency(summaryData.run.total_revenue)}</div>
+        </div>
+        <div className="summary-card">
+          <h5>Attributed revenue</h5>
+          <div className="value">{formatCurrency(summaryData.run.attributed_revenue)}</div>
+        </div>
+        <div className="summary-card">
+          <h5>Unattributed revenue</h5>
+          <div className="value">{formatCurrency(summaryData.run.unattributed_revenue)}</div>
+        </div>
+        <div className="summary-card">
+          <h5>Campaigns credited</h5>
+          <div className="value">{formatNumber(summaryData.run.campaigns_with_credit)}</div>
+        </div>
+        <div className="summary-card">
+          <h5>Touches used</h5>
+          <div className="value">{formatNumber(summaryData.run.touches_used)}</div>
+        </div>
+      </div>
+
+      {(() => {
+        const filters = summaryData.run.filters;
+        if (!filters) return null;
+        const channels = filters.requiredChannels || [];
+        const campaigns = filters.requiredCampaignIds || [];
+        if (!channels.length && !campaigns.length) return null;
+        return (
+          <div className="summary-filter-row">
+            <strong>Filters applied:</strong>
+            {channels.length ? (
+              <div className="chip-group">
+                {channels.map(channel => (
+                  <span key={channel} className="chip active muted">{CHANNEL_LABEL_MAP[channel] || channel}</span>
+                ))}
+              </div>
+            ) : null}
+            {campaigns.length ? (
+              <div className="chip-group">
+                {campaigns.map(id => (
+                  <span key={id} className="chip active muted">{campaignNameLookup[id] || id}</span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        );
+      })()}
+
+      {summaryData.run.excluded_by_filters ? (
+        <div className="summary-filter-row subtle">
+          <span>Excluded by filters: </span>
+          <span className="preview-detail">
+            {(() => {
+              const excluded = summaryData.run.excluded_by_filters;
+              if (!excluded) return '—';
+              const parts: string[] = [];
+              if (excluded.channels) parts.push(`${excluded.channels} lacking channels`);
+              if (excluded.campaigns) parts.push(`${excluded.campaigns} lacking campaigns`);
+              if (excluded.noTouches) parts.push(`${excluded.noTouches} without touches`);
+              return parts.join(', ') || '—';
+            })()}
+          </span>
+        </div>
+      ) : null}
+
+      {summaryData.run.deals_without_journeys ? (
+        <div className="alert-banner info" style={{ marginTop: 16 }}>
+          <span>
+            {summaryData.run.deals_without_journeys} deals ({formatCurrency(summaryData.run.unattributed_revenue)}) had no qualifying touches and remain unattributed.
+          </span>
+          <div className="actions">
+            <button
+              type="button"
+              className="btn-primary btn-sm"
+              onClick={() => {
+                if (!projectId) return;
+                const params = new URLSearchParams();
+                if (summaryData.run.date_from) params.set('from', summaryData.run.date_from.slice(0, 10));
+                if (summaryData.run.date_to) params.set('to', summaryData.run.date_to.slice(0, 10));
+                window.location.hash = `#/workspace/${projectId}/m06/journeys?${params.toString()}`;
+              }}
+            >
+              Review in Journey Preview
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: 18 }}>
+        <h4 style={{ margin: '0 0 8px 0' }}>Top campaigns</h4>
+        {summaryData.campaigns.length ? (
+          <div className="allocation-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Campaign</th>
+                  <th>Attributed revenue</th>
+                  <th>Deals</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summaryData.campaigns.map(c => (
+                  <tr key={String(c.campaign_id)}>
+                    <td>{String(c.campaign_id)}</td>
+                    <td>{formatCurrency(c.revenue)}</td>
+                    <td>{formatNumber(c.deal_count)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: '#4d4f67' }}>No campaigns received credit in this run.</div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <h4 style={{ margin: '0 0 8px 0' }}>Sample allocation preview</h4>
+        {summaryData.samples.length ? (
+          <div className="allocation-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Deal</th>
+                  <th>Lead</th>
+                  <th>Amount</th>
+                  <th>Allocation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summaryData.samples.map(sample => {
+                  const sampleId = String(sample._id);
+                  const isOpen = openAllocDealId === sampleId;
+                  const baseAmount = sample.deal_amount ?? sample.total ?? 0;
+                  return (
+                    <React.Fragment key={sampleId}>
+                      <tr>
+                        <td>{sampleId}</td>
+                        <td>{sample.lead_id ? String(sample.lead_id) : '—'}</td>
+                        <td>{formatCurrency(baseAmount)}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn-primary btn-sm"
+                            onClick={() => setOpenAllocDealId(isOpen ? null : sampleId)}
+                          >
+                            {isOpen ? 'Hide allocation' : 'View allocation'}
+                          </button>
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <tr>
+                          <td colSpan={4}>
+                            <div className="allocation-subtable">
+                              <table>
+                                <thead>
+                                  <tr>
+                                    <th>Campaign</th>
+                                    <th>Revenue share</th>
+                                    <th>% of deal</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {sample.items.map((item, idx) => {
+                                    const share = Number(item.share || 0);
+                                    const pct = baseAmount > 0 ? ((share / baseAmount) * 100) : 0;
+                                    return (
+                                      <tr key={idx}>
+                                        <td>{String(item.campaign_id)}</td>
+                                        <td>{formatCurrency(share)}</td>
+                                        <td>{pct.toFixed(1)}%</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+                {summaryData.unattributed_sample && (
+                  <tr>
+                    <td colSpan={4}>
+                      Deal {String(summaryData.unattributed_sample.deal_id)} closed with {formatCurrency(summaryData.unattributed_sample.revenue)} but had no qualifying touches.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: '#4d4f67' }}>No attributed deals to preview yet. Run attribution to populate samples.</div>
+        )}
+      </div>
+    </>
+  );
 
   return (
     <Layout>
@@ -771,18 +1006,18 @@ export default function RunAttributionScreen() {
             </div>
           </div>
 
-          {summaryLoading && (
+          {showLegacySummary && summaryLoading && (
             <div className="card">
               <div className="card-body">Loading summary…</div>
             </div>
           )}
 
-          {!summaryLoading && summary && (
+          {showLegacySummary && !summaryLoading && summary && (
             <div className="card">
             <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <div>
                 <div className="m06-section-label">Summary</div>
-                <h3 style={{ margin: '12px 0 0 0' }}>Summary for {modelLabel(summary.run.model_type)}</h3>
+                <h3 style={{ margin: '12px 0 0 0' }}>Summary for {modelLabel(summary!.run.model_type)}</h3>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button
@@ -802,43 +1037,43 @@ export default function RunAttributionScreen() {
                 <div className="summary-metrics">
                   <div className="summary-card">
                     <h5>Deals processed</h5>
-                    <div className="value">{formatNumber(summary.run.deal_count)}</div>
+                    <div className="value">{formatNumber(summary!.run.deal_count)}</div>
                   </div>
                   <div className="summary-card">
                     <h5>With journeys</h5>
-                    <div className="value">{formatNumber(summary.run.deals_with_journeys)}</div>
+                    <div className="value">{formatNumber(summary!.run.deals_with_journeys)}</div>
                   </div>
                   <div className="summary-card">
                     <h5>Without journeys</h5>
-                    <div className="value">{formatNumber(summary.run.deals_without_journeys)}</div>
+                    <div className="value">{formatNumber(summary!.run.deals_without_journeys)}</div>
                   </div>
                   <div className="summary-card">
                     <h5>Total revenue</h5>
-                    <div className="value">{formatCurrency(summary.run.total_revenue)}</div>
+                    <div className="value">{formatCurrency(summary!.run.total_revenue)}</div>
                   </div>
                   <div className="summary-card">
                     <h5>Attributed revenue</h5>
-                    <div className="value">{formatCurrency(summary.run.attributed_revenue)}</div>
+                    <div className="value">{formatCurrency(summary!.run.attributed_revenue)}</div>
                   </div>
                   <div className="summary-card">
                     <h5>Unattributed revenue</h5>
-                    <div className="value">{formatCurrency(summary.run.unattributed_revenue)}</div>
+                    <div className="value">{formatCurrency(summary!.run.unattributed_revenue)}</div>
                   </div>
                   <div className="summary-card">
                     <h5>Campaigns credited</h5>
-                    <div className="value">{formatNumber(summary.run.campaigns_with_credit)}</div>
+                    <div className="value">{formatNumber(summary!.run.campaigns_with_credit)}</div>
                   </div>
                   <div className="summary-card">
                     <h5>Touches used</h5>
-                    <div className="value">{formatNumber(summary.run.touches_used)}</div>
+                    <div className="value">{formatNumber(summary!.run.touches_used)}</div>
                   </div>
                 </div>
 
                 {(() => {
-                  const filters = summary.run.filters;
+                  const filters = summary!.run.filters;
                   if (!filters) return null;
-                  const channels = filters.requiredChannels || [];
-                  const campaigns = filters.requiredCampaignIds || [];
+                  const channels = filters?.requiredChannels || [];
+                  const campaigns = filters?.requiredCampaignIds || [];
                   if (!channels.length && !campaigns.length) return null;
                   return (
                     <div className="summary-filter-row">
@@ -861,27 +1096,27 @@ export default function RunAttributionScreen() {
                   );
                 })()}
 
-                {summary.run.excluded_by_filters ? (
+                {summary!.run.excluded_by_filters ? (
                   <div className="summary-filter-row subtle">
                     <span>Excluded by filters: </span>
                     <span className="preview-detail">
                       {(() => {
-                        const excluded = summary.run.excluded_by_filters;
+                        const excluded = summary!.run.excluded_by_filters;
                         if (!excluded) return '—';
                         const parts: string[] = [];
-                        if (excluded.channels) parts.push(`${excluded.channels} lacking channels`);
-                        if (excluded.campaigns) parts.push(`${excluded.campaigns} lacking campaigns`);
-                        if (excluded.noTouches) parts.push(`${excluded.noTouches} without touches`);
+                        if (excluded?.channels) parts.push(`${excluded?.channels} lacking channels`);
+                        if (excluded?.campaigns) parts.push(`${excluded?.campaigns} lacking campaigns`);
+                        if (excluded?.noTouches) parts.push(`${excluded?.noTouches} without touches`);
                         return parts.join(', ') || '—';
                       })()}
                     </span>
                   </div>
                 ) : null}
 
-                {summary.run.deals_without_journeys ? (
+                {summary!.run.deals_without_journeys ? (
                   <div className="alert-banner info" style={{ marginTop: 16 }}>
                     <span>
-                      {summary.run.deals_without_journeys} deals ({formatCurrency(summary.run.unattributed_revenue)}) had no qualifying touches and remain unattributed.
+                      {summary!.run.deals_without_journeys} deals ({formatCurrency(summary!.run.unattributed_revenue)}) had no qualifying touches and remain unattributed.
                     </span>
                     <div className="actions">
                       <button
@@ -890,8 +1125,8 @@ export default function RunAttributionScreen() {
                         onClick={() => {
                           if (!projectId) return;
                           const params = new URLSearchParams();
-                          if (summary.run.date_from) params.set('from', summary.run.date_from.slice(0, 10));
-                          if (summary.run.date_to) params.set('to', summary.run.date_to.slice(0, 10));
+                          if (summary!.run.date_from) params.set('from', summary!.run.date_from.slice(0, 10));
+                          if (summary!.run.date_to) params.set('to', summary!.run.date_to.slice(0, 10));
                           window.location.hash = `#/workspace/${projectId}/m06/journeys?${params.toString()}`;
                         }}
                       >
@@ -903,7 +1138,7 @@ export default function RunAttributionScreen() {
 
                 <div style={{ marginTop: 18 }}>
                   <h4 style={{ margin: '0 0 8px 0' }}>Top campaigns</h4>
-                  {summary.campaigns.length ? (
+                  {summary!.campaigns.length ? (
                     <div className="allocation-table">
                       <table>
                         <thead>
@@ -914,7 +1149,7 @@ export default function RunAttributionScreen() {
                           </tr>
                         </thead>
                         <tbody>
-                          {summary.campaigns.map(c => (
+                          {summary!.campaigns.map(c => (
                             <tr key={String(c.campaign_id)}>
                               <td>{String(c.campaign_id)}</td>
                               <td>{formatCurrency(c.revenue)}</td>
@@ -931,7 +1166,7 @@ export default function RunAttributionScreen() {
 
                 <div style={{ marginTop: 18 }}>
                   <h4 style={{ margin: '0 0 8px 0' }}>Sample allocation preview</h4>
-                  {summary.samples.length ? (
+                  {summary!.samples.length ? (
                     <div className="allocation-table">
                       <table>
                         <thead>
@@ -943,7 +1178,7 @@ export default function RunAttributionScreen() {
                           </tr>
                         </thead>
                         <tbody>
-                          {summary.samples.map(sample => {
+                          {summary!.samples.map(sample => {
                             const sampleId = String(sample._id);
                             const isOpen = openAllocDealId === sampleId;
                             const baseAmount = sample.deal_amount ?? sample.total ?? 0;
@@ -996,10 +1231,10 @@ export default function RunAttributionScreen() {
                               </React.Fragment>
                             );
                           })}
-                          {summary.unattributed_sample && (
+                          {summary!.unattributed_sample && (
                             <tr>
                               <td colSpan={4}>
-                                Deal {String(summary.unattributed_sample.deal_id)} closed with {formatCurrency(summary.unattributed_sample.revenue)} but had no qualifying touches.
+                                Deal {String(summary!.unattributed_sample!.deal_id)} closed with {formatCurrency(summary!.unattributed_sample!.revenue)} but had no qualifying touches.
                               </td>
                             </tr>
                           )}
@@ -1014,13 +1249,19 @@ export default function RunAttributionScreen() {
             </div>
           )}
 
-          {!summaryLoading && !summary && (
+          {showLegacySummary && !summaryLoading && !summary && (
             <div className="card">
               <div className="card-body" style={{ color: '#4d4f67' }}>
                 Select a run from the history panel to see its summary, or run a new attribution above.
               </div>
             </div>
           )}
+
+          <div className="card">
+            <div className="card-body" style={{ color: '#4d4f67' }}>
+              Open saved attribution summaries from the history panel. The page body stays focused on configuration and run history now.
+            </div>
+          </div>
         </section>
 
         <aside className="run-attribution-side">
@@ -1043,11 +1284,9 @@ export default function RunAttributionScreen() {
                   const isDefault = storedDefaultRunId === runId;
                   const statusClass = run.status === 'error' ? 'error' : run.status === 'running' ? 'running' : 'success';
                   return (
-                    <button
+                    <div
                       key={runId}
-                      type="button"
                       className={`run-history-card ${isActive ? 'active' : ''}`}
-                      onClick={() => handleSelectRun(runId)}
                     >
                       <h4>{modelLabel(run.model_type)} · {run.date_from?.slice(0, 10) || '—'} → {run.date_to?.slice(0, 10) || '—'}</h4>
                       <div className="run-history-meta">
@@ -1055,7 +1294,7 @@ export default function RunAttributionScreen() {
                         <span>{formatCurrency(run.attributed_revenue)} attributed</span>
                       </div>
                       {(() => {
-                        const filters = (run.meta as any)?.filters as AttributionFilterSummary | undefined;
+                        const filters = (run.meta as { filters?: AttributionFilterSummary } | null | undefined)?.filters;
                         if (!filters) return null;
                         const channels = filters.requiredChannels || [];
                         const campaigns = filters.requiredCampaignIds || [];
@@ -1072,11 +1311,21 @@ export default function RunAttributionScreen() {
                         );
                       })()}
                       <div className="run-history-footer">
-                        <span className={`status-pill ${statusClass}`}>{run.status}</span>
-                        {isDefault && <span className="status-pill default">ROI default</span>}
-                        <span>{formatTimestamp(run.timestamp)}</span>
+                        <div className="run-history-statuses">
+                          <span className={`status-pill ${statusClass}`}>{run.status}</span>
+                          {isDefault && <span className="status-pill default">ROI default</span>}
+                          <span>{formatTimestamp(run.timestamp)}</span>
+                        </div>
+                        <div className="run-history-actions">
+                          <button className="btn-ghost btn-sm" type="button" onClick={() => void handleSelectRun(runId)}>
+                            Select
+                          </button>
+                          <button className="btn-primary btn-sm" type="button" onClick={() => void openSummaryForRun(runId)}>
+                            View Summary
+                          </button>
+                        </div>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -1084,6 +1333,54 @@ export default function RunAttributionScreen() {
           </div>
         </aside>
       </div>
+
+      {summaryOpen ? (
+        <div className="fullscreen-overlay" onClick={() => setSummaryOpen(false)}>
+          <div className="fullscreen-panel m06-summary-panel" onClick={e => e.stopPropagation()}>
+            <div className="fullscreen-header">
+              <div>
+                <div className="m06-section-label">Summary</div>
+                <h3 style={{ margin: '10px 0 0 0' }}>
+                  {summaryLoading ? 'Loading run summary…' : summary ? `Summary for ${modelLabel(summary.run.model_type)}` : 'Run summary'}
+                </h3>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  className="btn-ghost btn-sm"
+                  type="button"
+                  onClick={markRunAsDefault}
+                  disabled={!activeRunIdRef.current || storedDefaultRunId === activeRunIdRef.current || summaryLoading || !summary}
+                >
+                  {storedDefaultRunId === activeRunIdRef.current ? 'ROI default' : 'Set as ROI default'}
+                </button>
+                <button className="btn-primary btn-sm" type="button" disabled={!activeRunIdRef.current || summaryLoading || !summary} onClick={goToROI}>
+                  Go to ROI
+                </button>
+                <button className="btn-ghost btn-sm" type="button" onClick={() => setSummaryOpen(false)}>
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="fullscreen-body">
+              <div className="m06-summary-panel-body">
+                {summaryLoading ? (
+                  <div className="card">
+                    <div className="card-body">Loading summary…</div>
+                  </div>
+                ) : summary ? (
+                  renderSummaryContent(summary)
+                ) : (
+                  <div className="card">
+                    <div className="card-body" style={{ color: '#4d4f67' }}>
+                      No summary is available for this run yet.
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       </main>
     </Layout>
   );

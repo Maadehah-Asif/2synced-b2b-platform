@@ -3,16 +3,20 @@ import multer from 'multer';
 import {
   createInteraction,
   previewInteractionUpload,
+  validateInteractionUpload,
   commitInteractionUpload,
   listInteractions,
   getInteraction,
   updateInteraction,
   archiveInteraction,
   deleteInteractionPermanent,
+  getForecastOptions,
+  forecastFunnel,
 } from './controllers.js';
 import {
   createStage,
   previewStageUpload,
+  validateStageUpload,
   commitStageUpload,
   listStages,
   getStage,
@@ -29,6 +33,7 @@ router.get('/', (_req, res) => res.json({ ok: true, module: 'm07' }));
 // Stage history routes
 router.post('/stages', createStage);
 router.post('/stages/upload/preview', upload.single('file'), previewStageUpload);
+router.post('/stages/upload/validate', validateStageUpload);
 router.post('/stages/upload/commit', commitStageUpload);
 
 router.get('/stages', listStages);
@@ -40,6 +45,7 @@ router.delete('/stages/:id/permanent', deleteStagePermanent);
 // Interaction routes
 router.post('/interactions', createInteraction);
 router.post('/interactions/upload/preview', upload.single('file'), previewInteractionUpload);
+router.post('/interactions/upload/validate', validateInteractionUpload);
 router.post('/interactions/upload/commit', commitInteractionUpload);
 
 router.get('/interactions', listInteractions);
@@ -47,5 +53,7 @@ router.get('/interactions/:id', getInteraction);
 router.put('/interactions/:id', updateInteraction);
 router.post('/interactions/:id/archive', archiveInteraction);
 router.delete('/interactions/:id/permanent', deleteInteractionPermanent);
+router.get('/forecast/options', getForecastOptions);
+router.post('/forecast', forecastFunnel);
 
 export default router;

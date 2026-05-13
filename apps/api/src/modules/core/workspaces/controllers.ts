@@ -19,18 +19,49 @@ function getUserIdFromReq(req: Request) {
 }
 
 const ADMIN_ROLES = ["head_manager", "sales_manager", "marketing_manager"] as const;
+const LEGACY_ADMIN_ROLES = ["admin", "manager"] as const;
+
+function normalizeRole(role: string | undefined | null) {
+  const value = (role || "").toString().trim().toLowerCase();
+  if (value === "admin") return "head_manager";
+  if (value === "manager") return "sales_manager";
+  if (value === "member") return "sales_team_member";
+  return value;
+}
 
 function isManagerRole(role: string | undefined) {
-  return role === "head_manager" || role === "sales_manager" || role === "marketing_manager";
+  const normalized = normalizeRole(role);
+  return normalized === "head_manager" || normalized === "sales_manager" || normalized === "marketing_manager";
+}
+
+async function findActiveWorkspaceMembership(workspaceId: string, userId: string) {
+  return WorkspaceMember.findOne({ workspaceId, userId, status: "active" }).exec();
+}
+
+async function ensureAdminAccess(workspaceId: string, userId: string) {
+  const member = await findActiveWorkspaceMembership(workspaceId, userId);
+  if (!member) return null;
+  return isManagerRole(member.role) || LEGACY_ADMIN_ROLES.includes((member.role || "").toString().toLowerCase() as any)
+    ? member
+    : null;
 }
 
 async function ensureManagerExistsForTeamRole(workspaceId: string, role: string | undefined) {
-  if (role === "sales_team_member") {
-    const sm = await WorkspaceMember.findOne({ workspaceId, role: "sales_manager", status: "active" }).exec();
+  const normalizedRole = normalizeRole(role);
+  if (normalizedRole === "sales_team_member") {
+    const sm = await WorkspaceMember.findOne({
+      workspaceId,
+      role: { $in: ["sales_manager", "head_manager", "admin", "manager"] },
+      status: "active",
+    }).exec();
     if (!sm) return "sales_manager_required";
   }
-  if (role === "marketing_team_member") {
-    const mm = await WorkspaceMember.findOne({ workspaceId, role: "marketing_manager", status: "active" }).exec();
+  if (normalizedRole === "marketing_team_member") {
+    const mm = await WorkspaceMember.findOne({
+      workspaceId,
+      role: { $in: ["marketing_manager", "head_manager", "admin", "manager"] },
+      status: "active",
+    }).exec();
     if (!mm) return "marketing_manager_required";
   }
   return null;
@@ -112,11 +143,11 @@ export async function listJoinRequests(req: Request, res: Response) {
     const workspaceId = req.params.id;
     if (!workspaceId) return res.status(400).json({ error: "workspaceId_required" });
     // only managers can approve/reject and view join requests
-    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: { $in: ADMIN_ROLES }, status: 'active' }).exec();
+    const admin = await ensureAdminAccess(workspaceId, userId);
     if (!admin) return res.status(403).json({ error: 'not_admin' });
   // include requester user info (email, fullName) to help admins decide
     const requests = await WorkspaceMember.find({ workspaceId, status: 'pending' }).populate({ path: 'userId', select: 'email fullName' }).exec();
-    return res.json({ requests: requests.map((r: any) => ({ id: String(r._id), userId: String(r.userId?._id || r.userId), role: r.role, user: r.userId ? { id: String(r.userId._id), email: r.userId.email, fullName: r.userId.fullName } : null })) });
+    return res.json({ requests: requests.map((r: any) => ({ id: String(r._id), userId: String(r.userId?._id || r.userId), role: normalizeRole(r.role), user: r.userId ? { id: String(r.userId._id), email: r.userId.email, fullName: r.userId.fullName } : null })) });
   } catch (err) {
     console.error('[workspaces/requests]', err);
     return res.status(500).json({ error: 'internal_error' });
@@ -132,7 +163,7 @@ export async function listMembers(req: Request, res: Response) {
     const member = await WorkspaceMember.findOne({ workspaceId, userId, status: 'active' }).exec();
     if (!member) return res.status(403).json({ error: 'not_member' });
     const members = await WorkspaceMember.find({ workspaceId }).populate({ path: 'userId', select: 'email fullName' }).exec();
-    return res.json({ members: members.map((m:any) => ({ id: String(m._id), role: m.role, status: m.status, user: m.userId ? { id: String(m.userId._id), email: m.userId.email, fullName: m.userId.fullName } : null })) });
+    return res.json({ members: members.map((m:any) => ({ id: String(m._id), role: normalizeRole(m.role), status: m.status, user: m.userId ? { id: String(m.userId._id), email: m.userId.email, fullName: m.userId.fullName } : null })) });
   } catch (err) {
     console.error('[workspaces/members]', err);
     return res.status(500).json({ error: 'internal_error' });
@@ -146,7 +177,7 @@ export async function updateMemberRole(req: Request, res: Response) {
     const { id: workspaceId, memberId } = req.params;
     if (!workspaceId) return res.status(400).json({ error: "workspaceId_required" });
     if (!memberId) return res.status(400).json({ error: "memberId_required" });
-    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: { $in: ADMIN_ROLES }, status: 'active' }).exec();
+    const admin = await ensureAdminAccess(workspaceId, userId);
     if (!admin) return res.status(403).json({ error: 'not_admin' });
     const { role, status } = req.body || {};
     const member = await WorkspaceMember.findOne({ _id: memberId, workspaceId }).exec();
@@ -158,24 +189,25 @@ export async function updateMemberRole(req: Request, res: Response) {
     if (role) {
       // Only managers can assign roles; already enforced above.
       // Enforce single sales/marketing manager per workspace
-      if (role === 'sales_manager' || role === 'marketing_manager') {
+      const normalizedRole = normalizeRole(role);
+      if (normalizedRole === 'sales_manager' || normalizedRole === 'marketing_manager') {
         const existingManager = await WorkspaceMember.findOne({
           workspaceId,
-          role,
+          role: normalizedRole,
           status: 'active',
           _id: { $ne: memberId },
         }).exec();
         if (existingManager) {
-          return res.status(409).json({ error: `${role}_already_assigned` });
+          return res.status(409).json({ error: `${normalizedRole}_already_assigned` });
         }
       }
 
-      const managerRequirementError = await ensureManagerExistsForTeamRole(workspaceId, role);
+      const managerRequirementError = await ensureManagerExistsForTeamRole(workspaceId, normalizedRole);
       if (managerRequirementError) {
         return res.status(400).json({ error: managerRequirementError });
       }
 
-      member.role = role;
+      member.role = normalizedRole as any;
     }
     if (status) member.status = status;
     await member.save();
@@ -193,7 +225,7 @@ export async function approveRequest(req: Request, res: Response) {
     const { id: workspaceId, memberId } = req.params;
     if (!workspaceId) return res.status(400).json({ error: "workspaceId_required" });
     if (!memberId) return res.status(400).json({ error: "memberId_required" });
-    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: { $in: ADMIN_ROLES }, status: 'active' }).exec();
+    const admin = await ensureAdminAccess(workspaceId, userId);
     if (!admin) return res.status(403).json({ error: 'not_admin' });
     const member = await WorkspaceMember.findOne({ _id: memberId, workspaceId }).exec();
     if (!member) return res.status(404).json({ error: 'member_not_found' });
@@ -219,7 +251,7 @@ export async function rejectRequest(req: Request, res: Response) {
     const { id: workspaceId, memberId } = req.params;
     if (!workspaceId) return res.status(400).json({ error: "workspaceId_required" });
     if (!memberId) return res.status(400).json({ error: "memberId_required" });
-    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: { $in: ADMIN_ROLES }, status: 'active' }).exec();
+    const admin = await ensureAdminAccess(workspaceId, userId);
     if (!admin) return res.status(403).json({ error: 'not_admin' });
     const member = await WorkspaceMember.findOne({ _id: memberId, workspaceId }).exec();
     if (!member) return res.status(404).json({ error: 'member_not_found' });
@@ -238,7 +270,7 @@ export async function inviteByEmail(req: Request, res: Response) {
     if (!userId) return res.status(401).json({ error: 'missing_token' });
     const workspaceId = req.params.id;
     if (!workspaceId) return res.status(400).json({ error: 'workspaceId_required' });
-    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: { $in: ADMIN_ROLES }, status: 'active' }).exec();
+    const admin = await ensureAdminAccess(workspaceId, userId);
     if (!admin) return res.status(403).json({ error: 'not_admin' });
 
     const { email, role } = req.body || {};
@@ -255,7 +287,7 @@ export async function inviteByEmail(req: Request, res: Response) {
       });
     }
 
-    let targetRole = role || 'sales_team_member';
+    let targetRole = normalizeRole(role || 'sales_team_member');
 
     if (targetRole === 'sales_manager' || targetRole === 'marketing_manager') {
       const existingManager = await WorkspaceMember.findOne({ workspaceId, role: targetRole, status: 'active' }).exec();
@@ -287,7 +319,7 @@ export async function removeMember(req: Request, res: Response) {
     const { id: workspaceId, memberId } = req.params;
     if (!workspaceId) return res.status(400).json({ error: 'workspaceId_required' });
     if (!memberId) return res.status(400).json({ error: 'memberId_required' });
-    const admin = await WorkspaceMember.findOne({ workspaceId, userId, role: { $in: ADMIN_ROLES }, status: 'active' }).exec();
+    const admin = await ensureAdminAccess(workspaceId, userId);
     if (!admin) return res.status(403).json({ error: 'not_admin' });
 
     const member = await WorkspaceMember.findOne({ _id: memberId, workspaceId }).exec();

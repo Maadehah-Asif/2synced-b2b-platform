@@ -1,423 +1,312 @@
-import { useEffect, useMemo, useState } from 'react';
-import Layout from '../../components/Layout';
-import ModuleBackButton from '../../components/ModuleBackButton';
-import { useWorkspaceId } from '../../utils/workspace';
-import './module6.css';
-import BarChart from './BarChart';
-import TimelineChart from './TimelineChart';
-// Note: Temporarily using fixed channel list to align with agent CSV
+import { useEffect, useMemo, useState } from 'react'
+import Layout from '../../components/Layout'
+import ModuleBackButton from '../../components/ModuleBackButton'
+import { InsightHero, InsightKpiCard, InsightKpiGrid, InsightNoteCard, InsightPanel } from '../../components/InsightChrome'
+import { ForecastGroupedBarChart, ForecastLineChart } from '../../components/ForecastCharts'
+import { insightTokens } from '../../components/insightChromeTokens'
+import { useWorkspaceId } from '../../utils/workspace'
+import './module6.css'
+import BarChart from './BarChart'
+import TimelineChart from './TimelineChart'
+import Pagination from './components/Pagination'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
-type ForecastWindowKey = '1m' | '3m' | '6m';
-
-interface AgentResult {
-  history: Array<{ month: string; roi: number; ma3?: number; ma6?: number }>;
-  forecast: Array<{
-    month: string;
-    baseline_roi: number;
-    scenario_roi: number;
-    confidence_low: number;
-    confidence_high: number;
-  }>;
-  baselineROI: number;
-  scenarioROI: number;
-  confidenceLow: number;
-  confidenceHigh: number;
-  trend: string;
-  volatility: number;
-  seasonality: number;
-  explanation: string;
+type ForecastWindowKey = '1m' | '3m' | '6m'
+type ForecastChannel = { id: string; name: string }
+type AgentHistoryRow = { month: string; roi: number; ma3?: number; ma6?: number }
+type AgentForecastRow = {
+  month: string
+  baseline_roi: number
+  scenario_roi: number
+  confidence_low: number
+  confidence_high: number
+}
+type AgentResult = {
+  history: AgentHistoryRow[]
+  forecast: AgentForecastRow[]
+  baselineROI: number
+  scenarioROI: number
+  confidenceLow: number
+  confidenceHigh: number
+  trend: string
+  volatility: number
+  seasonality: number
+  explanation: string
 }
 
 const WINDOW_OPTIONS: { key: ForecastWindowKey; label: string }[] = [
   { key: '1m', label: '1 month' },
   { key: '3m', label: '3 months' },
   { key: '6m', label: '6 months' },
-];
-
-function formatPct(v: number | null | undefined) {
-  if (v === null || v === undefined || Number.isNaN(v)) return '-';
-  return `${Math.round(v)}%`;
-}
-
-function formatNumber(v: number | null | undefined) {
-  if (v === null || v === undefined || Number.isNaN(v)) return '-';
-  return (Math.round(v * 100) / 100).toLocaleString();
-}
+]
 
 export default function ForecastPage() {
-  const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
-  const BASIC_CHANNELS: Array<{ id: string; name: string }> = [
-    { id: 'email', name: 'Email' },
-    { id: 'ads', name: 'Ads' },
-    { id: 'linkedin', name: 'LinkedIn' },
-    { id: 'webinar', name: 'Webinar' },
-  ];
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string>(BASIC_CHANNELS[0].id);
-  const [windowKey, setWindowKey] = useState<ForecastWindowKey>('3m');
-  const [multiplier, setMultiplier] = useState<number>(1.0);
+  const workspaceId = useWorkspaceId({ redirectToWorkspaces: true })
+  const [channels, setChannels] = useState<ForecastChannel[]>([])
+  const [selectedChannelId, setSelectedChannelId] = useState('')
+  const [windowKey, setWindowKey] = useState<ForecastWindowKey>('3m')
+  const [multiplier, setMultiplier] = useState(1.0)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<AgentResult | null>(null)
+  const [forecastPage, setForecastPage] = useState(1)
+  const forecastPageSize = 6
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AgentResult | null>(null);
-
-  // No remote fetch: use fixed basic channels only for now
   useEffect(() => {
-    // Ensure a default is set
-    if (!selectedCampaignId) setSelectedCampaignId(BASIC_CHANNELS[0].id);
-  }, []);
+    fetch(`${API_BASE}/m06/forecast/options`)
+      .then((res) => res.json())
+      .then((json: { channels?: string[] }) => {
+        const items = Array.isArray(json?.channels)
+          ? json.channels.map((channel) => ({ id: channel, name: channel.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()) }))
+          : []
+        setChannels(items)
+        if (!selectedChannelId && items[0]) setSelectedChannelId(items[0].id)
+      })
+      .catch(() => {
+        const fallback: ForecastChannel[] = [
+          { id: 'email', name: 'Email' },
+          { id: 'webinar', name: 'Webinar' },
+          { id: 'cold_outreach', name: 'Cold Outreach' },
+        ]
+        setChannels(fallback)
+        if (!selectedChannelId) setSelectedChannelId(fallback[0].id)
+      })
+  }, [selectedChannelId])
 
   async function generateForecast() {
-    if (!selectedCampaignId) {
-      setError('Please select a campaign to forecast.');
-      return;
+    if (!selectedChannelId) {
+      setError('Please select a channel to forecast.')
+      return
     }
-    setLoading(true);
-    setError(null);
-    setResult(null);
+    setLoading(true)
+    setError(null)
+    setResult(null)
     try {
-      const payload = {
-        campaign_channel: selectedCampaignId,
-        forecast_window: windowKey,
-        spend_multiplier: multiplier,
-      };
       const res = await fetch(`${API_BASE}/m06/forecast-agent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json();
+        body: JSON.stringify({
+          campaign_channel: selectedChannelId,
+          forecast_window: windowKey,
+          spend_multiplier: multiplier,
+        }),
+      })
+      const json = await res.json().catch(() => ({} as { ok?: boolean; error?: string; result?: Partial<AgentResult> & Record<string, unknown> }))
       if (!res.ok || !json) {
-        setError(json && json.error ? String(json.error) : 'Forecast request failed.');
-        return;
+        setError(json && typeof json.error === 'string' ? json.error : 'Forecast request failed.')
+        return
       }
       if (!json.ok) {
-        setError(json.error ? String(json.error) : 'Forecast agent was unable to generate a forecast.');
+        setError(typeof json.error === 'string' ? json.error : 'Forecast agent was unable to generate a forecast.')
       }
-      const r = json.result || {};
-      const mapped: AgentResult = {
-        history: Array.isArray(r.history) ? r.history : [],
-        forecast: Array.isArray(r.forecast) ? r.forecast : [],
-        baselineROI: typeof r.baselineROI === 'number' ? r.baselineROI : (typeof r.baseline_roi === 'number' ? r.baseline_roi : 0),
-        scenarioROI: typeof r.scenarioROI === 'number' ? r.scenarioROI : (typeof r.scenario_roi === 'number' ? r.scenario_roi : 0),
-        confidenceLow: typeof r.confidenceLow === 'number' ? r.confidenceLow : (typeof r.confidence_low === 'number' ? r.confidence_low : 0),
-        confidenceHigh: typeof r.confidenceHigh === 'number' ? r.confidenceHigh : (typeof r.confidence_high === 'number' ? r.confidence_high : 0),
-        trend: typeof r.trend === 'string' ? r.trend : 'flat',
-        volatility: typeof r.volatility === 'number' ? r.volatility : 0,
-        seasonality: typeof r.seasonality === 'number' ? r.seasonality : 0,
-        explanation: typeof r.explanation === 'string' ? r.explanation : 'Forecast results from Python agent.',
-      };
-      setResult(mapped);
-    } catch (e) {
-      setError('Network error while calling forecast agent.');
+      const raw = (json.result || {}) as Partial<AgentResult> & Record<string, unknown>
+      setResult({
+        history: Array.isArray(raw.history) ? raw.history as AgentHistoryRow[] : [],
+        forecast: Array.isArray(raw.forecast) ? raw.forecast as AgentForecastRow[] : [],
+        baselineROI: typeof raw.baselineROI === 'number' ? raw.baselineROI : typeof raw.baseline_roi === 'number' ? raw.baseline_roi : 0,
+        scenarioROI: typeof raw.scenarioROI === 'number' ? raw.scenarioROI : typeof raw.scenario_roi === 'number' ? raw.scenario_roi : 0,
+        confidenceLow: typeof raw.confidenceLow === 'number' ? raw.confidenceLow : typeof raw.confidence_low === 'number' ? raw.confidence_low : 0,
+        confidenceHigh: typeof raw.confidenceHigh === 'number' ? raw.confidenceHigh : typeof raw.confidence_high === 'number' ? raw.confidence_high : 0,
+        trend: typeof raw.trend === 'string' ? raw.trend : 'flat',
+        volatility: typeof raw.volatility === 'number' ? raw.volatility : 0,
+        seasonality: typeof raw.seasonality === 'number' ? raw.seasonality : 0,
+        explanation: typeof raw.explanation === 'string' ? raw.explanation : 'Forecast results from the forecasting agent.',
+      })
+      setForecastPage(1)
+    } catch {
+      setError('Network error while calling the forecast agent.')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
 
   function downloadCSV() {
-    if (!result) return;
-    const rows = result.forecast || [];
-    if (!rows.length) return;
-    const header = ['month', 'baseline_roi', 'scenario_roi', 'confidence_low', 'confidence_high'];
-    const body = rows
-      .map((r) =>
-        [
-          r.month,
-          String(r.baseline_roi ?? ''),
-          String(r.scenario_roi ?? ''),
-          String(r.confidence_low ?? ''),
-          String(r.confidence_high ?? ''),
-        ].join(','),
-      )
-      .join('\n');
-    const csv = header.join(',') + '\n' + body;
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `forecast-${workspaceId || 'workspace'}-${selectedCampaignId || 'campaign'}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    if (!result?.forecast.length) return
+    const header = ['month', 'baseline_roi', 'scenario_roi', 'confidence_low', 'confidence_high']
+    const body = result.forecast.map((row) => [row.month, row.baseline_roi, row.scenario_roi, row.confidence_low, row.confidence_high].join(',')).join('\n')
+    const csv = `${header.join(',')}\n${body}`
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `forecast-${workspaceId || 'workspace'}-${selectedChannelId || 'channel'}.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
   }
 
-  const timelineData = useMemo(() => {
-    if (!result || !result.history || result.history.length === 0) return [];
-    return result.history.map((h) => ({ month: h.month, total: h.roi }));
-  }, [result]);
-
-  const comparisonData = useMemo(() => {
-    if (!result) return [];
+  const timelineData = useMemo(() => result?.history.map((row) => ({ month: row.month, total: row.roi })) || [], [result])
+  const forecastTrendLabels = useMemo(() => result?.forecast.map((row) => row.month) || [], [result])
+  const forecastTrendSeries = useMemo(() => {
+    if (!result) return []
     return [
-      { label: 'Baseline', value: result.baselineROI || 0 },
-      { label: 'Scenario', value: result.scenarioROI || 0 },
-    ];
-  }, [result]);
-
-  const heatmapYears = useMemo(() => {
-    if (!result || !result.history || result.history.length === 0) return [] as string[];
-    const years = new Set<string>();
-    result.history.forEach((h) => {
-      const y = (h.month || '').split('-')[0];
-      if (y) years.add(y);
-    });
-    return Array.from(years).sort();
-  }, [result]);
-
-  function roiToColor(roi: number | null | undefined) {
-    if (roi === null || roi === undefined || Number.isNaN(roi)) return '#f0f4f7';
-    const clamped = Math.max(-50, Math.min(150, roi));
-    const norm = (clamped + 50) / 200; // 0..1 from -50..150
-    const hue = 0 + (120 - 0) * norm; // red->green
-    return `hsl(${hue},70%,60%)`;
-  }
-
-  function getRoiForYearMonth(year: string, monthIdx: number): number | null {
-    if (!result || !result.history) return null;
-    const mStr = String(monthIdx + 1).padStart(2, '0');
-    const key = `${year}-${mStr}`;
-    const row = result.history.find((h) => h.month === key);
-    return row ? row.roi : null;
-  }
-
-  // Using channel selection only; no campaign lookup for now
+      { label: 'Baseline ROI', color: '#4F6D9A', values: result.forecast.map((row) => row.baseline_roi) },
+      { label: 'Scenario ROI', color: '#4C956C', values: result.forecast.map((row) => row.scenario_roi) },
+      { label: 'Confidence High', color: '#C98C3A', values: result.forecast.map((row) => row.confidence_high) },
+    ]
+  }, [result])
+  const selectedChannel = channels.find((item) => item.id === selectedChannelId)?.name || selectedChannelId || 'No channel'
+  const forecastTableRows = useMemo(() => {
+    const rows = result?.forecast || []
+    const start = (forecastPage - 1) * forecastPageSize
+    return rows.slice(start, start + forecastPageSize)
+  }, [forecastPage, result])
+  const scenarioBars = useMemo(
+    () => ({
+      labels: ['Baseline', 'Scenario'],
+      series: [
+        { label: 'ROI', color: '#0f4258', values: result ? [result.baselineROI, result.scenarioROI] : [] },
+      ],
+    }),
+    [result]
+  )
 
   return (
     <Layout>
-      <main className="page-root m06-page">
-        <div style={{ marginTop: 8 }}>
-          <ModuleBackButton toSuffix="/m06" label="Module 6 Home" />
+      <main className="page-root m06-page" style={{ padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <ModuleBackButton toSuffix="/m06" />
         </div>
-        <section className="m06-hero">
-          <div className="m06-hero-inner">
-            <div className="m06-pill">Forecasts</div>
-            <h1>ROI Forecast Explorer</h1>
-            <div className="m06-hero-copy">
-              Test spend scenarios by channel, compare expected ROI shifts, and export the generated forecast without changing campaign or attribution data.
+
+        <InsightHero eyebrow="Revenue Insight Forecast" title="ROI Forecast" subtitle="Test spend scenarios by channel, compare expected ROI shifts, and export projected revenue-performance outputs without changing attribution records." />
+
+        <section style={{ ...insightTokens.twoCol, marginTop: 18 }}>
+          <InsightPanel eyebrow="Scenario setup" title="Choose the forecast configuration">
+            <div className="m06-filter-grid">
+              <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span>Channel</span>
+                <select value={selectedChannelId} onChange={(e) => setSelectedChannelId(e.target.value)}>
+                  {channels.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </label>
+              <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span>Forecast window</span>
+                <select value={windowKey} onChange={(e) => setWindowKey(e.target.value as ForecastWindowKey)}>
+                  {WINDOW_OPTIONS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+                </select>
+              </label>
+              <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span>Spend multiplier ({multiplier.toFixed(1)}x)</span>
+                <input type="range" min={0.5} max={2} step={0.1} value={multiplier} onChange={(e) => setMultiplier(Number(e.target.value))} />
+              </label>
             </div>
-          </div>
+            <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button className="btn-primary" onClick={generateForecast} disabled={loading || !selectedChannelId}>{loading ? 'Generating…' : 'Generate Forecast'}</button>
+              <button className="btn-ghost" onClick={downloadCSV} disabled={!result?.forecast.length}>Download Forecast CSV</button>
+            </div>
+            {error ? <div style={{ marginTop: 10, color: 'crimson', fontSize: 13 }}>{error}</div> : null}
+          </InsightPanel>
+
+          <InsightPanel eyebrow="Use this page for" title="Decision context" soft>
+            <div style={{ display: 'grid', gap: 12 }}>
+              <InsightNoteCard title="Scenario comparison" body="Use this view when you want to test whether more or less spend on a channel is likely to improve return before changing budget allocations." />
+              <InsightNoteCard title="Read confidence with caution" body="Wide confidence ranges usually mean historical data is volatile or seasonal, so those channels need a more conservative planning assumption." />
+              <InsightNoteCard title="Best paired with ROI and allocation" body="Use forecast after reviewing current ROI and attribution coverage, not as a replacement for the present-state commercial read." />
+            </div>
+          </InsightPanel>
         </section>
-        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-          <div style={{ flex: 2 }}>
-            <div className="m06-panel">
-              <div className="m06-section-label">Scenario Setup</div>
-              <h3 className="m06-panel-title" style={{ marginTop: 12 }}>Forecast ROI by channel</h3>
-              <div className="m06-helper" style={{ marginBottom: 14 }}>
-                Run scenario-based ROI forecasts for a selected channel using the Python forecasting agent.
+
+        {result ? (
+          <>
+            <InsightKpiGrid>
+              <InsightKpiCard label="Baseline ROI" value={formatPct(result.baselineROI)} note="Expected return without the proposed spend change." tone="navy" />
+              <InsightKpiCard label="Scenario ROI" value={formatPct(result.scenarioROI)} note="Projected return once the selected multiplier is applied." tone="teal" />
+              <InsightKpiCard label="Trend" value={formatTrend(result.trend)} note="Current direction in the underlying historical signal." tone="slate" />
+              <InsightKpiCard label="Confidence Range" value={`${formatPct(result.confidenceLow)} to ${formatPct(result.confidenceHigh)}`} note="Expected uncertainty band around the projection." tone="amber" />
+            </InsightKpiGrid>
+
+            <section style={{ ...insightTokens.equalCol, marginTop: 18 }}>
+              <InsightPanel eyebrow="History" title="Historical ROI">
+                <div style={{ minHeight: 220 }}>
+                  <TimelineChart data={timelineData} height={210} />
+                </div>
+              </InsightPanel>
+
+              <InsightPanel eyebrow="Scenario comparison" title="Baseline versus scenario" soft>
+                <div style={{ minHeight: 220 }}>
+                  <ForecastGroupedBarChart labels={scenarioBars.labels} series={scenarioBars.series} height={210} suffix="%" />
+                </div>
+              </InsightPanel>
+            </section>
+
+            <InsightPanel eyebrow="Forecast trend" title="Projected monthly ROI movement" soft>
+              <div style={{ minHeight: 260 }}>
+                <ForecastLineChart labels={forecastTrendLabels} series={forecastTrendSeries} suffix="%" height={250} />
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: 12, color: '#666' }}>Channel</div>
-                  <select
-                    value={selectedCampaignId}
-                    onChange={(e) => setSelectedCampaignId(e.target.value)}
-                    style={{ minWidth: 220 }}
-                  >
-                    {BASIC_CHANNELS.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: '#666' }}>Forecast window</div>
-                  <select
-                    value={windowKey}
-                    onChange={(e) => setWindowKey(e.target.value as ForecastWindowKey)}
-                  >
-                    {WINDOW_OPTIONS.map((w) => (
-                      <option key={w.key} value={w.key}>
-                        {w.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: '#666' }}>Spend multiplier ({multiplier.toFixed(2)}x)</div>
-                  <input
-                    type="range"
-                    min={0.5}
-                    max={2}
-                    step={0.1}
-                    value={multiplier}
-                    onChange={(e) => setMultiplier(Number(e.target.value))}
-                    style={{ width: 160 }}
+            </InsightPanel>
+
+            <section style={{ ...insightTokens.twoCol, marginTop: 18 }}>
+              <InsightPanel eyebrow="Forecast table" title="Projected monthly outcome">
+                <div style={{ marginBottom: 14 }}>
+                  <BarChart
+                    data={(result.forecast || []).slice(0, 6).map((row) => ({ label: row.month.slice(2), value: row.scenario_roi }))}
+                    height={180}
+                    valueFormatter={(value) => `${Math.round(value)}%`}
                   />
                 </div>
-                <div>
-                  <button
-                    className="btn-primary"
-                    onClick={generateForecast}
-                    disabled={loading || !selectedCampaignId}
-                  >
-                    {loading ? 'Generating…' : 'Generate Forecast'}
-                  </button>
-                </div>
-              </div>
-              {error && (
-                <div style={{ marginTop: 8, color: 'crimson', fontSize: 12 }}>{error}</div>
-              )}
-            </div>
-
-            {!result && !loading && !error && (
-              <div className="m06-panel soft" style={{ marginTop: 16 }}>
-                <div className="m06-section-label">How To Use</div>
-                <h3 className="m06-panel-title" style={{ marginTop: 12 }}>What this screen is for</h3>
-                <div className="m06-helper">
-                  Start with a channel, choose a short or medium forecast window, then adjust the spend multiplier to see how ROI might shift before making budget decisions.
-                </div>
-              </div>
-            )}
-
-            {result && (
-              <>
-                {/* KPI cards */}
-                <div className="summary-metrics" style={{ marginTop: 16 }}>
-                  <div className="summary-card">
-                    <h5>Baseline ROI</h5>
-                    <div className="value">{formatPct(result.baselineROI)}</div>
-                  </div>
-                  <div className="summary-card">
-                    <h5>Scenario ROI</h5>
-                    <div className="value">{formatPct(result.scenarioROI)}</div>
-                  </div>
-                  <div className="summary-card">
-                    <h5>Trend</h5>
-                    <div className="value">
-                      {result.trend === 'upward' ? '↑ Upward' : result.trend === 'downward' ? '↓ Downward' : '→ Flat'}
-                    </div>
-                  </div>
-                  <div className="summary-card">
-                    <h5>Seasonality</h5>
-                    <div className="value">{formatNumber(result.seasonality)}</div>
-                  </div>
-                  <div className="summary-card">
-                    <h5>Volatility</h5>
-                    <div className="value">{formatNumber(result.volatility)}</div>
-                  </div>
-                  <div className="summary-card">
-                    <h5>Confidence Range</h5>
-                    <div className="value">
-                      {formatPct(result.confidenceLow)} – {formatPct(result.confidenceHigh)}
-                    </div>
-                  </div>
+                <div style={insightTokens.tableWrap}>
+                  <table style={insightTokens.table}>
+                    <thead>
+                      <tr>
+                        <th style={insightTokens.th}>Month</th>
+                        <th style={insightTokens.th}>Baseline ROI</th>
+                        <th style={insightTokens.th}>Scenario ROI</th>
+                        <th style={insightTokens.th}>Low</th>
+                        <th style={insightTokens.th}>High</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {forecastTableRows.map((row) => (
+                        <tr key={row.month} style={insightTokens.row}>
+                          <td style={insightTokens.tdStrong}>{row.month}</td>
+                          <td style={insightTokens.td}>{formatPct(row.baseline_roi)}</td>
+                          <td style={insightTokens.td}>{formatPct(row.scenario_roi)}</td>
+                          <td style={insightTokens.td}>{formatPct(row.confidence_low)}</td>
+                          <td style={insightTokens.td}>{formatPct(row.confidence_high)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
 
-                {/* ROI line / timeline chart */}
-                <div className="m06-panel" style={{ marginTop: 18 }}>
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Historical ROI</div>
-                  <TimelineChart data={timelineData} />
-                </div>
-
-                {/* Scenario comparison bar chart */}
-                <div className="m06-panel" style={{ marginTop: 18 }}>
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Scenario Comparison</div>
-                  <BarChart data={comparisonData} height={140} />
-                </div>
-
-                {/* Heatmap */}
-                <div className="m06-panel soft" style={{ marginTop: 18 }}>
-                  <div style={{ fontWeight: 700, marginBottom: 8 }}>Historical ROI Heatmap</div>
-                  {heatmapYears.length === 0 ? (
-                    <div style={{ fontSize: 12, color: '#666' }}>No history found for this campaign.</div>
-                  ) : (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ borderCollapse: 'collapse', minWidth: 520 }}>
-                        <thead>
-                          <tr>
-                            <th style={{ padding: 4, fontSize: 11, textAlign: 'left' }}>Year</th>
-                            {Array.from({ length: 12 }).map((_, idx) => (
-                              <th key={idx} style={{ padding: 4, fontSize: 11 }}>{idx + 1}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {heatmapYears.map((y) => (
-                            <tr key={y}>
-                              <td style={{ padding: 4, fontSize: 11 }}>{y}</td>
-                              {Array.from({ length: 12 }).map((_, idx) => {
-                                const roi = getRoiForYearMonth(y, idx);
-                                return (
-                                  <td key={idx} style={{ padding: 0 }}>
-                                    <div
-                                      style={{
-                                        width: 26,
-                                        height: 22,
-                                        background: roiToColor(roi || 0),
-                                        borderRadius: 4,
-                                        fontSize: 9,
-                                        color: '#022',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                      }}
-                                      title={roi === null ? 'No data' : `${roi.toFixed(1)}%`}
-                                    >
-                                      {roi === null ? '' : Math.round(roi)}
-                                    </div>
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-
-                {/* Agent explanation and download */}
-                <div style={{ marginTop: 18, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                  <div style={{ flex: 2, minWidth: 260 }}>
-                    <div className="summary-card">
-                      <h5>Agent Explanation</h5>
-                      <div style={{ marginTop: 8, fontSize: 13, color: '#2d2f45', whiteSpace: 'pre-wrap' }}>
-                        {result.explanation}
-                      </div>
-                    </div>
+                <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={insightTokens.mutedText}>
+                    Showing {(forecastPage - 1) * forecastPageSize + 1} to {Math.min(forecastPage * forecastPageSize, result.forecast.length)} of {result.forecast.length} forecast rows.
                   </div>
-                  <div style={{ flex: 1, minWidth: 200 }}>
-                    <div className="summary-card">
-                      <h5>Downloads</h5>
-                      <div style={{ marginTop: 10 }}>
-                        <button className="btn-primary" onClick={downloadCSV} disabled={!result.forecast.length}>
-                          Download Forecast CSV
-                        </button>
-                        <div style={{ marginTop: 6, fontSize: 11, color: '#666' }}>
-                          Includes baseline and scenario ROI plus confidence bounds per month.
-                        </div>
-                      </div>
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button type="button" className="btn-ghost btn-sm" disabled={forecastPage <= 1} onClick={() => setForecastPage((value) => Math.max(1, value - 1))}>Prev</button>
+                    <Pagination page={forecastPage} total={result.forecast.length} limit={forecastPageSize} onPage={setForecastPage} />
+                    <button type="button" className="btn-ghost btn-sm" disabled={forecastPage * forecastPageSize >= result.forecast.length} onClick={() => setForecastPage((value) => value + 1)}>Next</button>
                   </div>
                 </div>
-              </>
-            )}
+              </InsightPanel>
 
-            {!loading && !result && !error && (
-              <div style={{ marginTop: 18, fontSize: 13, color: '#666' }}>
-                Select a channel and click <strong>Generate Forecast</strong> to view projected ROI.
-              </div>
-            )}
-          </div>
-
-          <div style={{ flex: 1, minWidth: 260 }}>
-            <div className="summary-card">
-              <h5>Selection Context</h5>
-              <div style={{ marginTop: 8, fontSize: 13, color: '#2d2f45' }}>
-                <div><strong>Channel:</strong> {selectedCampaignId}</div>
-              </div>
-            </div>
-            <div style={{ marginTop: 12 }} className="summary-card">
-              <h5>Tips</h5>
-              <ul style={{ margin: 0, marginTop: 8, paddingLeft: 16, fontSize: 12, color: '#4d4f67' }}>
-                <li>Try 3 or 6 month windows to see medium-term patterns.</li>
-                <li>Use higher spend multipliers to stress-test ROI sensitivity.</li>
-                <li>Watch volatility and seasonality before committing big budget shifts.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
+              <InsightPanel eyebrow="Forecast interpretation" title="What this scenario is saying" soft>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  <InsightNoteCard title="Current selection" body={`This scenario is modeling ${selectedChannel} over a ${WINDOW_OPTIONS.find((item) => item.key === windowKey)?.label || windowKey} window at ${multiplier.toFixed(1)}x current spend.`} />
+                  <InsightNoteCard title="Agent explanation" body={result.explanation} />
+                  <InsightNoteCard title="Planning guidance" body={result.scenarioROI >= result.baselineROI ? 'The scenario suggests a stronger return profile than baseline, so this channel may justify a controlled budget increase.' : 'The scenario weakens ROI relative to baseline, so this channel should be treated cautiously before increasing spend.'} />
+                </div>
+              </InsightPanel>
+            </section>
+          </>
+        ) : (
+          <InsightPanel eyebrow="Forecast output" title="Waiting for a scenario run" soft>
+            <div style={insightTokens.mutedText}>Select a channel and generate a forecast to see projected ROI movement, confidence ranges, and downloadable scenario outputs.</div>
+          </InsightPanel>
+        )}
       </main>
     </Layout>
-  );
+  )
+}
+
+function formatPct(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) return '-'
+  return `${Math.round(value)}%`
+}
+
+function formatTrend(trend: string) {
+  if (trend === 'upward') return 'Upward'
+  if (trend === 'downward') return 'Downward'
+  return 'Flat'
 }

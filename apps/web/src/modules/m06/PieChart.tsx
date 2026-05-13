@@ -1,48 +1,59 @@
 type PieSlice = { label?: string; value: number; color?: string }
 
-function polarToCartesian(cx:number, cy:number, r:number, angle:number){
-  const rad = (angle-90) * Math.PI / 180.0;
-  return { x: cx + (r * Math.cos(rad)), y: cy + (r * Math.sin(rad)) };
+const palette = ['#0f4258', '#0F766E', '#B7791F', '#5B6C8B', '#7AA6B8', '#9CB7A4']
+
+function polarToCartesian(cx: number, cy: number, r: number, angle: number) {
+  const rad = (angle - 90) * Math.PI / 180
+  return { x: cx + (r * Math.cos(rad)), y: cy + (r * Math.sin(rad)) }
 }
 
-export default function PieChart({ data, size=140 }: { data: PieSlice[]; size?: number }){
-  const total = data.reduce((s,d)=> s + (d.value || 0), 0) || 1;
-  let angle = 0;
-  const cx = size/2, cy = size/2, r = size/2 - 6;
-  const paths: any[] = [];
-  for(const d of data){
-    const sliceAngle = (d.value/total) * 360;
-    const start = polarToCartesian(cx, cy, r, angle);
-    const end = polarToCartesian(cx, cy, r, angle + sliceAngle);
-    const large = sliceAngle > 180 ? 1 : 0;
-    const path = `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${large} 1 ${end.x} ${end.y} Z`;
-    paths.push({ path, color: d.color || '#65A1BF', label: d.label, value: d.value });
-    angle += sliceAngle;
-  }
+export default function PieChart({ data, size = 140 }: { data: PieSlice[]; size?: number }) {
+  const total = data.reduce((sum, item) => sum + (item.value || 0), 0) || 1
+  let angle = 0
+  const cx = size / 2
+  const cy = size / 2
+  const r = size / 2 - 8
+  const innerRadius = r * 0.48
 
-  // center label: total
-  const centerLabel = `$${Math.round(total).toLocaleString()}`;
+  const paths = data.map((item, index) => {
+    const sliceAngle = (item.value / total) * 360
+    const start = polarToCartesian(cx, cy, r, angle)
+    const end = polarToCartesian(cx, cy, r, angle + sliceAngle)
+    const large = sliceAngle > 180 ? 1 : 0
+    const path = `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${large} 1 ${end.x} ${end.y} Z`
+    const fill = item.color || palette[index % palette.length]
+    angle += sliceAngle
+    return { path, fill, label: item.label, value: item.value }
+  })
+
+  const centerLabel = `$${Math.round(total).toLocaleString()}`
 
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}` }>
+    <div style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <defs>
-          <filter id="m7-shadow" x="-50%" y="-50%" width="200%" height="200%">
-            <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#042a33" floodOpacity="0.12"/>
+          <filter id="m06-pie-shadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#0b2540" floodOpacity="0.14" />
           </filter>
         </defs>
-        <g filter="url(#m7-shadow)">
-          {paths.map((p, i) => <path key={i} d={p.path} fill={p.color} stroke="#fff" strokeWidth={0.8} />)}
+        <g filter="url(#m06-pie-shadow)">
+          {paths.map((item, index) => <path key={index} d={item.path} fill={item.fill} stroke="#fff" strokeWidth={1.2} />)}
         </g>
-        <circle cx={cx} cy={cy} r={r * 0.48} fill="#fff" />
-        <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize={12} fill="#042a33" fontWeight={700}>{centerLabel}</text>
+        <circle cx={cx} cy={cy} r={innerRadius} fill="#fff" />
+        <text x={cx} y={cy - 5} textAnchor="middle" fill="#5B6C8B" fontSize={11} fontWeight={800} letterSpacing="0.06em">
+          TOTAL
+        </text>
+        <text x={cx} y={cy + 12} textAnchor="middle" fill="#0B2540" fontSize={14} fontWeight={900}>
+          {centerLabel}
+        </text>
       </svg>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {data.map((d, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 140 }}>
-            <div style={{ width: 12, height: 12, background: d.color || '#65A1BF', borderRadius: 3 }} />
-            <div style={{ fontSize: 12, color: '#042a33' }}>{d.label || '—'}</div>
-            <div style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700 }}>{Math.round(d.value || 0)}</div>
+
+      <div style={{ display: 'grid', gap: 8, minWidth: 220 }}>
+        {paths.map((item, index) => (
+          <div key={index} style={{ display: 'grid', gridTemplateColumns: '12px minmax(90px, 1fr) auto', gap: 10, alignItems: 'center' }}>
+            <div style={{ width: 12, height: 12, background: item.fill, borderRadius: 4 }} />
+            <div style={{ fontSize: 12, color: '#0B2540', fontWeight: 700, textTransform: 'capitalize' }}>{item.label || '—'}</div>
+            <div style={{ fontSize: 12, color: '#415274', fontWeight: 700 }}>{Math.round(item.value || 0).toLocaleString()}</div>
           </div>
         ))}
       </div>

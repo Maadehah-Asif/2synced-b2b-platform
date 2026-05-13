@@ -10,6 +10,7 @@ function required(name: string): string {
 export const ENV = {
   NODE_ENV: process.env.NODE_ENV || "development",
   PORT: parseInt(process.env.PORT || "4000", 10),
+  BODY_LIMIT: process.env.BODY_LIMIT || "25mb",
   MONGO_URI: required("MONGO_URI"),
   DB_NAME: required("DB_NAME"),
   JWT_SECRET: required("JWT_SECRET"),

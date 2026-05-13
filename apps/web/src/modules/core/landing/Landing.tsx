@@ -79,17 +79,6 @@ function HeroFull() {
   );
 }
 
-const primaryBtn: React.CSSProperties = {
-  background: '#0f4258',
-  color: '#fefefe',
-  border: 'none',
-  borderRadius: 10,
-  padding: '12px 16px',
-  fontWeight: 700,
-  cursor: 'pointer',
-  boxShadow: '0 10px 30px rgba(15,66,88,0.3)',
-};
-
 const ghostBtn: React.CSSProperties = {
   background: '#ffffff',
   color: '#0f4258',

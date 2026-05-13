@@ -431,13 +431,13 @@ export default function Upload(){
   return (
     <Layout>
       <div className="p-20 m01-upload-page">
+        <div className="m01-upload-toprow">
+          <ModuleBackButton toSuffix="" />
+        </div>
         <div className="m01-upload-header">
           <div className="m01-upload-header-row">
             <div className="m01-upload-header-copy">
               <div className="m01-upload-kicker">Lead Input</div>
-              <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <ModuleBackButton toSuffix="" />
-              </div>
               <h2 style={{ margin: 0 }}>Module 01 Uploads</h2>
               <p className="m01-upload-subtitle">
                 Add source CSV files, review active upload batches, and prepare lead data for preview,
@@ -563,7 +563,7 @@ export default function Upload(){
               <div><strong>Uploaded by:</strong> {detailsItem.uploadedBy?.fullName || detailsItem.uploadedBy?.email || 'Unknown'}</div>
               <div><strong>Workspace:</strong> {detailsItem.workspace}</div>
               <div><strong>Created at:</strong> {new Date(detailsItem.createdAt).toLocaleString()}</div>
-              <div className="mt-12"><button type="button" onClick={() => setDetailsItem(null)}>Close</button></div>
+              <div className="mt-12"><button type="button" className="btn-outline" onClick={() => setDetailsItem(null)}>Close</button></div>
             </div>
           </div>
         )}
@@ -642,7 +642,7 @@ export default function Upload(){
                       ))}
                     </div>
                     <div style={{ marginTop: 10 }}>
-                      <button disabled={!matchingKeysCompatible()} onClick={() => setStep(2)}>Next→</button>
+                      <button type="button" className="btn-primary" disabled={!matchingKeysCompatible()} onClick={() => setStep(2)}>Next</button>
                     </div>
                   </div>
                 )}
@@ -696,10 +696,10 @@ export default function Upload(){
                         <div style={{ color: 'red', marginBottom: 6 }}>Map all required merged columns (e.g. {Array.from(REQUIRED_TARGETS).join(', ')}) exactly once.</div>
                       )}
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <button onClick={() => setStep(1)}>← Back</button>
-                        <button onClick={submitMerge} disabled={!requiredTargetsSatisfied()}>Merge and save</button>
+                        <button type="button" className="btn-outline" onClick={() => setStep(1)}>Back</button>
+                        <button type="button" className="btn-primary" onClick={submitMerge} disabled={!requiredTargetsSatisfied()}>Merge and save</button>
                         {mergedResultId && (
-                          <button type="button" onClick={() => {
+                          <button type="button" className="btn-ghost" onClick={() => {
                             if (workspace) window.location.hash = `#/workspace/${workspace}/m01/merged?open=${mergedResultId}`;
                             else window.location.hash = `#/m01/merged`;
                           }}>Open / View merged CSVs</button>

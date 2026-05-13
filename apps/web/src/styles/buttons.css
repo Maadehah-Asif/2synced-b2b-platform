@@ -20,8 +20,18 @@
   --header-primary-fallback: #0f4258;
 }
 
-/* base button reset */
-.btn, button {
+/* base button reset for explicitly styled buttons */
+.btn,
+.btn-primary,
+.btn-secondary,
+.btn-outline,
+.btn-ghost,
+.btn-outline-primary,
+.btn-ghost-translucent,
+.button-primary,
+.auth-button,
+.auth-button-primary,
+.auth-button-secondary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -47,7 +57,7 @@
 .btn-primary:hover:not(:disabled) {
   filter: brightness(1.06);
   transform: translateY(-2px);
-  box-shadow: 0 20px 44px rgba(1,8,114,0.18);
+  box-shadow: 0 20px 44px rgba(15,66,88,0.22);
 }
 
 /* Outline variant - white fill, header-colored outline and text */
@@ -58,7 +68,7 @@
 }
 
 .btn-outline-primary:hover:not(:disabled) {
-  background: rgba(1,8,114,0.04);
+  background: rgba(15,66,88,0.04);
 }
 
 /* Ghost translucent used in headers */

@@ -42,8 +42,8 @@ export default function JoinWorkspace() {
       <div style={{ maxWidth: 680, margin: '0 auto' }}>
         <form onSubmit={onJoin} className="auth-card">
           <h2 className="auth-title">Join Workspace</h2>
-          <label>Workspace ID or Name</label>
-          <input className="auth-input" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required />
+          <label>Workspace ID or Share Code</label>
+          <input className="auth-input" value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder="Paste the workspace ID or share code" required />
           {message && <div className="auth-error">{message}</div>}
           <button className="btn-primary" disabled={loading}>{loading ? 'Joining...' : 'Join'}</button>
         </form>

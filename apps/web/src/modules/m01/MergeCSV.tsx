@@ -302,7 +302,7 @@ export default function MergeCSV() {
           <option value="">-- none --</option>
           {templates.map(t => <option key={t._id} value={t._id}>{t.name}</option>)}
         </select>
-        <button style={{ marginLeft: 8 }} onClick={handleSaveTemplate}>Save template</button>
+        <button type="button" className="btn-outline btn-sm" style={{ marginLeft: 8 }} onClick={handleSaveTemplate}>Save template</button>
       </div>
 
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
@@ -367,7 +367,7 @@ export default function MergeCSV() {
                   })}
                 </div>
                 <div style={{ marginTop: 10 }}>
-                  <button disabled={!allMatchingSelected || !matchingKeysCompatible()} onClick={() => setStep(2)}>Next →</button>
+                  <button type="button" className="btn-primary" disabled={!allMatchingSelected || !matchingKeysCompatible()} onClick={() => setStep(2)}>Next</button>
                 </div>
               </div>
             ) : (
@@ -412,8 +412,8 @@ export default function MergeCSV() {
                     <div style={{ color: 'red', marginBottom: 6 }}>Map all required merged columns (e.g. {Array.from(REQUIRED_TARGETS).join(', ')}) exactly once.</div>
                   )}
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => setStep(1)}>← Back</button>
-                    <button onClick={doMerge} disabled={loading || !requiredTargetsSatisfied()}>Merge & Download</button>
+                    <button type="button" className="btn-outline" onClick={() => setStep(1)}>Back</button>
+                    <button type="button" className="btn-primary" onClick={doMerge} disabled={loading || !requiredTargetsSatisfied()}>Merge & Download</button>
                   </div>
                 </div>
               </div>

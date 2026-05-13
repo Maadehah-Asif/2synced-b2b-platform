@@ -42,6 +42,8 @@ export default function WorkspaceMembers(){
   const [inviteRole, setInviteRole] = useState<string>("sales_team_member");
   const [inviteMessage, setInviteMessage] = useState<string|null>(null);
   const [selfUserId, setSelfUserId] = useState<string|null>(null);
+  const activeMembers = members.filter((member) => (member.status || '').toLowerCase() === 'active');
+  const pendingMembers = members.filter((member) => (member.status || '').toLowerCase() === 'pending');
 
   function friendlyError(msg: string): string {
     if (!msg) return 'Something went wrong. Please try again.';
@@ -86,6 +88,9 @@ export default function WorkspaceMembers(){
       const data = await res.json();
       if(!res.ok) throw new Error(data?.error||'Failed');
       setRequests(r => r.filter(x => x.id !== memberId));
+      const res2 = await fetch(`${API_URL}/workspaces/${workspaceId}/members`,{ headers: { Authorization: `Bearer ${token}` } });
+      const d2 = await res2.json();
+      if(res2.ok) setMembers(d2.members||[]);
     }catch(e:any){ setError(friendlyError(e.message)); }
   }
 
@@ -206,11 +211,11 @@ export default function WorkspaceMembers(){
                 >
                   <div style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.16)', borderRadius: 18, padding: '16px 18px' }}>
                     <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.72)' }}>Members</div>
-                    <div style={{ fontSize: 28, fontWeight: 800, marginTop: 8 }}>{members.length}</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, marginTop: 8 }}>{activeMembers.length}</div>
                   </div>
                   <div style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.16)', borderRadius: 18, padding: '16px 18px' }}>
                     <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.72)' }}>Pending</div>
-                    <div style={{ fontSize: 28, fontWeight: 800, marginTop: 8 }}>{requests.length}</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, marginTop: 8 }}>{pendingMembers.length}</div>
                   </div>
                 </div>
               </div>
@@ -241,7 +246,7 @@ export default function WorkspaceMembers(){
                       fontWeight: 700,
                     }}
                   >
-                    {requests.length} request{requests.length === 1 ? '' : 's'}
+                    {pendingMembers.length} request{pendingMembers.length === 1 ? '' : 's'}
                   </div>
                 </div>
 

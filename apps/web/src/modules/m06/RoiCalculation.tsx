@@ -1,6 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
+import { InsightPanel } from '../../components/InsightChrome';
+import BarChart from './BarChart';
+import PieChart from './PieChart';
+import Pagination from './components/Pagination';
 import './module6.css';
 import { useWorkspaceId } from '../../utils/workspace';
 
@@ -35,6 +39,17 @@ type RoiByRunResponse = {
   campaignCount?: number;
 };
 
+type RunApiItem = {
+  id?: string;
+  _id?: string;
+  runId?: string;
+  run_id?: string;
+  model_type?: string;
+  modelType?: string;
+  timestamp?: string;
+  status?: string;
+};
+
 export default function RoiCalculation() {
   const wid = useWorkspaceId({ redirectToWorkspaces: true });
   const workspaceId = wid || '';
@@ -44,6 +59,8 @@ export default function RoiCalculation() {
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RoiByRunResponse | null>(null);
+  const [campaignPage, setCampaignPage] = useState(1);
+  const campaignPageSize = 10;
 
   useEffect(() => {
     if (!wid) return;
@@ -62,7 +79,7 @@ export default function RoiCalculation() {
           setError(j?.message || j?.error || 'Failed to load runs');
           setRuns([]);
         } else {
-          const list: AttributionRun[] = (j.runs || []).map((r: any) => ({
+          const list: AttributionRun[] = (j.runs || []).map((r: RunApiItem) => ({
             id: r.id || r._id || r.runId || '',
             run_id: r.run_id || r.id || '',
             model_type: r.model_type || r.modelType || 'unknown',
@@ -99,6 +116,7 @@ export default function RoiCalculation() {
         setError(j?.message || j?.error || 'Failed to calculate ROI for run');
       } else {
         setResult(j as RoiByRunResponse);
+        setCampaignPage(1);
       }
     } catch {
       setError('Network error while calculating ROI');
@@ -118,6 +136,34 @@ export default function RoiCalculation() {
   const pct = (v: number | null | undefined) =>
     v === null || v === undefined ? '—' : `${(Math.round(v * 100) / 100).toLocaleString()}%`;
 
+  const topCampaignChart = useMemo(
+    () =>
+      (result?.campaigns || [])
+        .slice()
+        .sort((a, b) => (b.attributed || 0) - (a.attributed || 0))
+        .slice(0, 6)
+        .map((campaign) => ({
+          label: (campaign.name || campaign.campaign_id).slice(0, 14),
+          value: campaign.attributed || 0,
+        })),
+    [result]
+  );
+
+  const channelMix = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const campaign of result?.campaigns || []) {
+      const key = campaign.channel || 'other';
+      totals.set(key, (totals.get(key) || 0) + (campaign.attributed || 0));
+    }
+    return Array.from(totals.entries()).map(([label, value]) => ({ label, value }));
+  }, [result]);
+
+  const paginatedCampaigns = useMemo(() => {
+    const rows = result?.campaigns || [];
+    const start = (campaignPage - 1) * campaignPageSize;
+    return rows.slice(start, start + campaignPageSize);
+  }, [campaignPage, result]);
+
   if (!workspaceId) {
     return (
       <Layout>
@@ -131,9 +177,8 @@ export default function RoiCalculation() {
   return (
     <Layout>
       <main className="page-root m06-page">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
           <ModuleBackButton toSuffix="/m06" />
-          <h2 style={{ marginTop: 16, marginBottom: 0 }}>Module 6</h2>
         </div>
 
         <section className="m06-hero">
@@ -146,7 +191,7 @@ export default function RoiCalculation() {
           </div>
         </section>
 
-        <section className="m06-panel">
+        <section className="m06-panel" style={{ paddingBottom: 18 }}>
           <div className="m06-toolbar">
             <div>
               <div className="m06-section-label">Step 1</div>
@@ -164,7 +209,7 @@ export default function RoiCalculation() {
               No successful attribution runs found. Run attribution first from the allocation area.
             </div>
           ) : (
-            <div className="m06-filter-grid" style={{ marginTop: 16 }}>
+            <div className="m06-filter-grid" style={{ marginTop: 16, alignItems: 'end' }}>
               <label className="label" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span>Attribution run</span>
                 <select value={selectedRunId} onChange={e => setSelectedRunId(e.target.value)}>
@@ -222,6 +267,16 @@ export default function RoiCalculation() {
               )}
             </section>
 
+            <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 18, marginTop: 18 }}>
+              <InsightPanel eyebrow="Top return" title="Best-attributed campaigns">
+                <BarChart data={topCampaignChart} height={220} valueFormatter={(value) => tr(value)} />
+              </InsightPanel>
+
+              <InsightPanel eyebrow="Channel mix" title="Attributed revenue by channel" soft>
+                <PieChart data={channelMix} size={170} />
+              </InsightPanel>
+            </section>
+
             <section className="m06-panel">
               <div className="m06-toolbar">
                 <div>
@@ -249,7 +304,7 @@ export default function RoiCalculation() {
                     </tr>
                   </thead>
                   <tbody>
-                    {result.campaigns.map(c => (
+                    {paginatedCampaigns.map(c => (
                       <tr key={c.campaign_id}>
                         <td>{c.name || c.campaign_id}</td>
                         <td>{c.channel || '—'}</td>
@@ -261,6 +316,17 @@ export default function RoiCalculation() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 12, color: '#5B6C8B' }}>
+                  Showing {(campaignPage - 1) * campaignPageSize + 1} to {Math.min(campaignPage * campaignPageSize, result.campaigns.length)} of {result.campaigns.length} campaigns.
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <button type="button" className="btn-ghost btn-sm" disabled={campaignPage <= 1} onClick={() => setCampaignPage((value) => Math.max(1, value - 1))}>Prev</button>
+                  <Pagination page={campaignPage} total={result.campaigns.length} limit={campaignPageSize} onPage={setCampaignPage} />
+                  <button type="button" className="btn-ghost btn-sm" disabled={campaignPage * campaignPageSize >= result.campaigns.length} onClick={() => setCampaignPage((value) => value + 1)}>Next</button>
+                </div>
               </div>
             </section>
 

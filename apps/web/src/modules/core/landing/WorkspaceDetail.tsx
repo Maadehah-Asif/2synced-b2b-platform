@@ -11,6 +11,16 @@ const palette = {
   accent: "#0f4258",
 };
 
+const moduleDisplayNames: Record<string, string> = {
+  M01: "Lead Quality & Scoring",
+  M02: "Intent Signals",
+  M03: "Conversation AI",
+  M05: "Sales & Marketing Alignment",
+  M06: "Revenue Insight",
+  M07: "Funnel Insight",
+  M09: "Campaign Performance Optimization",
+};
+
 function useParamsHash() {
   const hash = window.location.hash || "";
   const m = hash.match(/#\/workspace\/(.+)/);
@@ -41,7 +51,7 @@ const dataHubCards: HubCard[] = [
     module: "M01",
     title: "Lead Input",
     desc: "Upload source lead files and prepare raw records used by scoring workflows.",
-    cta: "Go to Data",
+    cta: "Manage",
     kind: "Input",
     entity: "Leads",
     usedIn: ["M01"],
@@ -51,7 +61,7 @@ const dataHubCards: HubCard[] = [
     module: "M01",
     title: "Merged CSVs",
     desc: "Review merged lead datasets before turning them into module 1 lead records.",
-    cta: "Open",
+    cta: "Manage",
     kind: "View",
     entity: "Leads",
     usedIn: ["M01"],
@@ -61,7 +71,7 @@ const dataHubCards: HubCard[] = [
     module: "M02",
     title: "Intent Input Data",
     desc: "Upload and map behavior or intent-related records used by prioritization flows.",
-    cta: "Go to Data",
+    cta: "Manage",
     kind: "Input",
     entity: "Intent Data",
     usedIn: ["M02"],
@@ -81,7 +91,7 @@ const dataHubCards: HubCard[] = [
     module: "M02",
     title: "Intent Upload",
     desc: "Open the direct upload screen for intent-source files when you do not need the wizard flow.",
-    cta: "Open",
+    cta: "Manage",
     kind: "Input",
     entity: "Intent Data",
     usedIn: ["M02"],
@@ -91,7 +101,7 @@ const dataHubCards: HubCard[] = [
     module: "M02",
     title: "Merged CSVs",
     desc: "Review merged datasets used to create module 2 lead and intent-ready records.",
-    cta: "Open",
+    cta: "Manage",
     kind: "View",
     entity: "Intent Data",
     usedIn: ["M02"],
@@ -121,7 +131,7 @@ const dataHubCards: HubCard[] = [
     module: "M06",
     title: "Lead Data",
     desc: "Open the shared lead table used by both attribution and funnel workflows.",
-    cta: "Open",
+    cta: "Manage",
     kind: "View",
     entity: "Leads",
     usedIn: ["M06", "M07"],
@@ -160,7 +170,7 @@ const dataHubCards: HubCard[] = [
   {
     module: "M05",
     title: "Web Engagement Data",
-    desc: "Upload, preview, archive, and manage web engagement CSV datasets used by the Module 5 alignment workspace.",
+    desc: "Upload, preview, archive, and manage web engagement CSV datasets used by the Sales & Marketing Alignment workspace.",
     cta: "Manage",
     kind: "Input",
     entity: "Web Engagement",
@@ -229,7 +239,6 @@ export default function WorkspaceDetail() {
   const [memberCount, setMemberCount] = useState<number>(0);
   const [entityFilter, setEntityFilter] = useState<string>("All data");
   const [moduleFilter, setModuleFilter] = useState<string>("All modules");
-  const [actionFilter, setActionFilter] = useState<string>("All actions");
 
   useEffect(() => {
     (async () => {
@@ -277,18 +286,22 @@ export default function WorkspaceDetail() {
     window.location.hash = path;
   }
 
+  function openMembers() {
+    if (!id) return;
+    window.location.hash = `#/workspace/${id}/members`;
+  }
+
   const entityOptions = ["All data", ...Array.from(new Set(dataHubCards.map((card) => card.entity)))];
   const moduleOptions = [
     "All modules",
     ...Array.from(new Set([...dataHubCards.flatMap((card) => card.usedIn), "M03", "M05", "M09"]))
-      .sort((a, b) => Number(a.replace(/\D/g, "")) - Number(b.replace(/\D/g, ""))),
+      .sort((a, b) => Number(a.replace(/\D/g, "")) - Number(b.replace(/\D/g, "")))
+      .map((module) => moduleDisplayNames[module] || module),
   ];
-  const actionOptions = ["All actions", ...Array.from(new Set(dataHubCards.map((card) => card.kind).filter(Boolean) as string[]))];
 
   const visibleHubCards = dataHubCards.filter((card) => {
     if (entityFilter !== "All data" && card.entity !== entityFilter) return false;
-    if (moduleFilter !== "All modules" && !card.usedIn.includes(moduleFilter)) return false;
-    if (actionFilter !== "All actions" && card.kind !== actionFilter) return false;
+    if (moduleFilter !== "All modules" && !card.usedIn.some((module) => moduleDisplayNames[module] === moduleFilter)) return false;
     return true;
   });
 
@@ -393,6 +406,24 @@ export default function WorkspaceDetail() {
                 <div style={{ fontSize: 30, fontWeight: 900, color: palette.ink, marginTop: 8 }}>
                   {loading ? "..." : memberCount}
                 </div>
+                <button
+                  type="button"
+                  onClick={openMembers}
+                  style={{
+                    marginTop: 12,
+                    border: "1px solid rgba(15,66,88,0.12)",
+                    background: "#ffffff",
+                    color: palette.accent,
+                    borderRadius: 999,
+                    padding: "8px 12px",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    letterSpacing: "0.04em",
+                    boxShadow: "0 8px 18px rgba(13,30,60,0.06)",
+                  }}
+                >
+                  Manage members
+                </button>
               </div>
               <div
                 style={{
@@ -473,7 +504,7 @@ export default function WorkspaceDetail() {
                   style={{
                     marginTop: 18,
                     display: "grid",
-                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                     gap: 10,
                   }}
                 >
@@ -530,33 +561,6 @@ export default function WorkspaceDetail() {
                       ))}
                     </select>
                   </label>
-
-                  <label style={{ display: "grid", gap: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.72)" }}>
-                      Action
-                    </span>
-                    <select
-                      value={actionFilter}
-                      onChange={(e) => setActionFilter(e.target.value)}
-                      style={{
-                        width: "100%",
-                        borderRadius: 12,
-                        border: "1px solid rgba(255,255,255,0.16)",
-                        background: "rgba(255,255,255,0.12)",
-                        color: "#fff",
-                        padding: "10px 12px",
-                        fontSize: 13,
-                        fontWeight: 700,
-                        outline: "none",
-                      }}
-                    >
-                      {actionOptions.map((option) => (
-                        <option key={option} value={option} style={{ color: palette.ink }}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
                 </div>
               </div>
 
@@ -583,26 +587,16 @@ export default function WorkspaceDetail() {
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        <div style={{ display: "inline-flex", alignItems: "center", padding: "5px 10px", borderRadius: 999, background: "rgba(15,66,88,0.10)", color: palette.accent, fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                          {card.entity}
-                        </div>
-                        {card.usedIn.map((module) => (
-                          <div key={`${card.title}-${module}`} style={{ display: "inline-flex", alignItems: "center", padding: "5px 9px", borderRadius: 999, background: "rgba(72,177,217,0.10)", color: palette.slate, fontSize: 11, fontWeight: 700 }}>
-                            {module}
-                          </div>
-                        ))}
+                      <div style={{ display: "inline-flex", alignItems: "center", padding: "5px 10px", borderRadius: 999, background: "rgba(15,66,88,0.10)", color: palette.accent, fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                        {card.entity}
                       </div>
-                      {card.kind && (
-                        <div style={{ display: "inline-flex", alignItems: "center", padding: "5px 9px", borderRadius: 999, background: "rgba(72,177,217,0.10)", color: palette.slate, fontSize: 11, fontWeight: 700 }}>
-                          {card.kind}
-                        </div>
-                      )}
                     </div>
                     <div style={{ fontSize: 18, fontWeight: 900, color: palette.ink, lineHeight: 1.3 }}>{card.title}</div>
                     <div style={{ fontSize: 13, color: palette.slate, lineHeight: 1.7, flex: 1 }}>{card.desc}</div>
                     <div style={{ paddingTop: 8, borderTop: "1px solid rgba(15,66,88,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                      <div style={{ fontSize: 12, color: palette.slate, fontWeight: 700 }}>Used in {card.usedIn.join(", ")}</div>
+                      <div style={{ fontSize: 12, color: palette.slate, fontWeight: 700 }}>
+                        Used in {card.usedIn.map((module) => moduleDisplayNames[module] || module).join(", ")}
+                      </div>
                       <button
                         className="btn-primary"
                         style={{ padding: "9px 13px", borderRadius: 12, fontWeight: 800 }}
@@ -689,24 +683,6 @@ export default function WorkspaceDetail() {
                     <div style={{ height: 6, background: "linear-gradient(90deg, rgba(15,66,88,0.95) 0%, rgba(72,177,217,0.82) 100%)" }} />
                     <div style={{ height: 150, position: "relative" }}>
                       <img alt="insight visual" src={card.image} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      <div
-                        style={{
-                          position: "absolute",
-                          left: 14,
-                          bottom: 12,
-                          padding: "6px 10px",
-                          borderRadius: 999,
-                          background: "rgba(255,255,255,0.92)",
-                          border: "1px solid rgba(15,66,88,0.10)",
-                          color: "var(--header-secondary)",
-                          fontSize: 11,
-                          fontWeight: 800,
-                          letterSpacing: "0.04em",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        {card.module}
-                      </div>
                     </div>
 
                     <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12, flex: 1, background: "linear-gradient(180deg, #ffffff 0%, #fdfefe 100%)" }}>

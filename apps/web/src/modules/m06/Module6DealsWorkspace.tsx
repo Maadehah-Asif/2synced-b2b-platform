@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ChangeEvent } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import Autocomplete from '../../components/Autocomplete';
-import { useWorkspaceId } from '../../utils/workspace';
+import { CSV_UPLOAD_LIMIT_BYTES, CSV_UPLOAD_LIMIT_LABEL } from '../../utils/csvUpload';
+import ImportPreviewStep from './components/ImportPreviewStep';
 import {
   archiveDeal,
   createDeal,
@@ -12,89 +12,147 @@ import {
   listDeals,
   searchLeads,
   updateDeal,
+  validateDealsCSV,
+  type Deal,
+  type DealImportSummary,
+  type DealValidationResult,
 } from './services/deals';
-import type { Deal } from './services/deals';
+import {
+  DEAL_CURRENCY_OPTIONS,
+  DEAL_HEADER_ALIASES,
+  DEAL_REQUIRED_FIELDS,
+  defaultDealMapping,
+  emptyDealForm,
+  type DealFieldKey,
+  type DealFormState,
+  type DealMapping,
+} from './dealInputSchema';
 import './module6.css';
 
-const MAX_PREVIEW_ROWS = 200;
-const PREVIEW_PAGE_SIZE = 12;
-
 type DealTab = 'list' | 'form' | 'csv';
+type CsvRow = { rowNumber: number; original: Record<string, string> };
 
 function Toast({ message, type, onClose }:{ message:string, type:'success'|'error', onClose:()=>void }){
   return (
-    <div style={{ position:'fixed', right:16, bottom:16, background:type==='success'?'#0a7':'#c33', color:'#fff', padding:'10px 14px', borderRadius:8 }}>
+    <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 10, background: type === 'success' ? '#e9fff3' : '#fff1f1', color: type === 'success' ? '#0a7' : '#a22', border: `1px solid ${type === 'success' ? '#a6e7c3' : '#f3b6b6'}` }}>
       <div>{message}</div>
-      <button className="btn-ghost" style={{ marginTop:6, background:'#fff', color:'#333' }} onClick={onClose}>Close</button>
+      <button className="btn-ghost" style={{ marginTop: 8 }} onClick={onClose}>Dismiss</button>
     </div>
   );
 }
 
-function formatLeadOption(lead: any) {
-  const name = String(lead?.name || lead?.First_Name || '').trim();
+function parseCsvText(text: string): string[][] {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentValue = '';
+  let inQuotes = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+    if (char === '"') {
+      if (inQuotes && next === '"') { currentValue += '"'; index += 1; }
+      else inQuotes = !inQuotes;
+      continue;
+    }
+    if (char === ',' && !inQuotes) {
+      currentRow.push(currentValue.trim());
+      currentValue = '';
+      continue;
+    }
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') index += 1;
+      currentRow.push(currentValue.trim());
+      rows.push(currentRow);
+      currentRow = [];
+      currentValue = '';
+      continue;
+    }
+    currentValue += char;
+  }
+  if (currentValue.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentValue.trim());
+    rows.push(currentRow);
+  }
+  return rows.filter((row) => row.some((cell) => cell.trim().length > 0));
+}
+
+function normalizeHeader(text: string) {
+  return text.toLowerCase().replace(/[\s_-]+/g, '').replace(/s$/, '');
+}
+
+function autoMapHeaders(headers: string[]): DealMapping {
+  const mapping = defaultDealMapping();
+  const used = new Set<string>();
+  (Object.keys(mapping) as DealFieldKey[]).forEach((field) => {
+    const aliases = DEAL_HEADER_ALIASES[field].map(normalizeHeader);
+    const match = headers.find((header) => !used.has(header) && aliases.includes(normalizeHeader(header)));
+    mapping[field] = match || '';
+    if (match) used.add(match);
+  });
+  return mapping;
+}
+
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function formatLeadDisplay(lead: any) {
+  const name = String(lead?.full_name || lead?.name || '').trim();
   const email = String(lead?.email || '').trim();
   const leadId = String(lead?.lead_id || '').trim();
-  return [name || (leadId ? `#${leadId}` : ''), email].filter(Boolean).join(' • ') || 'Unknown lead';
+  return [leadId ? `#${leadId}` : '', name, email].filter(Boolean).join(' | ') || 'Unknown lead';
+}
+
+function formatLeadOption(lead: any) {
+  const name = String(lead?.full_name || lead?.name || '').trim();
+  const email = String(lead?.email || '').trim();
+  const leadId = String(lead?.lead_id || '').trim();
+  return [leadId ? `#${leadId}` : '', name, email].filter(Boolean).join(' • ') || 'Unknown lead';
 }
 
 export default function Module6DealsWorkspace(){
-  const workspaceId = useWorkspaceId({ redirectToWorkspaces: true });
   const [activeTab, setActiveTab] = useState<DealTab>('list');
   const [toast, setToast] = useState<{msg:string,type:'success'|'error'}|null>(null);
-
   const [leadQuery, setLeadQuery] = useState('');
-  const [leadId, setLeadId] = useState<string>('');
-  const [dealId, setDealId] = useState('');
-  const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState('USD');
-  const [closedWon, setClosedWon] = useState(true);
-  const [closedAt, setClosedAt] = useState('');
-  const [stage, setStage] = useState('Closed Won');
-  const [notes, setNotes] = useState('');
-  const [formErrors, setFormErrors] = useState<Record<string,string>>({});
-
   const [filterLeadQuery, setFilterLeadQuery] = useState('');
-  const [filterLeadId, setFilterLeadId] = useState<string>('');
+  const [form, setForm] = useState<DealFormState>(emptyDealForm);
+  const [formErrors, setFormErrors] = useState<Partial<Record<DealFieldKey, string>>>({});
+  const [saving, setSaving] = useState(false);
+  const [filterLeadId, setFilterLeadId] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [status, setStatus] = useState('closed_won');
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
-  const [filterStage, setFilterStage] = useState('');
   const [includeArchived, setIncludeArchived] = useState(false);
   const [rows, setRows] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string|undefined>(undefined);
   const [editing, setEditing] = useState<string|null>(null);
-  const [editAmount, setEditAmount] = useState('');
-  const [editClosedWon, setEditClosedWon] = useState('true');
-  const [editClosedAt, setEditClosedAt] = useState('');
-  const [editStage, setEditStage] = useState('');
-  const [editNotes, setEditNotes] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
+  const [editState, setEditState] = useState({ revenue: '', closed_won: 'true', closed_at: '', currency: 'USD' });
 
+  const [csvFileName, setCsvFileName] = useState('');
   const [csvText, setCsvText] = useState('');
-  const [headersPreview, setHeadersPreview] = useState<string[]>([]);
-  const [rowsPreview, setRowsPreview] = useState<string[][]>([]);
-  const [totalPreviewRows, setTotalPreviewRows] = useState(0);
-  const [previewLimited, setPreviewLimited] = useState(false);
-  const [blankRowCount, setBlankRowCount] = useState(0);
-  const [previewPage, setPreviewPage] = useState(0);
-  const [headerError, setHeaderError] = useState<string | null>(null);
-  const [mapDealId, setMapDealId] = useState('');
-  const [mapLead, setMapLead] = useState('');
-  const [mapAmount, setMapAmount] = useState('');
-  const [mapCurrency, setMapCurrency] = useState('');
-  const [mapClosedWon, setMapClosedWon] = useState('');
-  const [mapClosedAt, setMapClosedAt] = useState('');
-  const [mapStage, setMapStage] = useState('');
-  const [mapNotes, setMapNotes] = useState('');
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
+  const [csvFileError, setCsvFileError] = useState<string | null>(null);
+  const [mapping, setMapping] = useState<DealMapping>(defaultDealMapping);
+  const [mappingErrors, setMappingErrors] = useState<string[]>([]);
   const [startRow, setStartRow] = useState(1);
-  const [endRow, setEndRow] = useState<number|undefined>(undefined);
-  const [mappingConfirmed, setMappingConfirmed] = useState(false);
+  const [endRow, setEndRow] = useState<number|''>('');
+  const [rangeError, setRangeError] = useState<string | null>(null);
   const [duplicatePolicy, setDuplicatePolicy] = useState<'skip'|'allow'>('skip');
-  const [uploadSummary, setUploadSummary] = useState<any|null>(null);
+  const [validationResult, setValidationResult] = useState<DealValidationResult | null>(null);
+  const [uploadSummary, setUploadSummary] = useState<DealImportSummary|null>(null);
+  const [validatingCsv, setValidatingCsv] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     const now = new Date();
@@ -102,326 +160,249 @@ export default function Module6DealsWorkspace(){
     past.setDate(past.getDate() - 90);
     setFrom(past.toISOString().slice(0,10));
     setTo(now.toISOString().slice(0,10));
-    setStatus('closed_won');
   }, []);
 
-  function validateForm(){
-    const errs: Record<string,string> = {};
-    if(!leadId) errs.lead = 'Lead required';
-    const amt = Number(amount);
-    if(Number.isNaN(amt) || amt <= 0) errs.amount = 'Amount must be a positive number';
-    if(closedWon && !closedAt) errs.closed_at = 'Closed date required';
-    setFormErrors(errs);
-    return Object.keys(errs).length === 0;
+  function validateForm(nextForm: DealFormState) {
+    const errors: Partial<Record<DealFieldKey, string>> = {};
+    if (!nextForm.deal_id.trim()) errors.deal_id = 'Deal ID is required.';
+    if (!nextForm.lead_id.trim()) errors.lead_id = 'Lead is required.';
+    if (!nextForm.revenue.trim()) errors.revenue = 'Revenue is required.';
+    else if (Number.isNaN(Number(nextForm.revenue)) || Number(nextForm.revenue) < 0) errors.revenue = 'Revenue must be 0 or higher.';
+    if (!DEAL_CURRENCY_OPTIONS.includes(nextForm.currency as typeof DEAL_CURRENCY_OPTIONS[number])) errors.currency = 'Select a valid currency.';
+    if (!['true','false'].includes(nextForm.closed_won)) errors.closed_won = 'Closed won must be true or false.';
+    if (nextForm.closed_won === 'true' && !nextForm.closed_at.trim()) errors.closed_at = 'Closed at is required when closed won is true.';
+    if (nextForm.closed_at && Number.isNaN(new Date(nextForm.closed_at).getTime())) errors.closed_at = 'Closed at must be a valid datetime.';
+    return errors;
   }
 
-  async function submitForm(){
-    if(!workspaceId) { setToast({ msg:'Open a workspace first', type:'error'}); return; }
-    if(!validateForm()) return;
-    const res = await createDeal({
-      lead_id: leadId,
-      deal_id: dealId || undefined,
-      amount: Number(amount),
-      currency,
-      closed_won: closedWon,
-      closed_at: closedAt || undefined,
-      stage,
-      notes
+  function validateMappingState(nextMapping: DealMapping) {
+    const issues: string[] = [];
+    const counts = new Map<string, number>();
+    Object.values(nextMapping).forEach((value) => {
+      if (!value) return;
+      counts.set(value, (counts.get(value) || 0) + 1);
     });
-    if((res as any).error) setToast({ msg:'Error creating deal', type:'error'});
-    else {
-      setToast({ msg:'Deal created', type:'success'});
-      setLeadQuery('');
-      setLeadId('');
-      setDealId('');
-      setAmount('');
-      setClosedAt('');
-      setNotes('');
-      setActiveTab('list');
-      load();
-    }
+    counts.forEach((count, header) => { if (count > 1) issues.push(`CSV column "${header}" is mapped more than once.`); });
+    DEAL_REQUIRED_FIELDS.forEach((field) => { if (!nextMapping[field]) issues.push(`Required field "${field}" is not mapped.`); });
+    return issues;
+  }
+
+  function validateRangeState(totalRows: number, start: number, end: number | '') {
+    if (!totalRows) return 'Upload a CSV file first.';
+    if (!Number.isInteger(start) || start < 1) return 'Start row must be 1 or greater.';
+    const safeEnd = end === '' ? totalRows : Number(end);
+    if (!Number.isInteger(safeEnd)) return 'End row must be a whole number.';
+    if (safeEnd < start) return 'End row cannot be earlier than start row.';
+    if (safeEnd > totalRows) return `End row cannot exceed ${totalRows}.`;
+    return null;
+  }
+
+  function setFormValue(key: DealFieldKey, value: string) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setFormErrors((prev) => ({ ...prev, [key]: undefined }));
+  }
+
+  function setMappingValue(key: DealFieldKey, value: string) {
+    const next = { ...mapping, [key]: value };
+    setMapping(next);
+    setMappingErrors(validateMappingState(next));
+    setValidationResult(null);
+    setUploadSummary(null);
+    setShowPreview(false);
   }
 
   async function load(){
-    if(!workspaceId){
-      setRows([]);
-      return;
-    }
     setLoading(true);
     setLoadError(undefined);
-    const params: any = { from, to, status, stage: filterStage, includeArchived };
-    if(filterLeadId) params.leadId = filterLeadId;
-    if(minAmount) params.minAmount = Number(minAmount);
-    if(maxAmount) params.maxAmount = Number(maxAmount);
     try {
-      const data = await listDeals(params);
+      const data = await listDeals({
+        leadId: filterLeadId || undefined,
+        from,
+        to,
+        status,
+        minAmount: minAmount ? Number(minAmount) : undefined,
+        maxAmount: maxAmount ? Number(maxAmount) : undefined,
+        includeArchived,
+      });
       setRows(Array.isArray(data) ? data : []);
-    } catch(e:any){
-      setLoadError(e?.message || 'Failed to load deals');
+    } catch (error:any) {
+      setLoadError(error?.message || 'Failed to load deals');
     }
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, [filterLeadId, from, to, status, minAmount, maxAmount, filterStage, includeArchived, workspaceId]);
+  useEffect(() => { void load(); }, [filterLeadId, from, to, status, minAmount, maxAmount, includeArchived]);
 
-  function startEdit(r: Deal){
-    setEditing(r._id!);
-    setEditAmount(String(r.amount || ''));
-    setEditClosedWon(String(r.closed_won));
-    setEditClosedAt((r.closed_at || '').slice(0,16));
-    setEditStage(r.stage || '');
-    setEditNotes(r.notes || '');
-    setModalOpen(true);
+  async function submitForm() {
+    const errors = validateForm(form);
+    setFormErrors(errors);
+    if (Object.keys(errors).length > 0) { setToast({ msg:'Please fix the highlighted form errors.', type:'error' }); return; }
+    if (!window.confirm('Are you sure you want to save this record?')) return;
+    setSaving(true);
+    try {
+      await createDeal({
+        deal_id: form.deal_id.trim(),
+        lead_id: form.lead_id.trim(),
+        revenue: Number(form.revenue),
+        currency: form.currency,
+        closed_won: form.closed_won === 'true',
+        closed_at: form.closed_at || undefined,
+      });
+      setToast({ msg:'Deal record saved successfully.', type:'success' });
+      setForm(emptyDealForm());
+      setLeadQuery('');
+      setActiveTab('list');
+      await load();
+    } catch (error: unknown) {
+      setToast({ msg: error instanceof Error ? error.message : 'Failed to create deal.', type:'error' });
+    } finally {
+      setSaving(false);
+    }
   }
 
-  async function saveEdit(){
+  function startEdit(row: Deal) {
+    setEditing(row._id || null);
+    setEditState({
+      revenue: String(row.revenue || ''),
+      closed_won: String(row.closed_won),
+      closed_at: row.closed_at ? new Date(row.closed_at).toISOString().slice(0,16) : '',
+      currency: row.currency || 'USD',
+    });
+  }
+
+  async function saveEdit() {
     if(!editing) return;
-    const payload: any = {
-      amount: Number(editAmount),
-      closed_won: editClosedWon === 'true',
-      closed_at: editClosedAt || undefined,
-      stage: editStage || undefined,
-      notes: editNotes || undefined
-    };
-    const res = await updateDeal(editing, payload);
-    if((res as any).error) setToast({ msg:'Update failed', type:'error' });
-    else {
+    try {
+      await updateDeal(editing, {
+        revenue: Number(editState.revenue),
+        closed_won: editState.closed_won === 'true',
+        closed_at: editState.closed_at || undefined,
+        currency: editState.currency,
+      });
       setToast({ msg:'Updated', type:'success' });
       setEditing(null);
-      setModalOpen(false);
-      load();
+      await load();
+    } catch (error: unknown) {
+      setToast({ msg: error instanceof Error ? error.message : 'Update failed', type:'error' });
     }
   }
 
-  async function doArchive(id:string){
-    if(!confirm('This will archive the deal. It will stay available for historical reporting. Proceed?')) return;
-    const res = await archiveDeal(id);
-    if((res as any).error) setToast({ msg:'Archive failed', type:'error' });
-    else {
-      setToast({ msg:'Archived', type:'success' });
-      load();
-    }
-  }
-
-  async function doDelete(id:string){
-    const deal = rows.find(r => r._id === id);
-    const extId = deal?.deal_id || '';
-    const msg = extId ? `Type the Deal ID (${extId}) to confirm permanent deletion:` : 'Type DELETE to confirm permanent deletion:';
-    const input = prompt(msg, '');
-    if(extId){
-      if(input !== extId) return;
-    } else if((input || '').toUpperCase() !== 'DELETE') {
-      return;
-    }
-    const res = await deleteDealPermanent(id);
-    if((res as any).error) setToast({ msg:'Delete failed', type:'error' });
-    else {
-      setToast({ msg:'Deleted', type:'success' });
-      load();
-    }
-  }
-
-  function resetCsvState(){
+  function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const input = event.target;
+    const file = input.files?.[0];
+    setCsvFileName('');
     setCsvText('');
-    setHeadersPreview([]);
-    setRowsPreview([]);
-    setTotalPreviewRows(0);
-    setPreviewLimited(false);
-    setBlankRowCount(0);
-    setPreviewPage(0);
-    setHeaderError(null);
-    setMapDealId('');
-    setMapLead('');
-    setMapAmount('');
-    setMapCurrency('');
-    setMapClosedWon('');
-    setMapClosedAt('');
-    setMapStage('');
-    setMapNotes('');
+    setCsvHeaders([]);
+    setCsvRows([]);
+    setCsvFileError(null);
+    setMapping(defaultDealMapping());
+    setMappingErrors([]);
     setStartRow(1);
-    setEndRow(undefined);
+    setEndRow('');
+    setValidationResult(null);
     setUploadSummary(null);
-    setMappingConfirmed(false);
-    setImporting(false);
-  }
-
-  function onFileChange(e: ChangeEvent<HTMLInputElement>){
-    const input = e.target;
-    const f = input.files && input.files[0];
-    resetCsvState();
-    if(!f){
-      input.value = '';
-      return;
-    }
-    if(!f.name.toLowerCase().endsWith('.csv')){
-      setToast({ msg: 'Please select a .csv file', type: 'error' });
-      input.value = '';
-      return;
-    }
-    if(f.size > 5 * 1024 * 1024){
-      setToast({ msg: 'File too large (max 5MB)', type: 'error' });
-      input.value = '';
-      return;
-    }
+    setShowPreview(false);
+    if (!file) { input.value = ''; return; }
+    if (!file.name.toLowerCase().endsWith('.csv')) { setCsvFileError('Only CSV files are supported.'); input.value = ''; return; }
+    if (file.size <= 0) { setCsvFileError('Uploaded file is empty.'); input.value = ''; return; }
+    if (file.size > CSV_UPLOAD_LIMIT_BYTES) { setCsvFileError(`File exceeds the ${CSV_UPLOAD_LIMIT_LABEL} size limit.`); input.value = ''; return; }
     const reader = new FileReader();
     reader.onload = () => {
-      const text = String(reader.result || '');
-      setCsvText(text);
-      const normalized = text.replace(/\r\n?/g, '\n');
-      const lines = normalized.split('\n');
-      const headerLine = lines[0] || '';
-      const cols = headerLine.split(',').map(s=>s.trim());
-      setHeadersPreview(cols);
-      const dataLines = lines.slice(1);
-      const nonBlankLines = dataLines.filter(line => line.trim().length > 0);
-      const limitedRows = nonBlankLines.slice(0, MAX_PREVIEW_ROWS).map(line => line.split(',').map(s=>s.trim()));
-      setRowsPreview(limitedRows);
-      setTotalPreviewRows(nonBlankLines.length);
-      setPreviewLimited(nonBlankLines.length > MAX_PREVIEW_ROWS);
-      setBlankRowCount(dataLines.length - nonBlankLines.length);
-      setPreviewPage(0);
-      const lowerCols = cols.map(c => c.toLowerCase());
-      const pickHeader = (current: string, candidates: string[], fallbackIndex?: number) => {
-        if(current && cols.includes(current)) return current;
-        for(const candidate of candidates){
-          const idx = lowerCols.indexOf(candidate);
-          if(idx !== -1) return cols[idx];
-        }
-        if(fallbackIndex !== undefined && cols[fallbackIndex]) return cols[fallbackIndex];
-        return '';
-      };
-      setMapDealId(prev => pickHeader(prev, ['deal_id','deal id']));
-      setMapLead(prev => pickHeader(prev, ['lead_id','lead email','lead','lead_email'], 0));
-      setMapAmount(prev => pickHeader(prev, ['amount','value','deal_amount'], 1));
-      setMapCurrency(prev => pickHeader(prev, ['currency','deal_currency']));
-      setMapClosedWon(prev => pickHeader(prev, ['closed_won','is_closed_won']));
-      setMapClosedAt(prev => pickHeader(prev, ['closed_at','close_date','date','closed at'], 2));
-      setMapStage(prev => pickHeader(prev, ['stage','deal_stage']));
-      setMapNotes(prev => pickHeader(prev, ['notes','description','details']));
-      setUploadSummary(null);
-      setMappingConfirmed(false);
-      if(cols.length < 2) setHeaderError('Could not detect valid headers. Ensure first row has column names.');
-      else setHeaderError(null);
+      try {
+        const text = String(reader.result || '');
+        const parsedRows = parseCsvText(text);
+        if (parsedRows.length < 2) { setCsvFileError('The uploaded file does not contain any data rows.'); return; }
+        const headers = parsedRows[0];
+        const dataRows = parsedRows.slice(1).map((row, rowIndex) => ({ rowNumber: rowIndex + 1, original: Object.fromEntries(headers.map((header, columnIndex) => [header, row[columnIndex] ?? ''])) }));
+        const nextMapping = autoMapHeaders(headers);
+        setCsvFileName(file.name);
+        setCsvText(text);
+        setCsvHeaders(headers);
+        setCsvRows(dataRows);
+        setMapping(nextMapping);
+        setMappingErrors(validateMappingState(nextMapping));
+        setStartRow(1);
+        setEndRow(dataRows.length);
+      } catch {
+        setCsvFileError('The uploaded file could not be parsed.');
+      }
     };
-    reader.onerror = () => {
-      resetCsvState();
-      setToast({ msg: 'Failed to read file', type: 'error' });
-    };
-    reader.readAsText(f);
+    reader.onerror = () => setCsvFileError('The uploaded file could not be read.');
+    reader.readAsText(file);
     input.value = '';
   }
 
-  const headerOptions = useMemo(() => headersPreview.map(value => ({ value, label: value })), [headersPreview]);
-
-  useEffect(() => {
-    setPreviewPage(prev => {
-      if(!rowsPreview.length) return 0;
-      const maxIndex = Math.max(0, Math.ceil(rowsPreview.length / PREVIEW_PAGE_SIZE) - 1);
-      return Math.min(prev, maxIndex);
-    });
-  }, [rowsPreview]);
-
-  const previewPageCount = rowsPreview.length ? Math.ceil(rowsPreview.length / PREVIEW_PAGE_SIZE) : 1;
-  const currentPreviewPage = rowsPreview.length ? Math.min(previewPage, previewPageCount - 1) : 0;
-  const previewPageRows = rowsPreview.slice(currentPreviewPage * PREVIEW_PAGE_SIZE, (currentPreviewPage * PREVIEW_PAGE_SIZE) + PREVIEW_PAGE_SIZE);
-  const previewStartIndex = rowsPreview.length ? (currentPreviewPage * PREVIEW_PAGE_SIZE) + 1 : 0;
-  const previewEndIndex = rowsPreview.length ? Math.min(rowsPreview.length, previewStartIndex + PREVIEW_PAGE_SIZE - 1) : 0;
-
-  const resolveHeader = (value: string | null | undefined) => {
-    if(!value) return null;
-    const exact = headersPreview.find(h => h === value);
-    if(exact) return exact;
-    const lower = value.toLowerCase();
-    const match = headersPreview.find(h => h.toLowerCase() === lower);
-    return match || null;
-  };
-
-  function verifyRequiredMappings(){
-    const missing: string[] = [];
-    if(!mapLead) missing.push('lead');
-    if(!mapAmount) missing.push('amount');
-    if(!mapClosedAt) missing.push('closed_at');
-    if(missing.length){
-      setToast({ msg:`Missing mappings: ${missing.join(', ')}`, type:'error' });
-      return null;
+  async function runCsvValidation() {
+    const nextMappingErrors = validateMappingState(mapping);
+    const nextRangeError = validateRangeState(csvRows.length, startRow, endRow);
+    setMappingErrors(nextMappingErrors);
+    setRangeError(nextRangeError);
+    if (!csvText.trim()) { setCsvFileError('Upload a CSV file first.'); return; }
+    if (nextMappingErrors.length > 0 || nextRangeError) { setToast({ msg:'Please fix the CSV mapping and row range errors first.', type:'error' }); return; }
+    setValidatingCsv(true);
+    try {
+      const result = await validateDealsCSV({
+        csv: csvText,
+        map: mapping,
+        startRow,
+        endRow: endRow === '' ? undefined : Number(endRow),
+        duplicatePolicy,
+      });
+      setValidationResult(result);
+      setUploadSummary(null);
+      setShowPreview(false);
+      setToast({ msg:`Validation finished. ${result.summary.validRows} valid rows and ${result.summary.invalidRows} invalid rows found.`, type:'success' });
+    } catch (error: unknown) {
+      setToast({ msg: error instanceof Error ? error.message : 'CSV validation failed.', type:'error' });
+    } finally {
+      setValidatingCsv(false);
     }
-    const resolved = {
-      deal_id: resolveHeader(mapDealId),
-      lead: resolveHeader(mapLead),
-      amount: resolveHeader(mapAmount),
-      currency: resolveHeader(mapCurrency),
-      closed_won: resolveHeader(mapClosedWon),
-      closed_at: resolveHeader(mapClosedAt),
-      stage: resolveHeader(mapStage),
-      notes: resolveHeader(mapNotes),
-    } as const;
-    const mismatched: string[] = [];
-    if(!resolved.lead) mismatched.push(`lead column "${mapLead}"`);
-    if(!resolved.amount) mismatched.push(`amount column "${mapAmount}"`);
-    if(!resolved.closed_at) mismatched.push(`closed_at column "${mapClosedAt}"`);
-    if(mismatched.length){
-      setToast({ msg:`Mapped headers not found: ${mismatched.join(', ')}`, type:'error' });
-      return null;
-    }
-    return resolved;
   }
 
-  async function submitCsv(){
-    if(!workspaceId){ setToast({ msg:'Open a workspace first', type:'error' }); return; }
-    if(!csvText.trim()) { setToast({ msg:'Upload a CSV file first', type:'error'}); return; }
-    const resolvedMap = verifyRequiredMappings();
-    if(!resolvedMap) return;
-    if(!mappingConfirmed){ setToast({ msg:'Confirm mappings checkbox', type:'error'}); return; }
+  async function submitCsvImport(allowPartial: boolean) {
+    if (!validationResult) { await runCsvValidation(); return; }
+    const confirmMessage = validationResult.summary.invalidRows > 0 && allowPartial
+      ? `Some rows contain errors. ${validationResult.summary.invalidRows} rows will be skipped. Continue uploading ${validationResult.summary.validRows} valid rows only?`
+      : `Please confirm the field mapping and selected row range. You are about to upload ${validationResult.summary.validRows} valid rows. Continue?`;
+    if (!window.confirm(confirmMessage)) return;
     setImporting(true);
-    setUploadSummary(null);
     try {
-      const map = {
-        deal_id: resolvedMap.deal_id || undefined,
-        lead: resolvedMap.lead!,
-        amount: resolvedMap.amount!,
-        currency: resolvedMap.currency || undefined,
-        closed_won: resolvedMap.closed_won || undefined,
-        closed_at: resolvedMap.closed_at!,
-        stage: resolvedMap.stage || undefined,
-        notes: resolvedMap.notes || undefined,
-      };
       const summary = await importDealsCSV({
         csv: csvText,
-        map,
-        startRow: Number(startRow || 1),
-        endRow,
-        duplicatePolicy
+        map: mapping,
+        startRow,
+        endRow: endRow === '' ? undefined : Number(endRow),
+        duplicatePolicy,
+        allowPartial,
       });
       setUploadSummary(summary);
-      if(summary && summary.inserted) setToast({ msg:`Imported ${summary.inserted} deals`, type:'success'});
-      else if(summary && summary.failed) setToast({ msg:`Import finished with ${summary.failed} failures`, type:'error'});
-      else setToast({ msg:'Import completed', type:'success'});
+      setToast({ msg:`${summary.inserted || 0} rows inserted, ${summary.failed || 0} failed, ${summary.duplicates || 0} duplicates skipped.`, type:'success' });
       setActiveTab('list');
-      load();
-    } catch {
-      setToast({ msg:'Failed to import CSV', type:'error'});
+      await load();
+    } catch (error: unknown) {
+      setToast({ msg: error instanceof Error ? error.message : 'Failed to import CSV', type:'error' });
+    } finally {
+      setImporting(false);
     }
-    setImporting(false);
   }
 
-  function downloadFailedCSV(){
-    if(!uploadSummary || !uploadSummary.failedRows || uploadSummary.failedRows.length===0) return;
-    const rowsCsv = uploadSummary.failedRows as Array<{row:number;error:string}>;
-    const lines = ['row,error'];
-    for(const r of rowsCsv){
-      const safeErr = String(r.error).replace(/"/g,'""');
-      lines.push(`${r.row},"${safeErr}"`);
-    }
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'deal_import_failed_rows.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  function downloadInvalidRows() {
+    if (!validationResult || validationResult.summary.invalidRows === 0) return;
+    const invalidRows = validationResult.rowResults.filter((row) => !row.valid);
+    const lines = [['row_number','error_fields','error_messages', ...csvHeaders].join(',')];
+    invalidRows.forEach((row) => {
+      const errorFields = row.errors.map((issue) => issue.field).join('; ');
+      const errorMessages = row.errors.map((issue) => issue.message).join('; ');
+      const values = csvHeaders.map((header) => JSON.stringify(row.original[header] ?? ''));
+      lines.push([row.rowNumber, JSON.stringify(errorFields), JSON.stringify(errorMessages), ...values].join(','));
+    });
+    downloadTextFile('deal-invalid-rows.csv', lines.join('\n'));
   }
+
+  const previewRows = useMemo(() => {
+    if (validationResult) return validationResult.rowResults;
+    return csvRows.filter((row) => row.rowNumber >= startRow && row.rowNumber <= (endRow === '' ? csvRows.length : Number(endRow))).map((row) => ({ ...row, valid: true, errors: [], warnings: [] }));
+  }, [csvRows, endRow, startRow, validationResult]);
 
   return (
     <Layout>
@@ -436,20 +417,11 @@ export default function Module6DealsWorkspace(){
               <div className="m06-leads-hero-copy">
                 <div className="m06-pill">M06 Deal Workspace</div>
                 <h1 style={{ fontSize: 38 }}>Deal Operations</h1>
-                <div className="m06-hero-copy">
-                  Review deal records, add a single closed deal, or import deal batches from CSV in one workspace.
-                  This keeps pipeline-supporting revenue records in the same operational screen.
-                </div>
+                <div className="m06-hero-copy">Manage revenue records with the same validation-heavy manual and CSV ingestion pattern used across the data hub.</div>
               </div>
               <div className="m06-leads-stat-grid">
-                <div className="m06-kpi-card">
-                  <div className="label">Visible deals</div>
-                  <div className="value">{rows.length}</div>
-                </div>
-                <div className="m06-kpi-card">
-                  <div className="label">Current mode</div>
-                  <div className="value" style={{ fontSize: 22 }}>{activeTab === 'list' ? 'View' : activeTab === 'form' ? 'Add' : 'CSV import'}</div>
-                </div>
+                <div className="m06-kpi-card"><div className="label">Visible deals</div><div className="value">{rows.length}</div></div>
+                <div className="m06-kpi-card"><div className="label">Current mode</div><div className="value" style={{ fontSize: 22 }}>{activeTab === 'list' ? 'View' : activeTab === 'form' ? 'Manual' : 'CSV import'}</div></div>
               </div>
             </div>
           </section>
@@ -457,96 +429,34 @@ export default function Module6DealsWorkspace(){
           <section className="m06-panel soft">
             <div className="m06-section-label">Deal Actions</div>
             <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Manage deals from one screen</h3>
-            <div className="m06-helper" style={{ marginBottom: 14 }}>
-              Switch between reviewing existing deals, adding one deal manually, and importing CRM exports through CSV.
-            </div>
+            <div className="m06-helper" style={{ marginBottom: 14 }}>Switch between reviewing existing deals, adding one deal manually, and validating/importing CRM exports through CSV.</div>
             <div className="m06-tab-row">
-              <button className={`m06-tab-btn ${activeTab === 'list' ? 'active' : ''}`} onClick={() => setActiveTab('list')}>
-                <span className="step">1</span>
-                <span className="meta">
-                  <strong>View deals</strong>
-                  <span>Filter, edit, archive, and delete deal records</span>
-                </span>
-              </button>
-              <button className={`m06-tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>
-                <span className="step">2</span>
-                <span className="meta">
-                  <strong>Add deal</strong>
-                  <span>Create one revenue record with amount, stage, and close date</span>
-                </span>
-              </button>
-              <button className={`m06-tab-btn ${activeTab === 'csv' ? 'active' : ''}`} onClick={() => setActiveTab('csv')}>
-                <span className="step">3</span>
-                <span className="meta">
-                  <strong>CSV import</strong>
-                  <span>Preview rows and map deal fields before import</span>
-                </span>
-              </button>
+              <button className={`m06-tab-btn ${activeTab === 'list' ? 'active' : ''}`} onClick={() => setActiveTab('list')}><span className="step">1</span><span className="meta"><strong>View deals</strong><span>Filter, edit, archive, and delete deal records</span></span></button>
+              <button className={`m06-tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}><span className="step">2</span><span className="meta"><strong>Add deal</strong><span>Create one revenue record with full validation</span></span></button>
+              <button className={`m06-tab-btn ${activeTab === 'csv' ? 'active' : ''}`} onClick={() => setActiveTab('csv')}><span className="step">3</span><span className="meta"><strong>Upload CSV</strong><span>Map, preview, validate, and import batches</span></span></button>
             </div>
           </section>
+
+          {toast && <Toast message={toast.msg} type={toast.type} onClose={()=>setToast(null)} />}
 
           {activeTab === 'list' && (
             <section className="m06-panel">
               <div className="m06-section-label">View</div>
               <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Deal Table</h3>
-              <div className="m06-helper">
-                Filter by lead, close window, status, amount range, and stage before editing or archiving deal records.
-              </div>
+              <div className="m06-helper">Filter by lead, close window, status, and revenue range before editing or archiving deal records.</div>
               <div className="m06-campaign-filter-grid" style={{ marginTop: 16 }}>
                 <div>
                   <label>Lead</label>
-                  <Autocomplete
-                    value={filterLeadQuery}
-                    placeholder="Lead id / name / company"
-                    fetchItems={async (q)=>{ const r = await searchLeads(q); return r.leads || []; }}
-                    formatItem={formatLeadOption}
-                    getValue={formatLeadOption}
-                    onChange={(val,item)=>{ setFilterLeadQuery(val); setFilterLeadId(item ? String(item.lead_id || item._id) : ''); }}
-                  />
+                  <Autocomplete value={filterLeadQuery} placeholder="Lead id / name / email" fetchItems={async (query) => { const result = await searchLeads(query); return result.leads || []; }} formatItem={formatLeadDisplay} getValue={formatLeadDisplay} onChange={(value,item)=>{ setFilterLeadQuery(value); setFilterLeadId(item ? String(item.lead_id) : ''); }} />
                 </div>
-                <div>
-                  <label>Closed from</label>
-                  <input type="date" value={from} onChange={e=>setFrom(e.target.value)} />
-                </div>
-                <div>
-                  <label>Closed to</label>
-                  <input type="date" value={to} onChange={e=>setTo(e.target.value)} />
-                </div>
-                <div>
-                  <label>Status</label>
-                  <select value={status} onChange={e=>setStatus(e.target.value)}>
-                    <option value="">All</option>
-                    <option value="closed_won">Closed Won</option>
-                    <option value="closed_lost">Closed Lost</option>
-                    <option value="open">Open</option>
-                  </select>
-                </div>
-                <div>
-                  <label>Min amount</label>
-                  <input value={minAmount} onChange={e=>setMinAmount(e.target.value)} placeholder="1000" />
-                </div>
-                <div>
-                  <label>Max amount</label>
-                  <input value={maxAmount} onChange={e=>setMaxAmount(e.target.value)} placeholder="50000" />
-                </div>
-                <div>
-                  <label>Stage</label>
-                  <input value={filterStage} onChange={e=>setFilterStage(e.target.value)} placeholder="Closed Won" />
-                </div>
-                <div>
-                  <label>Archive filter</label>
-                  <label className="toggle" style={{ minHeight: 46 }}>
-                    <input type="checkbox" checked={includeArchived} onChange={e=>setIncludeArchived(e.target.checked)} />
-                    Include archived
-                  </label>
-                </div>
+                <div><label>Closed from</label><input type="date" value={from} onChange={(event)=>setFrom(event.target.value)} /></div>
+                <div><label>Closed to</label><input type="date" value={to} onChange={(event)=>setTo(event.target.value)} /></div>
+                <div><label>Status</label><select value={status} onChange={(event)=>setStatus(event.target.value)}><option value="">All</option><option value="closed_won">Closed Won</option><option value="open">Open</option></select></div>
+                <div><label>Min revenue</label><input value={minAmount} onChange={(event)=>setMinAmount(event.target.value)} placeholder="1000" /></div>
+                <div><label>Max revenue</label><input value={maxAmount} onChange={(event)=>setMaxAmount(event.target.value)} placeholder="50000" /></div>
+                <div><label>Archive filter</label><label className="toggle" style={{ minHeight: 46 }}><input type="checkbox" checked={includeArchived} onChange={(event)=>setIncludeArchived(event.target.checked)} />Include archived</label></div>
               </div>
-
-              <div className="m06-toolbar" style={{ marginTop: 14 }}>
-                <div className="m06-inline-note">Deals default to a rolling 90-day closed-won window when the page first opens.</div>
-                <button className="btn-ghost" onClick={() => load()}>Reload</button>
-              </div>
-
+              <div className="m06-toolbar" style={{ marginTop: 14 }}><div className="m06-inline-note">Deals default to a rolling 90-day closed-won window when the page first opens.</div><button className="btn-ghost" onClick={() => load()}>Reload</button></div>
               <div className="m06-leads-table-wrap">
                 {loadError && <div style={{ background:'#fee', color:'#900', padding:'8px 10px', border:'1px solid #f99', borderRadius:6, marginBottom:8 }}>Could not load deals: {loadError}</div>}
                 {loading && <div className="m06-inline-note">Loading deals...</div>}
@@ -554,46 +464,29 @@ export default function Module6DealsWorkspace(){
                 {!loading && rows.length > 0 && (
                   <div className="m06-table-shell" style={{ overflowX: 'auto' }}>
                     <table style={{ fontSize: 12 }}>
-                      <thead>
-                        <tr>
-                          <th>Deal ID</th>
-                          <th>Lead</th>
-                          <th>Amount</th>
-                          <th>Currency</th>
-                          <th>Status</th>
-                          <th>Closed at</th>
-                          <th>Stage</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
+                      <thead><tr><th>Deal ID</th><th>Lead ID</th><th>Revenue</th><th>Currency</th><th>Status</th><th>Closed at</th><th>Actions</th></tr></thead>
                       <tbody>
-                        {rows.map(r => {
-                          const isEditing = editing === r._id;
+                        {rows.map((row) => {
+                          const isEditing = editing === row._id;
                           return (
-                            <tr key={r._id}>
-                              <td>{r.deal_id || '-'}</td>
-                              <td>#{r.lead_id}</td>
-                              <td>{isEditing ? <input value={editAmount} onChange={e=>setEditAmount(e.target.value)} /> : r.amount}</td>
-                              <td>{r.currency || 'USD'}</td>
-                              <td>{isEditing ? (
-                                <select value={editClosedWon} onChange={e=>setEditClosedWon(e.target.value)}>
-                                  <option value="true">Closed Won</option>
-                                  <option value="false">Not Won</option>
-                                </select>
-                              ) : (r.closed_won ? 'Closed Won' : 'Open/Other')}</td>
-                              <td>{isEditing ? <input type="datetime-local" value={editClosedAt} onChange={e=>setEditClosedAt(e.target.value)} /> : (r.closed_at ? new Date(r.closed_at).toLocaleString() : '-')}</td>
-                              <td>{isEditing ? <input value={editStage} onChange={e=>setEditStage(e.target.value)} /> : (r.stage || '-')}</td>
+                            <tr key={row._id}>
+                              <td>{row.deal_id}</td>
+                              <td>{row.lead_id}</td>
+                              <td>{isEditing ? <input value={editState.revenue} onChange={(event)=>setEditState((prev)=>({ ...prev, revenue: event.target.value }))} /> : row.revenue}</td>
+                              <td>{isEditing ? <select value={editState.currency} onChange={(event)=>setEditState((prev)=>({ ...prev, currency: event.target.value }))}>{DEAL_CURRENCY_OPTIONS.map((option)=><option key={option} value={option}>{option}</option>)}</select> : (row.currency || 'USD')}</td>
+                              <td>{isEditing ? <select value={editState.closed_won} onChange={(event)=>setEditState((prev)=>({ ...prev, closed_won: event.target.value }))}><option value="true">Closed Won</option><option value="false">Not Won</option></select> : (row.closed_won ? 'Closed Won' : 'Open')}</td>
+                              <td>{isEditing ? <input type="datetime-local" value={editState.closed_at} onChange={(event)=>setEditState((prev)=>({ ...prev, closed_at: event.target.value }))} /> : (row.closed_at ? new Date(row.closed_at).toLocaleString() : '-')}</td>
                               <td style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                                 {!isEditing ? (
                                   <>
-                                    <button className="btn-ghost" onClick={()=>startEdit(r)}>Edit</button>
-                                    <button className="btn-ghost" onClick={()=>doArchive(r._id!)}>Archive</button>
-                                    <button className="btn-danger" onClick={()=>doDelete(r._id!)}>Delete</button>
+                                    <button className="btn-ghost" onClick={()=>startEdit(row)}>Edit</button>
+                                    <button className="btn-ghost" onClick={async ()=>{ if(!window.confirm('This will archive the deal. Proceed?')) return; try { await archiveDeal(row._id!); setToast({ msg:'Archived', type:'success' }); await load(); } catch (error: unknown) { setToast({ msg: error instanceof Error ? error.message : 'Archive failed', type:'error' }); } }}>Archive</button>
+                                    <button className="btn-danger" onClick={async ()=>{ const input = prompt(`Type the Deal ID (${row.deal_id}) to confirm permanent deletion:`, ''); if(input !== row.deal_id) return; try { await deleteDealPermanent(row._id!); setToast({ msg:'Deleted', type:'success' }); await load(); } catch (error: unknown) { setToast({ msg: error instanceof Error ? error.message : 'Delete failed', type:'error' }); } }}>Delete</button>
                                   </>
                                 ) : (
                                   <>
                                     <button className="btn-primary" onClick={saveEdit}>Save</button>
-                                    <button className="btn-ghost" onClick={()=>{ setModalOpen(false); setEditing(null); }}>Cancel</button>
+                                    <button className="btn-ghost" onClick={()=>setEditing(null)}>Cancel</button>
                                   </>
                                 )}
                               </td>
@@ -610,210 +503,87 @@ export default function Module6DealsWorkspace(){
 
           {activeTab === 'form' && (
             <section className="m06-panel">
-              <div className="m06-section-label">Add Deal</div>
+              <div className="m06-section-label">Manual Entry</div>
               <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Single Deal Form</h3>
-              <div className="m06-helper" style={{ marginBottom: 12 }}>
-                Add one revenue record with lead linkage, amount, win state, close date, stage, and short deal context.
-              </div>
+              <div className="m06-helper" style={{ marginBottom: 12 }}>Add one revenue record with lead linkage, revenue, currency, win state, and close date.</div>
+              {Object.values(formErrors).filter(Boolean).length > 0 && (
+                <div className="m06-summary-box" style={{ marginBottom: 14, border: '1px solid rgba(195,51,51,0.18)', background: '#fff7f7' }}>
+                  <strong>Fix these issues before saving:</strong>
+                  <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+                    {Object.entries(formErrors).map(([field, message]) => message ? <div key={field}>{message}</div> : null)}
+                  </div>
+                </div>
+              )}
               <div className="m06-form-grid">
                 <div>
                   <label>Lead *</label>
-                  <Autocomplete
-                    value={leadQuery}
-                    placeholder="Lead id / name / company"
-                    fetchItems={async (q)=>{ const r = await searchLeads(q); return r.leads || []; }}
-                    formatItem={formatLeadOption}
-                    getValue={formatLeadOption}
-                    onChange={(val, item)=>{ setLeadQuery(val); setLeadId(item ? String(item._id) : ''); }}
-                  />
-                  {formErrors.lead && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.lead}</div>}
+                  <Autocomplete value={leadQuery} placeholder="Lead id / name / email" fetchItems={async (query)=>{ const result = await searchLeads(query); return result.leads || []; }} formatItem={formatLeadDisplay} getValue={formatLeadDisplay} onChange={(value,item)=>{ setLeadQuery(value); setFormValue('lead_id', item ? String(item.lead_id) : ''); }} />
+                  {formErrors.lead_id && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.lead_id}</div>}
                 </div>
-                <div>
-                  <label>Deal ID</label>
-                  <input value={dealId} onChange={e=>setDealId(e.target.value)} placeholder="CRM deal id" />
-                </div>
-                <div>
-                  <label>Amount *</label>
-                  <input value={amount} onChange={e=>setAmount(e.target.value)} placeholder="15000" />
-                  {formErrors.amount && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.amount}</div>}
-                </div>
-                <div>
-                  <label>Currency</label>
-                  <input value={currency} onChange={e=>setCurrency(e.target.value)} placeholder="USD" />
-                </div>
-                <div>
-                  <label>Closed won?</label>
-                  <select value={String(closedWon)} onChange={e=>setClosedWon(e.target.value==='true')}>
-                    <option value="true">Yes</option>
-                    <option value="false">No</option>
-                  </select>
-                </div>
-                <div>
-                  <label>Closed at {closedWon ? '*' : ''}</label>
-                  <input type="datetime-local" value={closedAt} onChange={e=>setClosedAt(e.target.value)} />
-                  {formErrors.closed_at && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.closed_at}</div>}
-                </div>
-                <div>
-                  <label>Stage</label>
-                  <input value={stage} onChange={e=>setStage(e.target.value)} />
-                </div>
-                <div style={{ gridColumn:'1 / -1' }}>
-                  <label>Notes</label>
-                  <textarea rows={3} value={notes} onChange={e=>setNotes(e.target.value)} style={{ width:'100%' }} />
-                </div>
+                <div><label>Deal ID *</label><input value={form.deal_id} onChange={(event)=>setFormValue('deal_id', event.target.value)} />{formErrors.deal_id && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.deal_id}</div>}</div>
+                <div><label>Revenue *</label><input value={form.revenue} onChange={(event)=>setFormValue('revenue', event.target.value)} />{formErrors.revenue && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.revenue}</div>}</div>
+                <div><label>Currency</label><select value={form.currency} onChange={(event)=>setFormValue('currency', event.target.value)}>{DEAL_CURRENCY_OPTIONS.map((option)=><option key={option} value={option}>{option}</option>)}</select></div>
+                <div><label>Closed won *</label><select value={form.closed_won} onChange={(event)=>setFormValue('closed_won', event.target.value)}><option value="true">Yes</option><option value="false">No</option></select>{formErrors.closed_won && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.closed_won}</div>}</div>
+                <div><label>Closed at {form.closed_won === 'true' ? '*' : '(optional)'}</label><input type="datetime-local" value={form.closed_at} onChange={(event)=>setFormValue('closed_at', event.target.value)} />{formErrors.closed_at && <div style={{ color:'#c33', fontSize:11, marginTop:4 }}>{formErrors.closed_at}</div>}</div>
               </div>
               <div style={{ marginTop:12, display:'flex', gap:8 }}>
-                <button className="btn-primary" onClick={submitForm}>Save Deal</button>
+                <button className="btn-primary" disabled={saving} onClick={submitForm}>{saving ? 'Saving...' : 'Save Deal'}</button>
+                <button className="btn-ghost" onClick={() => { setForm(emptyDealForm()); setLeadQuery(''); setFormErrors({}); }}>Clear</button>
               </div>
             </section>
           )}
 
           {activeTab === 'csv' && (
             <section className="m06-panel">
-              <div className="m06-section-label">CSV Import</div>
-              <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Import Deal CSV</h3>
-              <div className="m06-helper" style={{ marginBottom: 12 }}>
-                Upload a CSV file with deal data, verify the preview, then map the lead, amount, and close date fields required for import.
-              </div>
-              <div className="m06-file-drop">
-                <div className="m06-inline-note" style={{ marginBottom: 10 }}>
-                  Select a deal CSV file. Required columns are lead, amount, and closed_at.
-                </div>
-                <input type="file" accept=".csv" onChange={onFileChange} />
-              </div>
-              {headerError && <div style={{ marginTop:8, fontSize:12, color:'#c33' }}>{headerError}</div>}
-              {!headerError && headersPreview.length > 0 && <div className="m06-inline-note" style={{ marginTop:8 }}>Detected headers: {headersPreview.join(', ')}</div>}
-              {rowsPreview.length > 0 && (
-                <div style={{ marginTop:16 }}>
-                  <div className="m06-preview-head">
-                    Previewing rows {previewStartIndex}-{previewEndIndex} of {rowsPreview.length}
-                    {previewLimited ? ` (showing first ${rowsPreview.length} of ${totalPreviewRows})` : totalPreviewRows ? ` (total rows: ${totalPreviewRows})` : ''}
-                    {blankRowCount > 0 ? ` | Blank lines skipped: ${blankRowCount}` : ''}
+              <div className="m06-section-label">CSV Upload</div>
+              <h3 className="m06-panel-title" style={{ marginTop: 14 }}>Deal CSV Import</h3>
+              <div className="m06-helper" style={{ marginBottom: 12 }}>Upload a CSV, review auto-detected mappings, open the shared preview step, validate rows, inspect invalid rows, and confirm before import.</div>
+              <div className="m06-file-drop"><div className="m06-inline-note" style={{ marginBottom: 10 }}>Only `.csv` files up to {CSV_UPLOAD_LIMIT_LABEL} are accepted.</div><input type="file" accept=".csv" onChange={onFileChange} />{csvFileName && <div className="m06-inline-note" style={{ marginTop: 8 }}>Loaded file: {csvFileName}</div>}</div>
+              {csvFileError && <div style={{ marginTop:8, fontSize:12, color:'#c33' }}>{csvFileError}</div>}
+              {csvHeaders.length > 0 && (
+                <>
+                  <div className="m06-summary-box"><strong>Detected headers</strong><div style={{ marginTop: 6 }}>{csvHeaders.join(', ')}</div></div>
+                  <div className="m06-mapping-grid">
+                    {(Object.keys(mapping) as DealFieldKey[]).map((field) => {
+                      const usedElsewhere = new Set(Object.entries(mapping).filter(([key, value]) => key !== field && value).map(([, value]) => value));
+                      return (
+                        <div key={field}>
+                          <label>{field}{DEAL_REQUIRED_FIELDS.includes(field) ? ' *' : ' (optional)'}</label>
+                          <select value={mapping[field]} onChange={(event)=>setMappingValue(field, event.target.value)}>
+                            <option value="">{DEAL_REQUIRED_FIELDS.includes(field) ? 'Select CSV column' : 'Skip this field'}</option>
+                            {csvHeaders.filter((header) => !usedElsewhere.has(header) || header === mapping[field]).map((header) => <option key={header} value={header}>{header}</option>)}
+                          </select>
+                        </div>
+                      );
+                    })}
+                    <div><label>Start row *</label><input type="number" min={1} value={startRow} onChange={(event)=>{ setStartRow(Number(event.target.value||1)); setValidationResult(null); setShowPreview(false); }} /></div>
+                    <div><label>End row *</label><input type="number" min={1} value={endRow} onChange={(event)=>{ setEndRow(event.target.value ? Number(event.target.value) : ''); setValidationResult(null); setShowPreview(false); }} /></div>
+                    <div><label>Duplicate policy</label><select value={duplicatePolicy} onChange={(event)=>{ setDuplicatePolicy(event.target.value as 'skip'|'allow'); setValidationResult(null); setShowPreview(false); }}><option value="skip">Skip duplicates</option><option value="allow">Allow duplicates</option></select></div>
                   </div>
-                  <div className="m06-preview-shell">
-                    <div className="m06-preview-table-wrap">
-                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                        <thead>
-                          <tr>
-                            {headersPreview.map((header, idx)=><th key={idx}>{header}</th>)}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {previewPageRows.map((row, rIdx)=>(
-                            <tr key={rIdx}>
-                              {headersPreview.map((_, cIdx)=><td key={cIdx}>{row[cIdx] ?? ''}</td>)}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                  {mappingErrors.length > 0 && <div className="m06-summary-box" style={{ border: '1px solid rgba(195,51,51,0.18)', background: '#fff7f7' }}><strong>Mapping issues</strong><div style={{ marginTop: 8, display:'grid', gap:4 }}>{mappingErrors.map((issue)=><div key={issue}>{issue}</div>)}</div></div>}
+                  {rangeError && <div className="m06-summary-box" style={{ border: '1px solid rgba(195,51,51,0.18)', background: '#fff7f7' }}><strong>Row range issue</strong><div style={{ marginTop: 8 }}>{rangeError}</div></div>}
+                  <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}><button className="btn-primary" disabled={validatingCsv} onClick={runCsvValidation}>{validatingCsv ? 'Validating...' : 'Validate CSV'}</button><button className="btn-ghost" onClick={() => { setCsvFileName(''); setCsvText(''); setCsvHeaders([]); setCsvRows([]); setCsvFileError(null); setMapping(defaultDealMapping()); setMappingErrors([]); setStartRow(1); setEndRow(''); setValidationResult(null); setUploadSummary(null); setShowPreview(false); }}>Reset Upload</button></div>
+                  {validationResult && <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}><button className="btn-ghost" onClick={() => setShowPreview((prev) => !prev)}>{showPreview ? 'Hide Preview' : 'Open Preview'}</button></div>}
+                  {showPreview && previewRows.length > 0 && <div style={{ marginTop: 18 }}><ImportPreviewStep title="Deal CSV Preview" subtitle="This reusable Module 6 preview step is shared across data-hub ingestion flows." sourceHeaders={csvHeaders} rows={previewRows} currentStartRow={startRow} totalSelectedRows={previewRows.length} startFullscreen /></div>}
+                  {validationResult && (
+                    <div className="m06-summary-box" style={{ marginTop:16 }}>
+                      <div style={{ fontWeight:600, marginBottom:4 }}>Validation Summary</div>
+                      <div>Total rows checked: {validationResult.summary.checkedRows}</div>
+                      <div>Valid rows: {validationResult.summary.validRows}</div>
+                      <div>Invalid rows: {validationResult.summary.invalidRows}</div>
+                      <div>Warning rows: {validationResult.summary.warningRows}</div>
+                      <div>Selected range: rows {validationResult.selectedRange.startRow} to {validationResult.selectedRange.endRow}</div>
+                      <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}>
+                        {validationResult.summary.invalidRows > 0 && <button className="btn-ghost" onClick={downloadInvalidRows}>Download Invalid Rows</button>}
+                        {validationResult.summary.validRows > 0 && <button className="btn-primary" disabled={importing} onClick={() => submitCsvImport(validationResult.summary.invalidRows > 0)}>{importing ? 'Importing...' : validationResult.summary.invalidRows > 0 ? 'Proceed With Valid Rows Only' : 'Confirm and Import'}</button>}
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  )}
+                  {uploadSummary && <div className="m06-summary-box"><div style={{ fontWeight:600, marginBottom:4 }}>Import Summary</div><div>Processed: {uploadSummary.processed}</div><div>Inserted: {uploadSummary.inserted}</div><div>Failed: {uploadSummary.failed}</div><div>Duplicates skipped: {uploadSummary.duplicates}</div></div>}
+                </>
               )}
-              <div className="m06-mapping-grid">
-                <div>
-                  <label>Deal ID</label>
-                  <input list="deal-upload-headers" value={mapDealId} onChange={e=>setMapDealId(e.target.value)} placeholder="Optional" />
-                </div>
-                <div>
-                  <label>Lead *</label>
-                  <input list="deal-upload-headers" value={mapLead} onChange={e=>setMapLead(e.target.value)} placeholder="Column name" />
-                </div>
-                <div>
-                  <label>Amount *</label>
-                  <input list="deal-upload-headers" value={mapAmount} onChange={e=>setMapAmount(e.target.value)} placeholder="Column name" />
-                </div>
-                <div>
-                  <label>Currency</label>
-                  <input list="deal-upload-headers" value={mapCurrency} onChange={e=>setMapCurrency(e.target.value)} placeholder="Optional" />
-                </div>
-                <div>
-                  <label>Closed won</label>
-                  <input list="deal-upload-headers" value={mapClosedWon} onChange={e=>setMapClosedWon(e.target.value)} placeholder="Optional" />
-                </div>
-                <div>
-                  <label>Closed at *</label>
-                  <input list="deal-upload-headers" value={mapClosedAt} onChange={e=>setMapClosedAt(e.target.value)} placeholder="Column name" />
-                </div>
-                <div>
-                  <label>Stage</label>
-                  <input list="deal-upload-headers" value={mapStage} onChange={e=>setMapStage(e.target.value)} placeholder="Optional" />
-                </div>
-                <div>
-                  <label>Notes</label>
-                  <input list="deal-upload-headers" value={mapNotes} onChange={e=>setMapNotes(e.target.value)} placeholder="Optional" />
-                </div>
-                <div>
-                  <label>Start row</label>
-                  <input type="number" min={1} value={String(startRow)} onChange={e=>setStartRow(Number(e.target.value||1))} />
-                </div>
-                <div>
-                  <label>End row</label>
-                  <input type="number" min={1} value={endRow!==undefined?String(endRow):''} placeholder="auto" onChange={e=>setEndRow(e.target.value?Number(e.target.value):undefined)} />
-                </div>
-                <div>
-                  <label>Duplicate policy</label>
-                  <select value={duplicatePolicy} onChange={e=>setDuplicatePolicy(e.target.value as any)}>
-                    <option value="skip">Skip duplicates</option>
-                    <option value="allow">Allow duplicates</option>
-                  </select>
-                </div>
-              </div>
-              <datalist id="deal-upload-headers">
-                {headerOptions.map(opt => <option key={opt.value} value={opt.value} />)}
-              </datalist>
-              <label style={{ display:'inline-flex', alignItems:'center', gap:8, marginTop:12 }}>
-                <input type="checkbox" checked={mappingConfirmed} onChange={e=>setMappingConfirmed(e.target.checked)} />
-                <span className="m06-inline-note">I have reviewed my mappings and understand they will create deal records.</span>
-              </label>
-              <div style={{ marginTop:12, display:'flex', gap:10, flexWrap:'wrap' }}>
-                <button className="btn-primary" disabled={importing} onClick={submitCsv}>{importing?'Importing...':'Import CSV'}</button>
-                {uploadSummary && <span className="m06-inline-note">Processed {uploadSummary.processed}, Inserted {uploadSummary.inserted}, Failed {uploadSummary.failed}, Duplicates {uploadSummary.duplicates}</span>}
-                {uploadSummary && uploadSummary.failedRows && uploadSummary.failedRows.length>0 && (
-                  <button className="btn-ghost" onClick={downloadFailedCSV}>Download failed rows CSV</button>
-                )}
-              </div>
             </section>
           )}
-
-          {modalOpen && (
-            <div className="modal-backdrop">
-              <div className="modal">
-                <h3 style={{ marginTop:0 }}>Edit Deal</h3>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:10 }}>
-                  <label>
-                    <div style={{ fontSize:12 }}>Amount</div>
-                    <input value={editAmount} onChange={e=>setEditAmount(e.target.value)} />
-                  </label>
-                  <label>
-                    <div style={{ fontSize:12 }}>Closed won</div>
-                    <select value={editClosedWon} onChange={e=>setEditClosedWon(e.target.value)}>
-                      <option value="true">Closed Won</option>
-                      <option value="false">Not Won</option>
-                    </select>
-                  </label>
-                  <label>
-                    <div style={{ fontSize:12 }}>Closed at</div>
-                    <input type="datetime-local" value={editClosedAt} onChange={e=>setEditClosedAt(e.target.value)} />
-                  </label>
-                  <label>
-                    <div style={{ fontSize:12 }}>Stage</div>
-                    <input value={editStage} onChange={e=>setEditStage(e.target.value)} />
-                  </label>
-                  <label>
-                    <div style={{ fontSize:12 }}>Notes</div>
-                    <textarea rows={3} value={editNotes} onChange={e=>setEditNotes(e.target.value)} />
-                  </label>
-                </div>
-                <div style={{ marginTop:12, display:'flex', gap:8, justifyContent:'flex-end' }}>
-                  <button className="btn-ghost" onClick={()=>{ setModalOpen(false); setEditing(null); }}>Cancel</button>
-                  <button className="btn-primary" onClick={saveEdit}>Save</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {toast && <Toast message={toast.msg} type={toast.type} onClose={()=>setToast(null)} />}
         </div>
       </main>
     </Layout>

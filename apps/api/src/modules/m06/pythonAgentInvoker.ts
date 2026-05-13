@@ -47,7 +47,7 @@ export async function invokePythonAgent(
     const timeout = setTimeout(() => {
       child.kill();
       reject(new Error('forecast_agent_timeout'));
-    }, 20_000);
+    }, 60_000);
 
     child.stdout.on('data', (chunk) => {
       stdout += chunk.toString();
@@ -119,7 +119,7 @@ export async function invokePythonAgentByChannel(
     const timeout = setTimeout(() => {
       child.kill();
       reject(new Error('forecast_agent_timeout'));
-    }, 20_000);
+    }, 60_000);
 
     child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
     child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });

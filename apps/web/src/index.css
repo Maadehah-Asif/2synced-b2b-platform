@@ -41,19 +41,20 @@ h1 {
 
 button {
   border-radius: 8px;
-  border: 1px solid transparent;
+  border: 1px solid rgba(15, 66, 88, 0.16);
   padding: 0.6em 1.2em;
   font-size: 0.95rem;
   font-weight: 500;
   font-family: inherit;
-  background-color: var(--btn-bg);
-  color: var(--btn-text);
+  background-color: #ffffff;
+  color: var(--text-primary);
   cursor: pointer;
-  transition: border-color 0.25s, box-shadow 0.15s;
-  box-shadow: 0 6px 18px rgba(48,117,172,0.08);
+  transition: border-color 0.25s, box-shadow 0.15s, background-color 0.15s;
+  box-shadow: 0 6px 18px rgba(15, 66, 88, 0.08);
 }
 button:hover {
-  border-color: rgba(48,117,172,0.12);
+  border-color: rgba(15, 66, 88, 0.24);
+  background-color: rgba(15, 66, 88, 0.04);
 }
 button:focus,
 button:focus-visible {
@@ -69,7 +70,7 @@ button:focus-visible {
     color: var(--primary-2);
   }
   button {
-    background-color: var(--btn-bg);
-    color: var(--btn-text);
+    background-color: #ffffff;
+    color: var(--text-primary);
   }
 }

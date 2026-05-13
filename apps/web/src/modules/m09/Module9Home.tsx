@@ -110,9 +110,11 @@ export default function Module9Home() {
 
 function ActionCard({ title, desc, action }: { title: string; desc: string; action: string }) {
   return (
-    <div
+    <button
+      type="button"
+      onClick={() => { /* no-op for landing cards */ }}
       style={{
-        cursor: 'default',
+        cursor: 'pointer',
         borderRadius: 18,
         padding: 20,
         minHeight: 180,
@@ -121,10 +123,22 @@ function ActionCard({ title, desc, action }: { title: string; desc: string; acti
         flexDirection: 'column',
         justifyContent: 'space-between',
         textAlign: 'left',
+        appearance: 'none',
+        position: 'relative',
+        zIndex: 1,
         background: 'linear-gradient(145deg, #0f4258 0%, #195b74 50%, #1e6b88 100%)',
         border: '1px solid rgba(255,255,255,0.14)',
         boxShadow: '0 10px 24px rgba(13,30,60,0.10)',
         color: '#fff',
+        transition: '0.25s ease',
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-4px)'
+        ;(e.currentTarget as HTMLButtonElement).style.boxShadow = '0 14px 28px rgba(13,30,60,0.16)'
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)'
+        ;(e.currentTarget as HTMLButtonElement).style.boxShadow = '0 10px 24px rgba(13,30,60,0.10)'
       }}
     >
       <div>
@@ -137,7 +151,7 @@ function ActionCard({ title, desc, action }: { title: string; desc: string; acti
       <div style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', padding: '8px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, alignSelf: 'flex-start' }}>
         {action}
       </div>
-    </div>
+    </button>
   )
 }
 

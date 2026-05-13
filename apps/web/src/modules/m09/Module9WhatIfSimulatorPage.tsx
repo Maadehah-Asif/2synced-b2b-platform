@@ -606,7 +606,7 @@ function StatusCard({ title, tone, children }: { title: string; tone: 'success' 
       : { bg: 'rgba(190,24,93,0.10)', border: '1px solid rgba(190,24,93,0.18)', color: '#9D174D' }
 
   return (
-    <div style={{ borderRadius: 18, padding: 16, background: palette.bg, border: palette.border }}>
+    <div style={{ borderRadius: 18, padding: 16, background: palette.bg, border: palette.border, boxShadow: '0 10px 24px rgba(13,30,60,0.06)' }}>
       <div style={{ fontSize: 15, fontWeight: 900, color: palette.color }}>{title}</div>
       <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.7, color: palette.color }}>{children}</div>
     </div>
@@ -638,7 +638,7 @@ function InterpretationCard({ tone }: { tone: 'positive' | 'neutral' | 'negative
       : { title: 'Neutral impact', text: 'The projected result is close to the current baseline, so the scenario looks broadly flat rather than clearly better or worse.', color: '#9A6700', bg: 'rgba(180,120,32,0.08)', border: '1px solid rgba(180,120,32,0.16)', icon: 'flat' as const }
 
   return (
-    <div style={{ borderRadius: 18, padding: 18, background: config.bg, border: config.border }}>
+    <div style={{ borderRadius: 18, padding: 18, background: config.bg, border: config.border, boxShadow: '0 10px 24px rgba(13,30,60,0.06)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <IconBadge tone={tone} icon={config.icon} />
         <div style={{ fontSize: 16, fontWeight: 900, color: config.color }}>{config.title}</div>
@@ -720,7 +720,7 @@ function ResultMetricCard({ label, value, tone, icon }: { label: string; value: 
       : { bg: 'rgba(119,132,155,0.10)', border: '1px solid rgba(119,132,155,0.16)', color: '#44556F' }
 
   return (
-    <div style={{ borderRadius: 20, padding: 18, background: palette.bg, border: palette.border }}>
+    <div style={{ borderRadius: 20, padding: 18, background: palette.bg, border: palette.border, boxShadow: '0 10px 24px rgba(13,30,60,0.06)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
         <div style={{ fontSize: 13, fontWeight: 800, color: palette.color }}>{label}</div>
         <IconBadge tone={tone} icon={icon} />
@@ -783,9 +783,15 @@ const smallPrimaryButtonStyle: React.CSSProperties = { borderRadius: 10, padding
 const fieldLabelStyle: React.CSSProperties = { display: 'block', marginBottom: 8, fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#5B6C8B' }
 const inputStyle: React.CSSProperties = { width: '100%', borderRadius: 14, border: '1px solid rgba(15,66,88,0.16)', padding: '11px 12px', fontSize: 14, color: '#0B2540', background: '#fff' }
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'none' }
-const metricTileStyle: React.CSSProperties = { borderRadius: 16, padding: 14, background: 'rgba(244,248,252,0.95)', border: '1px solid rgba(15,66,88,0.07)' }
+const metricTileStyle: React.CSSProperties = {
+  borderRadius: 14,
+  padding: 14,
+  background: 'linear-gradient(180deg, rgba(255,255,255,1), rgba(244,248,252,0.98))',
+  border: '1px solid rgba(15,66,88,0.08)',
+  boxShadow: '0 10px 24px rgba(13,30,60,0.06)'
+}
 const metricTileLabelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#5B6C8B' }
-const metricTileValueStyle: React.CSSProperties = { marginTop: 8, fontSize: 18, fontWeight: 900, color: '#0B2540', lineHeight: 1.3 }
+const metricTileValueStyle: React.CSSProperties = { marginTop: 7, fontSize: 20, fontWeight: 900, color: '#0B2540', lineHeight: 1 }
 
 const baselineToolbarStyle: React.CSSProperties = { marginTop: 18, display: 'grid', gridTemplateColumns: 'minmax(260px, 1.4fr) minmax(220px, 0.8fr)', gap: 14 }
 const toolbarInputWrapStyle: React.CSSProperties = { minWidth: 0 }

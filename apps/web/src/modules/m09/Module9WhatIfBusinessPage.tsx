@@ -503,9 +503,15 @@ const smallPrimaryButtonStyle: React.CSSProperties = { borderRadius: 10, padding
 const fieldLabelStyle: React.CSSProperties = { display: 'block', marginBottom: 8, fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#5B6C8B' }
 const inputStyle: React.CSSProperties = { width: '100%', borderRadius: 14, border: '1px solid rgba(15,66,88,0.16)', padding: '11px 12px', fontSize: 14, color: '#0B2540', background: '#fff' }
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'none' }
-const metricTileStyle: React.CSSProperties = { borderRadius: 16, padding: 14, background: 'rgba(244,248,252,0.95)', border: '1px solid rgba(15,66,88,0.07)' }
+const metricTileStyle: React.CSSProperties = {
+  borderRadius: 14,
+  padding: 14,
+  background: 'linear-gradient(180deg, rgba(255,255,255,1), rgba(244,248,252,0.98))',
+  border: '1px solid rgba(15,66,88,0.08)',
+  boxShadow: '0 10px 24px rgba(13,30,60,0.06)'
+}
 const metricTileLabelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#5B6C8B' }
-const metricTileValueStyle: React.CSSProperties = { marginTop: 8, fontSize: 18, fontWeight: 900, color: '#0B2540', lineHeight: 1.3 }
+const metricTileValueStyle: React.CSSProperties = { marginTop: 7, fontSize: 20, fontWeight: 900, color: '#0B2540', lineHeight: 1 }
 const tableHeadStyle: React.CSSProperties = { textAlign: 'left', fontSize: 12, color: '#5B6C8B', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '14px 16px', borderBottom: '1px solid rgba(15,66,88,0.08)', background: 'rgba(244,248,252,0.95)' }
 const tableCellStyle: React.CSSProperties = { padding: '14px 16px', borderBottom: '1px solid rgba(15,66,88,0.08)', fontSize: 13, color: '#415274', verticalAlign: 'top' }
 const strongCellStyle: React.CSSProperties = { ...tableCellStyle, color: '#0B2540', fontWeight: 800 }

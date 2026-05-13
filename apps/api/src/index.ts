@@ -13,6 +13,7 @@ import m04Router from "./modules/m04/routes.js";
 import m07Router from "./modules/m07/routes.js";
 import m05Router from "./modules/m05/routes.js";
 import m08Router from "./modules/m08/routes.js";
+import m09Router from "./modules/m09/routes.js";
 
 const app = express();
 app.use(cors());
@@ -34,6 +35,7 @@ app.use("/m04", m04Router);
 app.use("/m07", m07Router);
 app.use("/m05", m05Router);
 app.use("/m08", m08Router);
+app.use("/m09", m09Router);
 
 app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
   if (

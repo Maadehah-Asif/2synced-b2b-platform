@@ -60,7 +60,7 @@ const dataHubCards: HubCard[] = [
   {
     module: "M01",
     title: "Merged CSVs",
-    desc: "Review merged lead datasets before turning them into module 1 lead records.",
+    desc: "Review merged lead datasets before turning them into lead-quality records.",
     cta: "Manage",
     kind: "View",
     entity: "Leads",
@@ -100,7 +100,7 @@ const dataHubCards: HubCard[] = [
   {
     module: "M02",
     title: "Merged CSVs",
-    desc: "Review merged datasets used to create module 2 lead and intent-ready records.",
+    desc: "Review merged datasets used to create lead and intent-ready records.",
     cta: "Manage",
     kind: "View",
     entity: "Intent Data",
@@ -183,7 +183,7 @@ const insightCards: InsightCard[] = [
   {
     module: "M01",
     title: "Lead Quality & Scoring",
-    desc: "Open module 1 scoring flows and lead quality views.",
+    desc: "Open scoring flows and lead quality views.",
     image: "/src/assets/leadscoring.png",
     path: (id) => `#/workspace/${id}/m01`,
   },
@@ -218,7 +218,7 @@ const insightCards: InsightCard[] = [
   {
     module: "M07",
     title: "Funnel Insight",
-    desc: "Open funnel diagnostics and module-level insight entry points.",
+    desc: "Open funnel diagnostics and insight entry points.",
     image: "/src/assets/funnel.png",
     path: (id) => `#/workspace/${id}/m07`,
   },
@@ -338,7 +338,7 @@ export default function WorkspaceDetail() {
               border: "1px solid rgba(15,66,88,0.08)",
               boxShadow: "0 24px 60px rgba(13,30,60,0.09)",
               display: "grid",
-              gridTemplateColumns: "minmax(0, 1.55fr) minmax(380px, 0.85fr)",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))",
               width: "100%",
             }}
           >
@@ -383,11 +383,12 @@ export default function WorkspaceDetail() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(180px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
                 gap: 14,
                 minWidth: 0,
                 padding: 24,
                 alignContent: "center",
+                alignItems: "stretch",
                 background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,250,254,0.98) 100%)",
               }}
             >
@@ -395,16 +396,24 @@ export default function WorkspaceDetail() {
                 style={{
                   borderRadius: 18,
                   padding: "16px 18px",
+                  minHeight: 142,
                   background: "linear-gradient(180deg, rgba(255,255,255,1), rgba(234,243,250,0.96))",
                   border: `1px solid ${palette.line}`,
                   boxShadow: "0 10px 24px rgba(13,30,60,0.04)",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  minWidth: 0,
                 }}
               >
-                <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", fontWeight: 700 }}>
-                  Members
-                </div>
-                <div style={{ fontSize: 30, fontWeight: 900, color: palette.ink, marginTop: 8 }}>
-                  {loading ? "..." : memberCount}
+                <div>
+                  <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", fontWeight: 700 }}>
+                    Members
+                  </div>
+                  <div style={{ fontSize: 30, fontWeight: 900, color: palette.ink, marginTop: 8, lineHeight: 1 }}>
+                    {loading ? "..." : memberCount}
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -432,40 +441,46 @@ export default function WorkspaceDetail() {
                   background: "linear-gradient(180deg, rgba(255,255,255,1), rgba(236,247,249,0.96))",
                   border: `1px solid ${palette.line}`,
                   boxShadow: "0 10px 24px rgba(13,30,60,0.04)",
-                  position: "relative",
+                  minHeight: 142,
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  minWidth: 0,
                 }}
               >
-                <button
-                  type="button"
-                  onClick={copyShareId}
-                  style={{
-                    position: "absolute",
-                    top: 10,
-                    right: 10,
-                    border: "1px solid rgba(15,66,88,0.12)",
-                    background: "rgba(255,255,255,0.92)",
-                    color: "var(--header-secondary)",
-                    borderRadius: 999,
-                    padding: "5px 10px",
-                    fontSize: 11,
-                    fontWeight: 800,
-                    letterSpacing: "0.04em",
-                    boxShadow: "0 8px 18px rgba(13,30,60,0.06)",
-                  }}
-                >
-                  Copy
-                </button>
-                <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", fontWeight: 700 }}>
-                  Share ID
-                </div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: palette.ink, marginTop: 10, wordBreak: "break-word" }}>
-                  {loading ? "Loading..." : shareId || "-"}
-                </div>
-                {copyMessage && (
-                  <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: "var(--header-secondary)" }}>
-                    {copyMessage}
+                <div>
+                  <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", fontWeight: 700 }}>
+                    Share ID
                   </div>
-                )}
+                  <div style={{ fontSize: 18, fontWeight: 900, color: palette.ink, marginTop: 10, wordBreak: "break-word", overflowWrap: "anywhere", lineHeight: 1.35 }}>
+                    {loading ? "Loading..." : shareId || "-"}
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={copyShareId}
+                    style={{
+                      border: "1px solid rgba(15,66,88,0.12)",
+                      background: "rgba(255,255,255,0.92)",
+                      color: "var(--header-secondary)",
+                      borderRadius: 999,
+                      padding: "8px 12px",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      letterSpacing: "0.04em",
+                      boxShadow: "0 8px 18px rgba(13,30,60,0.06)",
+                    }}
+                  >
+                    Copy
+                  </button>
+                  {copyMessage && (
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--header-secondary)" }}>
+                      {copyMessage}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </section>

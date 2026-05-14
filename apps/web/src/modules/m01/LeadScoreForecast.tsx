@@ -106,7 +106,7 @@ export default function LeadScoreForecast() {
   return (
     <Layout>
       <main className="page-root" style={{ padding: 20 }}>
-        <ModuleBackButton toSuffix="/m01" label="Module 1 Home" />
+        <ModuleBackButton toSuffix="/m01" label="Lead Quality Home" />
 
         <InsightHero eyebrow="Lead Quality Forecast" title="Lead Quality Forecast" subtitle="Project score movement and class-mix changes before weak intake starts reducing downstream scoring confidence and lead readiness." />
 

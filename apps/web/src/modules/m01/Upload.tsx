@@ -438,7 +438,7 @@ export default function Upload(){
           <div className="m01-upload-header-row">
             <div className="m01-upload-header-copy">
               <div className="m01-upload-kicker">Lead Input</div>
-              <h2 style={{ margin: 0 }}>Module 01 Uploads</h2>
+              <h2 style={{ margin: 0 }}>Lead Quality Uploads</h2>
               <p className="m01-upload-subtitle">
                 Add source CSV files, review active upload batches, and prepare lead data for preview,
                 archive, or merge workflows inside module 1.

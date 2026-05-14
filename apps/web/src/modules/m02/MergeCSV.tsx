@@ -262,7 +262,7 @@ export default function MergeCSVM02() {
     <div style={{ padding: 16, maxWidth: 980 }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
         <ModuleBackButton toSuffix="/m02" />
-        <h2 style={{ margin: 0 }}>Module 02  Merge CSVs</h2>
+        <h2 style={{ margin: 0 }}>Intent Data Merge CSVs</h2>
       </div>
       <p style={{ color: '#666' }}>Uploads: {uploadIds.join(', ') || '<none>'}</p>
       {loading && <div>Loading</div>}

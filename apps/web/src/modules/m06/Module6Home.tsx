@@ -91,7 +91,7 @@ export default function Module6Home(){
             <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(72,177,217,0.12)', color: '#0B2540', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               Interpretation Notes
             </div>
-            <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>How to work through Module 6</h3>
+            <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>How to work through Revenue Insight</h3>
             <div style={{ display: 'grid', gap: 12 }}>
               <StepCard step="1" title="Prepare operational records first" text="Use the Data Hub campaign, touch, lead, and deal workspaces first when the underlying attribution inputs still need creation, cleanup, or import." />
               <StepCard step="2" title="Start with dashboard-level reading" text="Open Dashboard, Journey Preview, or Run Attribution first when you need the current revenue picture, customer-path context, or contribution analysis setup." />

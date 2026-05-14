@@ -31,10 +31,10 @@ export default function Module6Dropdown() {
 
   return (
     <div className={`m7-root ${open ? 'open' : ''}`} ref={ref}>
-      <RoundedButton onClick={() => setOpen(s => !s)} label="Module 6" />
+      <RoundedButton onClick={() => setOpen(s => !s)} label="Revenue Insight" />
       <div className="m7-panel" aria-hidden={!open}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h4 style={{ margin: 0 }}>Module 6</h4>
+          <h4 style={{ margin: 0 }}>Revenue Insight</h4>
           <button className="m7-rounded" onClick={openInWorkspace} style={{ padding: '6px 10px', fontSize: 12 }}>Open in Workspace</button>
         </div>
         <div style={{ marginTop: 8 }}>

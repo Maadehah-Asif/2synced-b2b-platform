@@ -61,7 +61,7 @@ export default function MergedListM02() {
             <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <ModuleBackButton toSuffix="" />
             </div>
-            <h2 className="data-merged-title">Module 02 Merged CSVs</h2>
+            <h2 className="data-merged-title">Intent Data Merged CSVs</h2>
             <p className="data-merged-subtitle">
               Review merged intent and behavior datasets, inspect source composition, and open previews
               before moving into scoring, prioritization, or other M02 analysis steps.

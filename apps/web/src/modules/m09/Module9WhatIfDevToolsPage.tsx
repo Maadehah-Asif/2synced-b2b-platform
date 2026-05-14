@@ -49,13 +49,13 @@ export default function Module9WhatIfDevToolsPage() {
       <main className="page-root" style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix="/m09" label="Back" />
-          <h2 style={{ marginTop: 16 }}>Module 9</h2>
+          <h2 style={{ marginTop: 16 }}>Campaign Performance Optimization</h2>
         </div>
 
         <section style={heroStyle}>
           <div style={{ padding: 28 }}>
             <div style={heroPillRowStyle}>
-              <HeroPill label="Module 9" />
+              <HeroPill label="Campaign Intelligence" />
               <HeroPill label="Technical validation" />
               <HeroPill label="Scenario inspection" />
             </div>
@@ -87,7 +87,7 @@ export default function Module9WhatIfDevToolsPage() {
           ) : datasetError ? (
             <StateCard tone="error" title="Dataset loading problem">{datasetError}</StateCard>
           ) : datasets.length === 0 ? (
-            <StateCard tone="warning" title="No merged datasets available">Create a merged Module 9 dataset first, then return here to inspect technical simulator details.</StateCard>
+            <StateCard tone="warning" title="No merged datasets available">Create a merged campaign dataset first, then return here to inspect technical simulator details.</StateCard>
           ) : (
             <>
               <div style={{ marginTop: 18 }}>

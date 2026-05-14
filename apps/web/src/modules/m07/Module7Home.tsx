@@ -107,7 +107,7 @@ export default function Module7Home(){
               />
               <ActionCard
                 title="Funnel Forecast"
-                desc="Project conversion, drop-off pressure, and stage-delay movement using the module 7 forecast dataset."
+                desc="Project conversion, drop-off pressure, and stage-delay movement using the funnel forecast dataset."
                 action="Open Forecast"
                 onClick={() => go(`#/workspace/:workspaceId/m07/forecast`)}
               />
@@ -173,10 +173,7 @@ function ActionCard({ title, desc, action, onClick }: { title: string; desc: str
       }}
     >
       <div>
-        <div style={{ display: 'inline-flex', padding: '6px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.14)', fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          Insight Page
-        </div>
-        <div style={{ marginTop: 12, fontSize: 21, fontWeight: 900, lineHeight: 1.25 }}>{title}</div>
+        <div style={{ fontSize: 21, fontWeight: 900, lineHeight: 1.25 }}>{title}</div>
         <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.7, color: 'rgba(255,255,255,0.88)' }}>{desc}</div>
       </div>
       <div style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', padding: '8px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, alignSelf: 'flex-start' }}>

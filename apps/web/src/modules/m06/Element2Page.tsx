@@ -8,11 +8,11 @@ export default function Element2Page(){
       <main className="page-root">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix="/m06" />
-          <h2 style={{ marginTop: 16, marginBottom: 0 }}>Module 6 — Page Removed</h2>
+          <h2 style={{ marginTop: 16, marginBottom: 0 }}>Revenue Insight Page Removed</h2>
         </div>
         <div style={{ marginTop: 12 }}>
           <div style={{ fontSize: 14, color: '#444' }}>
-            The previous "Element 2" page (Attribution Runner) has been removed. Use the Module 6 main dashboard for overview and runs.
+            The previous "Element 2" page (Attribution Runner) has been removed. Use the Revenue Insight main dashboard for overview and runs.
           </div>
         </div>
       </main>

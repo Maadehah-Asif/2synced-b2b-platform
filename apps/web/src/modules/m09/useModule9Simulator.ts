@@ -205,7 +205,7 @@ export function useModule9Simulator() {
   async function loadDatasets() {
     if (!workspaceId) {
       setLoadingDatasets(false)
-      setDatasetError('Workspace context is missing. Open Module 9 from inside a workspace.')
+      setDatasetError('Workspace context is missing. Open Campaign Performance Optimization from inside a workspace.')
       return
     }
     setLoadingDatasets(true)
@@ -216,7 +216,7 @@ export function useModule9Simulator() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !json?.ok) {
         setDatasets([])
-        setDatasetError(json?.error || 'Module 9 could not load merged datasets right now.')
+        setDatasetError(json?.error || 'Campaign Performance Optimization could not load merged datasets right now.')
         return
       }
       const items = Array.isArray(json.items) ? (json.items as MergedDataset[]) : []
@@ -227,7 +227,7 @@ export function useModule9Simulator() {
       })
     } catch {
       setDatasets([])
-      setDatasetError('Module 9 could not reach the merged dataset service right now.')
+      setDatasetError('Campaign Performance Optimization could not reach the merged dataset service right now.')
     } finally {
       setLoadingDatasets(false)
     }
@@ -266,7 +266,7 @@ export function useModule9Simulator() {
       })
     } catch {
       setBaselineResponse(null)
-      setBaselineError('Module 9 could not reach the simulator baseline service.')
+      setBaselineError('Campaign Performance Optimization could not reach the simulator baseline service.')
     } finally {
       setLoadingBaselines(false)
     }
@@ -314,7 +314,7 @@ export function useModule9Simulator() {
     }
     setRunningSimulation(true)
     setSimulationError(null)
-    setMessage({ type: 'info', text: 'Running the Module 9 ROI scenario projection...' })
+    setMessage({ type: 'info', text: 'Running the campaign ROI scenario projection...' })
     try {
       const res = await fetch(`${API_URL}/m09/simulator/run`, {
         method: 'POST',
@@ -343,8 +343,8 @@ export function useModule9Simulator() {
       setMessage({ type: 'success', text: 'Scenario projection generated successfully.' })
     } catch {
       setSimulationResult(null)
-      setSimulationError('Module 9 could not reach the simulator service right now.')
-      setMessage({ type: 'error', text: 'Module 9 could not reach the simulator service right now.' })
+      setSimulationError('Campaign Performance Optimization could not reach the simulator service right now.')
+      setMessage({ type: 'error', text: 'Campaign Performance Optimization could not reach the simulator service right now.' })
     } finally {
       setRunningSimulation(false)
     }

@@ -64,7 +64,7 @@ export default function MergedList(){
             <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <ModuleBackButton toSuffix="" />
             </div>
-            <h2 className="data-merged-title">Module 01 Merged CSVs</h2>
+            <h2 className="data-merged-title">Lead Quality Merged CSVs</h2>
             <p className="data-merged-subtitle">
               Review merged datasets created from uploaded lead files, inspect merge details, and open
               previews before continuing into downstream lead-processing workflows.

@@ -103,7 +103,7 @@ function Module5Landing({ workspaceId }: { workspaceId: string | null }) {
           }}
         >
           <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(15,66,88,0.08)', color: 'var(--header-secondary)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            Module Areas
+            Alignment Areas
           </div>
           <h3 style={{ margin: '14px 0 12px', fontSize: 28, color: '#0B2540' }}>Open alignment workspaces</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
@@ -218,10 +218,7 @@ function ActionCard({ title, desc, action, onClick, disabled = false }: { title:
       }}
     >
       <div>
-        <div style={{ display: 'inline-flex', padding: '6px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.14)', fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          Insight Page
-        </div>
-        <div style={{ marginTop: 12, fontSize: 21, fontWeight: 900, lineHeight: 1.25 }}>{title}</div>
+        <div style={{ fontSize: 21, fontWeight: 900, lineHeight: 1.25 }}>{title}</div>
         <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.7, color: 'rgba(255,255,255,0.88)' }}>{desc}</div>
       </div>
       <div style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', padding: '8px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, alignSelf: 'flex-start' }}>

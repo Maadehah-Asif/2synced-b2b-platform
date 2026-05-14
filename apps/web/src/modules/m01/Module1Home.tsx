@@ -95,10 +95,10 @@ export default function Module1Home(){
             <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(72,177,217,0.12)', color: '#0B2540', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               Interpretation Notes
             </div>
-            <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>How to work through Module 1</h3>
+            <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>How to work through Lead Quality & Scoring</h3>
             <div style={{ display: 'grid', gap: 12 }}>
-              <StepCard step="1" title="Start in Data Hub" text="Upload raw lead files and review merged CSVs in the workspace Data Hub first so Module 1 receives cleaner source records." />
-              <StepCard step="2" title="Open Lead View for record review" text="Use Lead View when you need to inspect the created Module 1 lead records, confirm field completeness, and catch quality issues before scoring-dependent work." />
+              <StepCard step="1" title="Start in Data Hub" text="Upload raw lead files and review merged CSVs in the workspace Data Hub first so Lead Quality & Scoring receives cleaner source records." />
+              <StepCard step="2" title="Open Lead View for record review" text="Use Lead View when you need to inspect created lead records, confirm field completeness, and catch quality issues before scoring-dependent work." />
               <StepCard step="3" title="Finish in the report center" text="Use the report screen once the lead set looks stable so you can review the current quality picture and share summary findings with the team." />
             </div>
           </div>

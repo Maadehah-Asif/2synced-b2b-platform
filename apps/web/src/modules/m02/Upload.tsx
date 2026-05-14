@@ -384,7 +384,7 @@ return (
         <div className="m02-upload-header-row">
           <div className="m02-upload-header-copy">
             <div className="m02-upload-kicker">Intent Input</div>
-            <h2 style={{ margin: 0 }}>Module 02 Uploads</h2>
+            <h2 style={{ margin: 0 }}>Intent Data Uploads</h2>
             <p className="m02-upload-subtitle">
               Add source intent and behavior CSV files, review active batches, and prepare shared records
               for preview, archive, or merge workflows used by the M02 prioritization flow.

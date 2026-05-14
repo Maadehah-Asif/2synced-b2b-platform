@@ -79,11 +79,11 @@ export default function Module9Home() {
             }}
           >
             <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(15,66,88,0.08)', color: 'var(--header-secondary)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Module Screens
+              Campaign Tools
             </div>
             <h3 style={{ margin: '14px 0 12px', fontSize: 28, color: '#0B2540' }}>Open campaign aggregation workflows</h3>
             <div style={{ fontSize: 14, color: '#415274', lineHeight: 1.7, marginBottom: 16, maxWidth: 760 }}>
-              Module 9 should follow the same landing-page pattern as the other modules: open the feature area from here, then work inside a focused page for data operations and later optimization outputs.
+              Open a campaign feature area from here, then work inside a focused page for data operations and optimization outputs.
             </div>
             <h3 style={{ margin: '14px 0 12px', fontSize: 28, color: '#0B2540' }}>Open optimization focus areas</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>

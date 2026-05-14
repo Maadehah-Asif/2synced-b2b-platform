@@ -181,7 +181,7 @@ export default function Module9CampaignImportFlow() {
   async function loadUploads() {
     if (!workspaceId) {
       setLoading(false)
-      setMessage({ type: 'error', text: 'Workspace context is missing. Open Module 9 from inside a workspace.' })
+        setMessage({ type: 'error', text: 'Workspace context is missing. Open Campaign Performance Optimization from inside a workspace.' })
       return
     }
     setLoading(true)
@@ -191,13 +191,13 @@ export default function Module9CampaignImportFlow() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !json?.ok) {
         setUploads([])
-        setMessage({ type: 'error', text: json?.error || 'Module 9 could not load the current campaign upload list.' })
+        setMessage({ type: 'error', text: json?.error || 'Campaign Performance Optimization could not load the current campaign upload list.' })
         return
       }
       setUploads(Array.isArray(json.items) ? json.items : [])
     } catch {
       setUploads([])
-      setMessage({ type: 'error', text: 'Module 9 could not reach the shared upload service right now.' })
+      setMessage({ type: 'error', text: 'Campaign Performance Optimization could not reach the shared upload service right now.' })
     } finally {
       setLoading(false)
     }
@@ -263,7 +263,7 @@ export default function Module9CampaignImportFlow() {
     }
 
     setUploading(true)
-    setMessage({ type: 'info', text: 'Uploading campaign CSV to the shared Module 9 file library...' })
+    setMessage({ type: 'info', text: 'Uploading campaign CSV to the shared campaign file library...' })
     try {
       const formData = new FormData()
       formData.append('file', file, file.name)
@@ -281,7 +281,7 @@ export default function Module9CampaignImportFlow() {
         return
       }
       setFile(null)
-      setMessage({ type: 'success', text: 'Campaign CSV uploaded for Module 9.' })
+      setMessage({ type: 'success', text: 'Campaign CSV uploaded for Campaign Performance Optimization.' })
       await loadUploads()
     } catch {
       setMessage({ type: 'error', text: 'Upload failed before the shared service could confirm the file.' })
@@ -313,7 +313,7 @@ export default function Module9CampaignImportFlow() {
       }))
       setActiveUploadId(uploadId)
     } catch {
-      setMessage({ type: 'error', text: 'Module 9 could not fetch the selected file preview.' })
+      setMessage({ type: 'error', text: 'Campaign Performance Optimization could not fetch the selected file preview.' })
     } finally {
       setPreviewingId(null)
     }
@@ -354,7 +354,7 @@ export default function Module9CampaignImportFlow() {
       return
     }
     setValidating(true)
-    setMessage({ type: 'info', text: 'Validating selected Module 9 files and checking canonical mappings...' })
+    setMessage({ type: 'info', text: 'Validating selected campaign files and checking canonical mappings...' })
     try {
       await ensurePreviewsForSelection()
       const res = await fetch(`${API_URL}/m09/merge/validate`, {
@@ -385,7 +385,7 @@ export default function Module9CampaignImportFlow() {
       return
     }
     setRunningMerge(true)
-    setMessage({ type: 'info', text: 'Normalizing selected campaign files and building the merged Module 9 dataset...' })
+    setMessage({ type: 'info', text: 'Normalizing selected campaign files and building the merged campaign dataset...' })
     try {
       const res = await fetch(`${API_URL}/m09/merge/run`, {
         method: 'POST',
@@ -408,7 +408,7 @@ export default function Module9CampaignImportFlow() {
         warnings: Array.isArray(json.warnings) ? json.warnings : [],
         sampleRows: Array.isArray(json.sampleRows) ? json.sampleRows : [],
       })
-      setMessage({ type: 'success', text: 'Module 9 merged dataset created successfully.' })
+      setMessage({ type: 'success', text: 'Merged campaign dataset created successfully.' })
       await loadMergedOutputs()
     } catch {
       setMergeResult(null)
@@ -444,7 +444,7 @@ export default function Module9CampaignImportFlow() {
       setMergedDetailsById((current) => ({ ...current, [mergedId]: detail }))
       setPreviewMergedId(mergedId)
     } catch {
-      setMessage({ type: 'error', text: 'Module 9 could not fetch the merged dataset preview.' })
+      setMessage({ type: 'error', text: 'Campaign Performance Optimization could not fetch the merged dataset preview.' })
     } finally {
       setLoadingMergedPreviewId(null)
     }
@@ -472,7 +472,7 @@ export default function Module9CampaignImportFlow() {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(objectUrl)
-      setMessage({ type: 'success', text: 'Merged Module 9 CSV download started.' })
+      setMessage({ type: 'success', text: 'Merged campaign CSV download started.' })
     } catch {
       setMessage({ type: 'error', text: 'Merged CSV download could not be started.' })
     } finally {
@@ -485,7 +485,7 @@ export default function Module9CampaignImportFlow() {
       <main className="page-root" style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix="/m09" label="Back" />
-          <h2 style={{ marginTop: 16 }}>Module 9</h2>
+          <h2 style={{ marginTop: 16 }}>Campaign Performance Optimization</h2>
         </div>
 
         <section style={heroStyle}>
@@ -493,7 +493,7 @@ export default function Module9CampaignImportFlow() {
             <div style={heroEyebrow}>M09 Campaign Data Import</div>
             <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>Campaign Data Import</h1>
             <div style={{ maxWidth: 860, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
-              Upload raw campaign CSVs, preview detected headers, validate the selected source files, map source columns into the Module 9 canonical schema, normalize values, and merge them into one managed campaign dataset for later analytics and optimization workflows.
+              Upload raw campaign CSVs, preview detected headers, validate the selected source files, map source columns into the campaign intelligence schema, normalize values, and merge them into one managed campaign dataset for later analytics and optimization workflows.
             </div>
           </div>
         </section>
@@ -505,13 +505,13 @@ export default function Module9CampaignImportFlow() {
             <div style={pillStyle}>Upload</div>
             <h3 style={panelHeadingStyle}>Add a campaign CSV</h3>
             <div style={panelBodyStyle}>
-              Upload uses the existing shared M01 storage with `module=m09`, so raw files remain workspace-aware while Module 9 manages the preview, validation, normalization, and merge flow.
+              Upload uses the existing shared file storage, so raw files remain workspace-aware while Campaign Performance Optimization manages the preview, validation, normalization, and merge flow.
             </div>
             <form onSubmit={handleUpload} style={{ display: 'grid', gap: 14 }}>
               <label style={inputCardStyle}>
                 <div style={{ fontSize: 14, fontWeight: 800, color: '#0B2540' }}>Choose a CSV file</div>
                 <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.65, color: '#5B6C8B' }}>
-                  Raw files stay in the shared upload library. Module 9 processing starts after you select and validate them below.
+                  Raw files stay in the shared upload library. Campaign processing starts after you select and validate them below.
                 </div>
                 <input type="file" accept=".csv,text/csv" onChange={(event) => setFile(event.target.files?.[0] || null)} style={{ marginTop: 14 }} />
                 <div style={{ marginTop: 10, fontSize: 12, color: '#5B6C8B' }}>{file ? `Selected file: ${file.name}` : 'No file selected yet'}</div>
@@ -527,9 +527,9 @@ export default function Module9CampaignImportFlow() {
             <div style={statusPillStyle}>Current Status</div>
             <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>Feature 1 flow</h3>
             <div style={{ display: 'grid', gap: 12 }}>
-              <StepCard step="1" title="Select raw source files" text="Use the Module 9 file library to choose multiple uploaded campaign CSVs for processing." />
+              <StepCard step="1" title="Select raw source files" text="Use the campaign file library to choose multiple uploaded campaign CSVs for processing." />
               <StepCard step="2" title="Preview and map fields" text="Inspect headers, sample rows, inferred types, and source-to-canonical mappings for each file." />
-              <StepCard step="3" title="Validate and merge" text="Normalize rows, detect duplicate campaign-period rows, and save one merged Module 9 dataset." />
+              <StepCard step="3" title="Validate and merge" text="Normalize rows, detect duplicate campaign-period rows, and save one merged campaign dataset." />
             </div>
             <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
               <MetaTile label="Files" value={String(stats.count)} />
@@ -543,7 +543,7 @@ export default function Module9CampaignImportFlow() {
         <section style={panelStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 18 }}>
             <div>
-              <div style={pillStyle}>Module 9 Files</div>
+              <div style={pillStyle}>Campaign Files</div>
               <h3 style={{ margin: '12px 0 0', fontSize: 24, color: '#0B2540' }}>Uploaded campaign CSVs</h3>
             </div>
             <button className="btn-ghost" style={buttonGhostStyle} onClick={loadUploads}>Reload List</button>
@@ -556,7 +556,7 @@ export default function Module9CampaignImportFlow() {
               <SkeletonBlock height={68} />
             </div>
           ) : uploads.length === 0 ? (
-            <EmptyState title="No Module 9 files yet" text="Once a campaign CSV is uploaded with module=m09, it will appear here and can be selected for preview, validation, and merge." />
+            <EmptyState title="No campaign files yet" text="Once a campaign CSV is uploaded, it will appear here and can be selected for preview, validation, and merge." />
           ) : (
             <div style={{ overflowX: 'auto', borderRadius: 18, border: '1px solid rgba(15,66,88,0.08)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', background: 'rgba(255,255,255,0.96)' }}>
@@ -715,7 +715,7 @@ export default function Module9CampaignImportFlow() {
           </div>
 
           <div style={{ marginTop: 16, fontSize: 13, lineHeight: 1.7, color: '#5B6C8B' }}>
-            Selected uploads are normalized into the Module 9 canonical campaign schema, then combined with duplicate detection based on campaign name, channel, and period window.
+            Selected uploads are normalized into the campaign intelligence schema, then combined with duplicate detection based on campaign name, channel, and period window.
           </div>
 
           {validation ? (
@@ -760,7 +760,7 @@ export default function Module9CampaignImportFlow() {
           {mergeResult && (
             <div style={{ marginTop: 18 }}>
               <StatusCard title="Merged output created" tone="success">
-                {mergeResult.title} was saved as a Module 9 managed output. {mergeResult.rowCountBeforeMerge} normalized rows were reduced to {mergeResult.rowCountAfterMerge} rows after duplicate handling.
+                {mergeResult.title} was saved as a managed campaign output. {mergeResult.rowCountBeforeMerge} normalized rows were reduced to {mergeResult.rowCountAfterMerge} rows after duplicate handling.
               </StatusCard>
               <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
                 <MetaTile label="Rows before" value={String(mergeResult.rowCountBeforeMerge)} />
@@ -780,7 +780,7 @@ export default function Module9CampaignImportFlow() {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div>
               <div style={pillStyle}>Merged Outputs</div>
-              <h3 style={{ margin: '12px 0 0', fontSize: 24, color: '#0B2540' }}>Saved Module 9 merged datasets</h3>
+              <h3 style={{ margin: '12px 0 0', fontSize: 24, color: '#0B2540' }}>Saved merged campaign datasets</h3>
             </div>
             <button className="btn-ghost" style={buttonGhostStyle} onClick={loadMergedOutputs}>Reload Outputs</button>
           </div>
@@ -830,11 +830,11 @@ export default function Module9CampaignImportFlow() {
                   <div style={{ marginTop: 14 }}>
                     <div style={{ fontSize: 15, fontWeight: 900, color: '#0B2540' }}>How this dataset was generated</div>
                     <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-                      <TrustBullet text={`${item.sourceUploadIds?.length || 0} source file(s) were normalized into one Module 9 managed dataset.`} />
+                      <TrustBullet text={`${item.sourceUploadIds?.length || 0} source file(s) were normalized into one managed campaign dataset.`} />
                       <TrustBullet text={`${item.duplicateCount || 0} duplicate campaign-period row(s) were merged after exact and fuzzy duplicate checks.`} />
                       <TrustBullet text={item.summary?.fuzzyThreshold || 'Duplicate handling uses normalized campaign names, matching channels, and a close period window.'} />
                       <TrustBullet text="Normalization cleans currency-like values, trims strings, standardizes dates, and fills derived launch weekday or hour buckets when possible." />
-                      <TrustBullet text="Derived campaign metrics include CTR, CPL, ROI, and campaign duration days for downstream Module 9 analysis." />
+                      <TrustBullet text="Derived campaign metrics include CTR, CPL, ROI, and campaign duration days for downstream campaign analysis." />
                     </div>
                   </div>
 
@@ -869,7 +869,7 @@ export default function Module9CampaignImportFlow() {
               </div>
 
               <div style={{ marginTop: 14, fontSize: 13, lineHeight: 1.7, color: '#5B6C8B' }}>
-                This preview reads sample rows from the stored merged CSV in Module 9 storage so you can confirm the dataset structure before downloading or using it later.
+                This preview reads sample rows from the stored merged CSV so you can confirm the dataset structure before downloading or using it later.
               </div>
 
               <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>

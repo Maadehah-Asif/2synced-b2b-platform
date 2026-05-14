@@ -100,7 +100,7 @@ export default function IntentForecast() {
   return (
     <Layout>
       <main className="page-root" style={{ padding: 20 }}>
-        <ModuleBackButton toSuffix="/m02" label="Module 2 Home" />
+        <ModuleBackButton toSuffix="/m02" label="Intent Signals Home" />
 
         <InsightHero eyebrow="Intent Forecast" title="Intent Forecast" subtitle="Project intent strength and heat-band movement before prioritization logic starts drifting away from current buyer behaviour." />
 

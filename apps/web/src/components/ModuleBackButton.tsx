@@ -8,7 +8,7 @@ type Props = {
 export default function ModuleBackButton({ toSuffix = '', label = 'Back' }: Props) {
   const wid = getWorkspaceIdFromHash()
 
-  function go() {
+  function goFallback() {
     if (wid) {
       const suffix = toSuffix.startsWith('/') ? toSuffix : `/${toSuffix ?? ''}`
       const normalized = suffix === '/' ? '' : suffix.replace(/\/+/g, '/')
@@ -16,6 +16,18 @@ export default function ModuleBackButton({ toSuffix = '', label = 'Back' }: Prop
       return
     }
     window.location.hash = '#/workspaces'
+  }
+
+  function go() {
+    const currentHash = window.location.hash
+    if (window.history.length > 1) {
+      window.history.back()
+      window.setTimeout(() => {
+        if (window.location.hash === currentHash) goFallback()
+      }, 180)
+      return
+    }
+    goFallback()
   }
 
   return (

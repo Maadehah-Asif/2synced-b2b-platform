@@ -251,7 +251,7 @@ export default function ConversationManualLog() {
             <h1 className="page-title">Log conversation manually</h1>
             <p className="page-subtitle">
               Capture a quick summary of a call, WhatsApp chat, or ad-hoc email so
-              Module 3 can still extract entities, compute sentiment, and estimate
+              Conversation Intelligence can still extract entities, compute sentiment, and estimate
               deal health.
             </p>
           </div>

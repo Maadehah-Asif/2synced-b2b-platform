@@ -506,7 +506,7 @@ export default function DealHealthBoard() {
                   No analyzed deals yet.
                 </div>
                 <div className="muted" style={{ fontSize: 13 }}>
-                  Run conversation analysis on a few threads in Module 3 to see deal health scores here.
+                  Run conversation analysis on a few threads to see deal health scores here.
                 </div>
               </div>
             ) : (

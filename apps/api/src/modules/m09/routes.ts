@@ -304,7 +304,8 @@ router.post('/simulator/run', async (req, res) => {
     const scenario = normalizeScenario(body.scenario || {}, baseline);
     const noChange = isNoChangeScenario(baseline, scenario);
     const modelMetadata = loadRoiModelMetadata();
-    const predictionPayload = buildPredictionPayload(rawBaseline, baseline, scenario);
+    const predictionInput = buildPredictionPayload(rawBaseline, baseline, scenario);
+    const predictionPayload = predictionInput.payload;
     const normalization = {
       raw_roi: baselineRoiRaw,
       normalized_roi: baselineRoi,
@@ -314,12 +315,17 @@ router.post('/simulator/run', async (req, res) => {
     };
 
     let predictedRoi = baselineRoi;
+    let pythonPredictedRoi: number | null = null;
     let pythonRaw: Record<string, unknown> | null = null;
     let explanation = 'No scenario changes detected; projected ROI is equal to the normalized baseline ROI.';
     if (!noChange) {
+      if (process.env.M09_SIM_DEBUG === '1') {
+        console.info('[m09.simulator] prediction payload', summarizePredictionPayload(predictionPayload));
+      }
       const prediction = await invokePythonRoiPrediction(predictionPayload);
       pythonRaw = prediction.raw;
-      predictedRoi = clampRoi(prediction.predicted_roi) ?? prediction.predicted_roi;
+      pythonPredictedRoi = clampRoi(prediction.predicted_roi) ?? prediction.predicted_roi;
+      predictedRoi = projectBaselineAwareRoi(baselineRoi, pythonPredictedRoi, baseline, scenario);
       explanation = buildExplanation(predictedRoi - (baselineRoi ?? 0), scenario, baseline);
     }
 
@@ -353,7 +359,13 @@ router.post('/simulator/run', async (req, res) => {
       },
       technical: {
         predictionPayloadSummary: summarizePredictionPayload(predictionPayload),
+        predictionPayloadUsed: summarizePredictionPayload(predictionPayload),
         baselineNormalization: normalization,
+        baseline_roi: baselineRoi,
+        projected_roi: predictedRoi,
+        python_projected_roi: pythonPredictedRoi,
+        fallbacksUsed: predictionInput.fallbacksUsed,
+        baselineFeatureSummary: predictionInput.baselineFeatureSummary,
         noChangeDetected: noChange,
         confidence,
         pythonRaw,
@@ -508,31 +520,37 @@ function isNoChangeScenario(baseline: ReturnType<typeof buildBaselineItem>, scen
 }
 
 function buildPredictionPayload(raw: CsvRow, baseline: ReturnType<typeof buildBaselineItem>, scenario: ReturnType<typeof normalizeScenario>) {
+  const fallbacksUsed: string[] = [];
   const spend = scenario.spend ?? baseline.spend ?? 0;
   const impressions = toNumber(raw.impressions);
   const clicks = toNumber(raw.clicks);
   const conversions = toNumber(raw.conversions);
   const mqls = toNumber(raw.mqls);
   const sqls = toNumber(raw.sqls);
-  const ctr = baseline.ctr ?? (clicks !== null && impressions && impressions > 0 ? clicks / impressions : null);
-  const conversionRate = clicks && clicks > 0 && conversions !== null ? conversions / clicks : null;
-  const mqlRate = conversions && conversions > 0 && mqls !== null ? mqls / conversions : null;
-  const sqlRate = mqls && mqls > 0 && sqls !== null ? sqls / mqls : null;
-  const impressionsPerSpend = spend > 0 && impressions !== null ? impressions / spend : null;
-  const clicksPerSpend = spend > 0 && clicks !== null ? clicks / spend : null;
+  const ctr = toNumber((raw as any).ctr) ?? baseline.ctr ?? ratio(clicks, impressions);
+  const conversionRate = toNumber((raw as any).conversion_rate) ?? ratio(conversions, clicks);
+  const mqlRate = toNumber((raw as any).mql_rate) ?? ratio(mqls, conversions);
+  const sqlRate = toNumber((raw as any).sql_rate) ?? ratio(sqls, mqls);
+  const impressionsPerSpend = toNumber((raw as any).impressions_per_spend) ?? ratio(impressions, spend);
+  const clicksPerSpend = toNumber((raw as any).clicks_per_spend) ?? ratio(clicks, spend);
   const segment = normalizeCategory((raw as any).segment) || deriveSegment(scenario.channel);
-  return {
+  const payload = {
     spend,
     touches_per_user: scenario.touches_per_user,
-    campaign_duration_days: baseline.campaign_duration_days ?? 14,
+    campaign_duration_days: withPredictionFallback('campaign_duration_days', baseline.campaign_duration_days, 14, fallbacksUsed),
     fatigue_score: deriveFatigueScore(scenario.touches_per_user),
-    ctr: ctr ?? undefined,
-    conversion_rate: conversionRate ?? undefined,
-    mql_rate: mqlRate ?? undefined,
-    sql_rate: sqlRate ?? undefined,
-    impressions_per_spend: impressionsPerSpend ?? undefined,
-    clicks_per_spend: clicksPerSpend ?? undefined,
-    engagement_efficiency_score: deriveEngagementEfficiency(ctr, conversionRate, mqlRate),
+    ctr: withPredictionFallback('ctr', ctr, deriveChannelCtr(scenario.channel), fallbacksUsed),
+    conversion_rate: withPredictionFallback('conversion_rate', conversionRate, deriveChannelConversionRate(scenario.channel), fallbacksUsed),
+    mql_rate: withPredictionFallback('mql_rate', mqlRate, 0.62, fallbacksUsed),
+    sql_rate: withPredictionFallback('sql_rate', sqlRate, 0.34, fallbacksUsed),
+    impressions_per_spend: withPredictionFallback('impressions_per_spend', impressionsPerSpend, deriveChannelImpressionsPerSpend(scenario.channel), fallbacksUsed),
+    clicks_per_spend: withPredictionFallback('clicks_per_spend', clicksPerSpend, deriveChannelClicksPerSpend(scenario.channel), fallbacksUsed),
+    engagement_efficiency_score: withPredictionFallback(
+      'engagement_efficiency_score',
+      toNumber((raw as any).engagement_efficiency_score) ?? deriveEngagementEfficiency(ctr, conversionRate, mqlRate),
+      deriveChannelEngagementEfficiency(scenario.channel),
+      fallbacksUsed,
+    ),
     timing_score: deriveTimingScore(scenario.launch_weekday, scenario.launch_hour_bucket),
     channel_quality_score: deriveChannelQualityScore(scenario.channel),
     segment_quality_score: deriveSegmentQualityScore(segment),
@@ -542,6 +560,90 @@ function buildPredictionPayload(raw: CsvRow, baseline: ReturnType<typeof buildBa
     launch_hour_bucket: scenario.launch_hour_bucket,
     segment,
   };
+  return {
+    payload,
+    fallbacksUsed,
+    baselineFeatureSummary: {
+      ctr,
+      conversion_rate: conversionRate,
+      mql_rate: mqlRate,
+      sql_rate: sqlRate,
+      impressions_per_spend: impressionsPerSpend,
+      clicks_per_spend: clicksPerSpend,
+      campaign_duration_days: baseline.campaign_duration_days,
+      campaign_type: normalizeCategory(raw.campaign_type) || null,
+      segment: normalizeCategory((raw as any).segment) || null,
+    },
+  };
+}
+
+function withPredictionFallback(name: string, value: number | null, fallback: number, fallbacksUsed: string[]) {
+  if (value !== null && Number.isFinite(value)) return round(value);
+  fallbacksUsed.push(name);
+  return fallback;
+}
+
+function ratio(numerator: number | null, denominator: number | null) {
+  if (numerator === null || denominator === null || denominator <= 0) return null;
+  return numerator / denominator;
+}
+
+function projectBaselineAwareRoi(
+  baselineRoi: number | null,
+  modelRoi: number,
+  baseline: ReturnType<typeof buildBaselineItem>,
+  scenario: ReturnType<typeof normalizeScenario>,
+) {
+  if (baselineRoi === null) return clampRoi(modelRoi) ?? modelRoi;
+
+  const baselineScore = scenarioQualityScore({
+    channel: baseline.channel,
+    launch_weekday: baseline.launch_weekday,
+    launch_hour_bucket: baseline.launch_hour_bucket,
+    touches_per_user: baseline.touches_per_user,
+  });
+  const scenarioScore = scenarioQualityScore(scenario);
+  const qualityDelta = scenarioScore - baselineScore;
+  const directionalDelta = clamp(qualityDelta * 0.9, -0.75, 0.75);
+  const rawModelDelta = clamp((modelRoi - baselineRoi) * 0.12, -0.22, 0.22);
+  const modelDelta = constrainModelDeltaToScenarioDirection(rawModelDelta, qualityDelta);
+  let projectedDelta = directionalDelta + modelDelta;
+
+  if (Math.abs(projectedDelta) < 0.03 && Math.abs(qualityDelta) > 0.08) {
+    projectedDelta = qualityDelta > 0 ? 0.06 : -0.06;
+  }
+  if (baselineRoi >= 4.75 && projectedDelta > 0) {
+    projectedDelta = Math.min(projectedDelta, 5 - baselineRoi);
+  }
+
+  return round(clampRoi(baselineRoi + projectedDelta) ?? baselineRoi);
+}
+
+function scenarioQualityScore(input: {
+  channel: string | null;
+  launch_weekday: string | null;
+  launch_hour_bucket: string | null;
+  touches_per_user: number | null;
+}) {
+  const channelSignal = (deriveChannelQualityScore(input.channel) - 1) * 0.45;
+  const timingSignal = (deriveTimingScore(input.launch_weekday, input.launch_hour_bucket) - 1) * 0.8;
+  const fatigueSignal = touchQualitySignal(input.touches_per_user) * 0.65;
+  return channelSignal + timingSignal + fatigueSignal;
+}
+
+function touchQualitySignal(touches: number | null) {
+  if (touches === null) return 0;
+  if (touches <= 2) return 0.05;
+  if (touches <= 4) return 0.35;
+  if (touches <= 6) return 0.1;
+  if (touches <= 8) return -0.25;
+  return -0.45;
+}
+
+function constrainModelDeltaToScenarioDirection(modelDelta: number, qualityDelta: number) {
+  if (qualityDelta > 0.03 && modelDelta < 0) return Math.max(modelDelta, -0.03);
+  if (qualityDelta < -0.03 && modelDelta > 0) return Math.min(modelDelta, 0.03);
+  return modelDelta;
 }
 
 function summarizePredictionPayload(payload: Record<string, unknown>) {
@@ -922,6 +1024,66 @@ function deriveChannelQualityScore(channel: string | null) {
   return scores[channel || ''] ?? 1;
 }
 
+function deriveChannelCtr(channel: string | null) {
+  const scores: Record<string, number> = {
+    display: 0.006,
+    content_syndication: 0.0113,
+    email: 0.0165,
+    paid_search: 0.0211,
+    linkedin: 0.0171,
+    webinar: 0.0121,
+  };
+  return scores[channel || ''] ?? 0.018;
+}
+
+function deriveChannelConversionRate(channel: string | null) {
+  const scores: Record<string, number> = {
+    display: 0.0168,
+    content_syndication: 0.0377,
+    email: 0.032,
+    paid_search: 0.068,
+    linkedin: 0.0594,
+    webinar: 0.1267,
+  };
+  return scores[channel || ''] ?? 0.045;
+}
+
+function deriveChannelImpressionsPerSpend(channel: string | null) {
+  const scores: Record<string, number> = {
+    display: 118,
+    content_syndication: 96,
+    email: 76,
+    paid_search: 78,
+    linkedin: 72,
+    webinar: 44,
+  };
+  return scores[channel || ''] ?? 88;
+}
+
+function deriveChannelClicksPerSpend(channel: string | null) {
+  const scores: Record<string, number> = {
+    display: 0.71,
+    content_syndication: 1.08,
+    email: 1.25,
+    paid_search: 1.65,
+    linkedin: 1.23,
+    webinar: 0.54,
+  };
+  return scores[channel || ''] ?? 1.45;
+}
+
+function deriveChannelEngagementEfficiency(channel: string | null) {
+  const scores: Record<string, number> = {
+    display: 0.1387,
+    content_syndication: 0.1808,
+    email: 0.185,
+    paid_search: 0.1991,
+    linkedin: 0.2232,
+    webinar: 0.2797,
+  };
+  return scores[channel || ''] ?? 0.19;
+}
+
 function deriveCampaignType(channel: string | null) {
   const types: Record<string, string> = {
     display: 'paid_acquisition',
@@ -962,6 +1124,10 @@ function asNumber(value: unknown) {
 
 function round(value: number) {
   return Math.round(value * 1000000) / 1000000;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function isEmpty(value: unknown) {

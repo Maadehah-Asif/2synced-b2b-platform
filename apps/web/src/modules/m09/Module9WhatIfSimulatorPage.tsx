@@ -59,7 +59,7 @@ export default function Module9WhatIfSimulatorPage() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !json?.ok) {
         setDatasets([])
-        setDatasetError(json?.error || 'Module 9 could not load merged datasets right now.')
+        setDatasetError(json?.error || 'Campaign Intelligence could not load merged datasets right now.')
         return
       }
       const items = Array.isArray(json.items) ? (json.items as MergedDataset[]) : []
@@ -70,7 +70,7 @@ export default function Module9WhatIfSimulatorPage() {
       })
     } catch {
       setDatasets([])
-      setDatasetError('Module 9 could not reach the merged dataset service right now.')
+      setDatasetError('Campaign Intelligence could not reach the merged dataset service right now.')
     } finally {
       setLoadingDatasets(false)
     }
@@ -110,7 +110,7 @@ export default function Module9WhatIfSimulatorPage() {
       })
     } catch {
       setBaselineResponse(null)
-      setBaselineError('Module 9 could not reach the simulator baseline service.')
+      setBaselineError('Campaign Intelligence could not reach the simulator baseline service.')
     } finally {
       setLoadingBaselines(false)
     }
@@ -189,7 +189,7 @@ export default function Module9WhatIfSimulatorPage() {
 
     setRunningSimulation(true)
     setSimulationError(null)
-    setMessage({ type: 'info', text: 'Running the Module 9 ROI scenario projection...' })
+    setMessage({ type: 'info', text: 'Running the ROI scenario projection...' })
 
     try {
       const res = await fetch(`${API_URL}/m09/simulator/run`, {
@@ -219,8 +219,8 @@ export default function Module9WhatIfSimulatorPage() {
       setMessage({ type: 'success', text: 'Scenario projection generated successfully.' })
     } catch {
       setSimulationResult(null)
-      setSimulationError('Module 9 could not reach the simulator service right now.')
-      setMessage({ type: 'error', text: 'Module 9 could not reach the simulator service right now.' })
+      setSimulationError('Campaign Intelligence could not reach the simulator service right now.')
+      setMessage({ type: 'error', text: 'Campaign Intelligence could not reach the simulator service right now.' })
     } finally {
       setRunningSimulation(false)
     }
@@ -243,13 +243,13 @@ export default function Module9WhatIfSimulatorPage() {
       <main className="page-root" style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix="/m09" label="Back" />
-          <h2 style={{ marginTop: 16 }}>Module 9</h2>
+          <h2 style={{ marginTop: 16 }}>Campaign Intelligence & What-If Simulation</h2>
         </div>
 
         <section style={heroStyle}>
           <div style={{ padding: 28 }}>
             <div style={heroPillRowStyle}>
-              <HeroPill label="Module 9" />
+              <HeroPill label="Campaign Intelligence" />
               <HeroPill label="Uses trained ROI model" />
               <HeroPill label="Scenario-based projection" />
             </div>
@@ -284,8 +284,8 @@ export default function Module9WhatIfSimulatorPage() {
             </StatusCard>
           ) : datasets.length === 0 ? (
             <EmptyState
-              title="No merged Module 9 datasets yet"
-              text="Create a merged Module 9 dataset first in Campaign Data Import before using the simulator."
+              title="No merged campaign datasets yet"
+              text="Create a merged campaign dataset first in Campaign Data Import before using the simulator."
               actionLabel="Go to Campaign Data Import"
               onAction={goToImport}
             />

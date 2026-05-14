@@ -930,7 +930,7 @@ export default function Module5CommunicationHubPage() {
                   />
                 </div>
               </div>
-              <div style={composerActions}>
+              <div style={{ ...composerActions, ...modalActions }}>
                 <div style={{ fontSize: 12, color: '#64748B', maxWidth: 520 }}>
                   Phase 1 supports structured threads, replies, status, archive, and priority. Mentions, attachments, linked entities, and richer handoff actions are intentionally deferred.
                 </div>
@@ -1515,27 +1515,42 @@ const overlay: CSSProperties = {
   position: 'fixed',
   inset: 0,
   background: 'rgba(15,23,42,0.30)',
-  display: 'grid',
-  placeItems: 'center',
-  padding: 20,
-  zIndex: 60,
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent: 'center',
+  padding: '32px 20px',
+  overflowY: 'auto',
+  zIndex: 1000,
 }
 
 const modalCard: CSSProperties = {
   width: 'min(820px, 100%)',
-  maxHeight: '90vh',
-  overflow: 'auto',
+  maxHeight: 'calc(100dvh - 64px)',
+  overflow: 'hidden',
   borderRadius: 24,
   padding: 22,
   background: '#ffffff',
   border: '1px solid rgba(226,232,240,1)',
   boxShadow: '0 24px 60px rgba(15,23,42,0.16)',
+  display: 'flex',
+  flexDirection: 'column',
 }
 
 const modalForm: CSSProperties = {
   display: 'grid',
   gap: 16,
   marginTop: 16,
+  overflowY: 'auto',
+  paddingRight: 4,
+  minHeight: 0,
+}
+
+const modalActions: CSSProperties = {
+  position: 'sticky',
+  bottom: 0,
+  marginTop: 4,
+  paddingTop: 12,
+  background: '#ffffff',
 }
 
 const formGrid: CSSProperties = {

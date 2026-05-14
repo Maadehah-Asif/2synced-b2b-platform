@@ -490,7 +490,7 @@ export default function Module9CampaignImportFlow() {
 
         <section style={heroStyle}>
           <div style={{ padding: 28 }}>
-            <div style={heroEyebrow}>M09 Campaign Data Import</div>
+            <div style={heroEyebrow}>Campaign Data Import</div>
             <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>Campaign Data Import</h1>
             <div style={{ maxWidth: 860, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
               Upload raw campaign CSVs, preview detected headers, validate the selected source files, map source columns into the campaign intelligence schema, normalize values, and merge them into one managed campaign dataset for later analytics and optimization workflows.

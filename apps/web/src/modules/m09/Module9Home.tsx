@@ -6,21 +6,21 @@ export default function Module9Home() {
   const workspaceId = getWorkspaceIdFromHash()
   const cards = [
     {
-      title: 'Cross-Channel Performance',
-      body: 'Compare campaign results from multiple channels in one place so budget and attention can move based on a shared performance view.',
-      action: 'Open Performance',
+      title: 'Campaign Data Import',
+      body: 'Upload, validate, normalize, and merge campaign CSVs.',
+      action: 'Open Import',
       path: '/m09/import',
     },
     {
-      title: 'Fatigue & Pacing Checks',
-      body: 'Track where spend pace, frequency pressure, or campaign fatigue signals suggest that current delivery is becoming inefficient.',
-      action: 'Open Monitoring',
+      title: 'ROI What-If Simulator',
+      body: 'Test campaign changes and see whether projected ROI improves.',
+      action: 'Open Simulator',
       path: '/m09/simulator',
     },
     {
-      title: 'Optimization Recommendations',
-      body: 'Translate campaign signals into concrete next moves such as budget shifts, refresh decisions, or channel-level changes.',
-      action: 'Open Recommendations',
+      title: 'What-If Dev Tools',
+      body: 'Inspect model metrics, prediction payloads, and technical diagnostics.',
+      action: 'Open Dev Tools',
       path: '/m09/simulator-dev',
     },
     {
@@ -155,10 +155,7 @@ function ActionCard({ title, desc, action, path, workspaceId }: { title: string;
       }}
     >
       <div>
-        <div style={{ display: 'inline-flex', padding: '6px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.14)', fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          Insight Page
-        </div>
-        <div style={{ marginTop: 12, fontSize: 21, fontWeight: 900, lineHeight: 1.25 }}>{title}</div>
+        <div style={{ fontSize: 21, fontWeight: 900, lineHeight: 1.25 }}>{title}</div>
         <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.7, color: 'rgba(255,255,255,0.88)' }}>{desc}</div>
       </div>
       <div style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', padding: '8px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, alignSelf: 'flex-start' }}>

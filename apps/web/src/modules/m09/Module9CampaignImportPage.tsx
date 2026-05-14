@@ -56,7 +56,7 @@ export default function Module9CampaignImportPage() {
   async function loadUploads() {
     if (!workspaceId) {
       setLoading(false)
-      setMessage({ type: 'error', text: 'Workspace context is missing. Open Module 9 from inside a workspace.' })
+      setMessage({ type: 'error', text: 'Workspace context is missing. Open Campaign Intelligence from inside a workspace.' })
       return
     }
 
@@ -67,13 +67,13 @@ export default function Module9CampaignImportPage() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !json?.ok) {
         setUploads([])
-        setMessage({ type: 'error', text: json?.error || 'Module 9 could not load the current campaign upload list.' })
+        setMessage({ type: 'error', text: json?.error || 'Campaign Intelligence could not load the current campaign upload list.' })
         return
       }
       setUploads(Array.isArray(json.items) ? json.items : [])
     } catch {
       setUploads([])
-      setMessage({ type: 'error', text: 'Module 9 could not reach the shared upload service right now.' })
+      setMessage({ type: 'error', text: 'Campaign Intelligence could not reach the shared upload service right now.' })
     } finally {
       setLoading(false)
     }
@@ -108,7 +108,7 @@ export default function Module9CampaignImportPage() {
     }
 
     setUploading(true)
-    setMessage({ type: 'info', text: 'Uploading campaign CSV to the shared Module 9 file library...' })
+    setMessage({ type: 'info', text: 'Uploading campaign CSV to the shared campaign file library...' })
 
     try {
       const formData = new FormData()
@@ -129,7 +129,7 @@ export default function Module9CampaignImportPage() {
       }
 
       setFile(null)
-      setMessage({ type: 'success', text: 'Campaign CSV uploaded for Module 9.' })
+      setMessage({ type: 'success', text: 'Campaign CSV uploaded for Campaign Intelligence.' })
       await loadUploads()
     } catch {
       setMessage({ type: 'error', text: 'Upload failed before the shared service could confirm the file.' })
@@ -143,7 +143,7 @@ export default function Module9CampaignImportPage() {
       <main className="page-root" style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ModuleBackButton toSuffix="/m09" label="Back" />
-          <h2 style={{ marginTop: 16 }}>Module 9</h2>
+          <h2 style={{ marginTop: 16 }}>Campaign Intelligence & What-If Simulation</h2>
         </div>
 
         <section
@@ -159,11 +159,11 @@ export default function Module9CampaignImportPage() {
         >
           <div style={{ padding: 28 }}>
             <div style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.16)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              M09 Campaign Data Import
+              Campaign Data Import
             </div>
             <h1 style={{ margin: '16px 0 8px', fontSize: 38, lineHeight: 1.05, fontWeight: 900, color: '#fff' }}>Campaign Data Import</h1>
             <div style={{ maxWidth: 800, color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.7 }}>
-              Upload campaign performance CSV files for Module 9 into the shared workspace upload system. This first step focuses only on storing and listing campaign source files before preview mapping, normalization, and merge workflows are introduced.
+              Upload campaign performance CSV files into the shared workspace upload system. This first step focuses on storing and listing campaign source files before preview mapping, normalization, and merge workflows.
             </div>
           </div>
         </section>
@@ -220,7 +220,7 @@ export default function Module9CampaignImportPage() {
             </div>
             <h3 style={{ margin: '14px 0 12px', fontSize: 28, color: '#0B2540' }}>Add a campaign CSV</h3>
             <div style={{ fontSize: 14, color: '#415274', lineHeight: 1.7, marginBottom: 16 }}>
-              Use this page to send campaign source files to the existing workspace upload service with Module 9 tagging. The file will then appear in the Module 9 campaign upload list below.
+              Use this page to send campaign source files to the existing workspace upload service. The file will then appear in the campaign upload list below.
             </div>
 
             <form onSubmit={handleUpload} style={{ display: 'grid', gap: 14 }}>
@@ -235,7 +235,7 @@ export default function Module9CampaignImportPage() {
               >
                 <div style={{ fontSize: 14, fontWeight: 800, color: '#0B2540' }}>Choose a CSV file</div>
                 <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.65, color: '#5B6C8B' }}>
-                  This step only stores raw campaign files for Module 9. Preview, mapping, normalization, and merge logic will be added later.
+                  This step stores raw campaign files for Campaign Intelligence. Preview, mapping, normalization, and merge logic build on this file library.
                 </div>
                 <input
                   type="file"
@@ -273,8 +273,8 @@ export default function Module9CampaignImportPage() {
             </div>
             <h3 style={{ margin: '14px 0 10px', fontSize: 24, color: '#0B2540' }}>What this page covers</h3>
             <div style={{ display: 'grid', gap: 12 }}>
-              <StepCard step="1" title="Upload campaign files" text="Store raw campaign CSVs under Module 9 without creating a separate upload system." />
-              <StepCard step="2" title="Review the Module 9 file list" text="See every workspace file already tagged for Module 9 in one focused list." />
+              <StepCard step="1" title="Upload campaign files" text="Store raw campaign CSVs without creating a separate upload system." />
+              <StepCard step="2" title="Review the campaign file list" text="See every workspace file already tagged for Campaign Intelligence in one focused list." />
               <StepCard step="3" title="Prepare for normalization later" text="This page deliberately stops before preview mapping, schema validation, normalization, and merge." />
             </div>
 
@@ -299,7 +299,7 @@ export default function Module9CampaignImportPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 18 }}>
             <div>
               <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(15,66,88,0.08)', color: 'var(--header-secondary)', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                Module 9 Files
+                Campaign Files
               </div>
               <h3 style={{ margin: '12px 0 0', fontSize: 24, color: '#0B2540' }}>Uploaded campaign CSVs</h3>
             </div>
@@ -326,9 +326,9 @@ export default function Module9CampaignImportPage() {
               <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(72,177,217,0.12)', color: '#0B2540', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                 Empty State
               </div>
-              <h3 style={{ margin: '14px 0 8px', fontSize: 24, color: '#0B2540' }}>No Module 9 files yet</h3>
+              <h3 style={{ margin: '14px 0 8px', fontSize: 24, color: '#0B2540' }}>No campaign files yet</h3>
               <div style={{ maxWidth: 680, fontSize: 14, lineHeight: 1.75, color: '#415274' }}>
-                Once a campaign CSV is uploaded with `module=m09`, it will appear here. This list only shows Module 9-tagged files for the current workspace.
+                Once a campaign CSV is uploaded, it will appear here. This list only shows Campaign Intelligence files for the current workspace.
               </div>
             </div>
           ) : (

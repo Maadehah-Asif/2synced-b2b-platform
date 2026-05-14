@@ -13,6 +13,8 @@ const PAGE_LABELS: Record<string, string> = {
   m01_merge: "Lead Quality & Scoring Merge Guide",
   m01_merged: "Lead Quality & Scoring Merged Data Guide",
   m01_leads: "Lead Quality & Scoring Leads Guide",
+  m01_dashboard: "Lead Quality & Scoring Dashboard Guide",
+  m01_report: "Lead Quality & Scoring Report Guide",
 
   m02_home: "Intent Signals Guide",
   m02_upload: "Intent Signals Uploads Guide",
@@ -24,8 +26,20 @@ const PAGE_LABELS: Record<string, string> = {
   m02_generate: "Generate Intent Scores Guide",
   m02_prioritization: "Prioritization Guide",
   m02_intent_forecast: "Intent Forecast Guide",
+  m02_dashboard: "Intent Signals Dashboard Guide",
+  m02_report: "Intent Signals Report Guide",
 
   m03_home: "Conversation AI Guide",
+  m03_upload: "Conversation Upload Guide",
+  m03_manual_log: "Manual Conversation Log Guide",
+  m03_companies: "Company Directory Guide",
+  m03_explorer: "Conversation Explorer Guide",
+  m03_thread_detail: "Conversation Thread Guide",
+  m03_analytics: "Conversation Analytics Guide",
+  m03_deal_health: "Deal Health Board Guide",
+  m03_follow_ups: "Follow-Ups Guide",
+  m03_org_timeline: "Organisation Timeline Guide",
+  m03_report: "Conversation Intelligence Report Guide",
   m05_home: "Sales & Marketing Alignment Guide",
   m05_overview: "Sales & Marketing Alignment Overview Guide",
   m05_pipeline: "Unified Pipeline Guide",
@@ -33,6 +47,7 @@ const PAGE_LABELS: Record<string, string> = {
   m05_web_visualization: "Web Engagement Visualization Guide",
   m05_shortcomings: "Shortcoming Analyzer Guide",
   m05_communication: "Communication Hub Guide",
+  m05_report: "Sales & Marketing Alignment Report Guide",
 
   m06_home: "Revenue Insight Guide",
   m06_overview: "Revenue Insight Overview Guide",
@@ -46,6 +61,7 @@ const PAGE_LABELS: Record<string, string> = {
   m06_roi_calc: "ROI Calculation Guide",
   m06_forecast: "Forecast Guide",
   m06_allocation: "Allocation Guide",
+  m06_report: "Revenue Insight Report Guide",
 
   m07_home: "Funnel Insight Guide",
   m07_leads: "Funnel Insight Shared Leads Guide",
@@ -59,8 +75,14 @@ const PAGE_LABELS: Record<string, string> = {
   m07_fatigue: "Fatigue Analysis Guide",
   m07_recommendations: "Recommendations Guide",
   m07_trends: "Funnel Trends Guide",
+  m07_forecast: "Funnel Forecast Guide",
+  m07_report: "Funnel Insight Report Guide",
 
   m09_home: "Campaign Performance Optimization Guide",
+  m09_import: "Cross-Channel Performance Guide",
+  m09_simulator: "Fatigue & Pacing Checks Guide",
+  m09_simulator_dev: "Optimization Recommendations Guide",
+  m09_report: "Campaign Performance Optimization Report Guide",
 };
 
 export function getAssistantPageTitle(pageKey: string) {
@@ -86,10 +108,29 @@ function getModule5PageKey(rest: string) {
   return "m05_home";
 }
 
+function getReportPageKey(rest: string) {
+  if (rest === "m08/m01") return "m01_report";
+  if (rest === "m08/m02") return "m02_report";
+  if (rest === "m08/m03") return "m03_report";
+  if (rest === "m08/m05") return "m05_report";
+  if (rest === "m08/m06") return "m06_report";
+  if (rest === "m08/m07") return "m07_report";
+  if (rest === "m08/m09") return "m09_report";
+  return null;
+}
+
 const PAGE_MATCHERS: PageMatcher[] = [
   { test: (rest) => rest === "", pageKey: "workspace_detail" },
+  { test: (rest) => getReportPageKey(rest) === "m01_report", pageKey: "m01_report" },
+  { test: (rest) => getReportPageKey(rest) === "m02_report", pageKey: "m02_report" },
+  { test: (rest) => getReportPageKey(rest) === "m03_report", pageKey: "m03_report" },
+  { test: (rest) => getReportPageKey(rest) === "m05_report", pageKey: "m05_report" },
+  { test: (rest) => getReportPageKey(rest) === "m06_report", pageKey: "m06_report" },
+  { test: (rest) => getReportPageKey(rest) === "m07_report", pageKey: "m07_report" },
+  { test: (rest) => getReportPageKey(rest) === "m09_report", pageKey: "m09_report" },
 
   { test: (rest) => rest === "m01", pageKey: "m01_home" },
+  { test: (rest) => rest.startsWith("m01/dashboard"), pageKey: "m01_dashboard" },
   { test: (rest) => rest.startsWith("m01/upload/preview"), pageKey: "m01_preview" },
   { test: (rest) => rest.startsWith("m01/upload"), pageKey: "m01_upload" },
   { test: (rest) => rest.startsWith("m01/merge-columns"), pageKey: "m01_merge" },
@@ -109,9 +150,19 @@ const PAGE_MATCHERS: PageMatcher[] = [
   { test: (rest) => rest.startsWith("m02/leads"), pageKey: "m02_leads" },
   { test: (rest) => rest.startsWith("m02/generate"), pageKey: "m02_generate" },
   { test: (rest) => rest.startsWith("m02/prioritization"), pageKey: "m02_prioritization" },
+  { test: (rest) => rest.startsWith("m02/dashboard"), pageKey: "m02_dashboard" },
   { test: (rest) => rest.startsWith("m02/intent-forecast"), pageKey: "m02_intent_forecast" },
 
   { test: (rest) => rest === "m03", pageKey: "m03_home" },
+  { test: (rest) => rest.startsWith("m03/upload"), pageKey: "m03_upload" },
+  { test: (rest) => rest.startsWith("m03/manual-log"), pageKey: "m03_manual_log" },
+  { test: (rest) => rest.startsWith("m03/companies"), pageKey: "m03_companies" },
+  { test: (rest) => rest.startsWith("m03/explorer"), pageKey: "m03_explorer" },
+  { test: (rest) => rest.startsWith("m03/conversations/"), pageKey: "m03_thread_detail" },
+  { test: (rest) => rest.startsWith("m03/analytics"), pageKey: "m03_analytics" },
+  { test: (rest) => rest.startsWith("m03/deal-health"), pageKey: "m03_deal_health" },
+  { test: (rest) => rest.startsWith("m03/follow-ups"), pageKey: "m03_follow_ups" },
+  { test: (rest) => rest.startsWith("m03/org-timeline"), pageKey: "m03_org_timeline" },
   { test: (rest) => getModule5PageKey(rest) === "m05_home", pageKey: "m05_home" },
   { test: (rest) => getModule5PageKey(rest) === "m05_overview", pageKey: "m05_overview" },
   { test: (rest) => getModule5PageKey(rest) === "m05_pipeline", pageKey: "m05_pipeline" },
@@ -138,6 +189,7 @@ const PAGE_MATCHERS: PageMatcher[] = [
 
   { test: (rest) => rest === "m07", pageKey: "m07_home" },
   { test: (rest) => rest.startsWith("m07/overview"), pageKey: "m07_overview" },
+  { test: (rest) => rest.startsWith("m07/forecast"), pageKey: "m07_forecast" },
   { test: (rest) => rest.startsWith("m07/leakage"), pageKey: "m07_leakage" },
   { test: (rest) => rest.startsWith("m07/journey/"), pageKey: "m07_journey" },
   { test: (rest) => rest.startsWith("m07/fatigue"), pageKey: "m07_fatigue" },
@@ -152,6 +204,9 @@ const PAGE_MATCHERS: PageMatcher[] = [
   { test: (rest) => rest.startsWith("m07/interactions"), pageKey: "m07_interactions" },
 
   { test: (rest) => rest === "m09", pageKey: "m09_home" },
+  { test: (rest) => rest.startsWith("m09/import"), pageKey: "m09_import" },
+  { test: (rest) => rest.startsWith("m09/simulator-dev"), pageKey: "m09_simulator_dev" },
+  { test: (rest) => rest.startsWith("m09/simulator"), pageKey: "m09_simulator" },
 ];
 
 export function getAssistantConfigFromHash(hash: string): AssistantPageConfig | null {

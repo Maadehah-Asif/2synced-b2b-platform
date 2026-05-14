@@ -86,6 +86,7 @@ export default function GuidedAssistantHost() {
   const [draft, setDraft] = useState("");
   const [replyDraft, setReplyDraft] = useState("");
   const [replyConversationId, setReplyConversationId] = useState<string | null>(null);
+  const [topicsExpanded, setTopicsExpanded] = useState(true);
   const messagesRef = useRef<HTMLDivElement | null>(null);
 
   const page = useMemo(() => getAssistantConfigFromHash(hash), [hash]);
@@ -103,6 +104,7 @@ export default function GuidedAssistantHost() {
     setDraft("");
     setReplyDraft("");
     setReplyConversationId(null);
+    setTopicsExpanded(true);
   }, [page?.workspaceId, page?.pageKey]);
 
   useEffect(() => {
@@ -181,7 +183,51 @@ export default function GuidedAssistantHost() {
     [currentFaqIds, faqLookup],
   );
   const showingFollowUps = currentFaqIds.length > 0 && JSON.stringify(currentFaqIds) !== JSON.stringify(bootstrap?.page.rootFaqIds || []);
+  const quickStartFaqs = useMemo(() => {
+    if (showingFollowUps) return [];
+
+    const nextIds = visibleFaqs
+      .flatMap((faq) => faq.followUpIds || [])
+      .filter((id, index, items) => items.indexOf(id) === index)
+      .slice(0, 8);
+
+    return nextIds
+      .map((id) => faqLookup.get(id))
+      .filter(Boolean) as AssistantFaq[];
+  }, [faqLookup, showingFollowUps, visibleFaqs]);
+  const matchedDraftFaqs = useMemo(() => {
+    const query = draft.trim().toLowerCase();
+    if (query.length < 2) return [];
+
+    const terms = query.split(/\s+/).filter(Boolean);
+    const candidates = (bootstrap?.page.faqs || [])
+      .filter((faq) => faq.id !== "conversation-restart")
+      .map((faq) => {
+        const haystack = `${faq.label} ${faq.answer}`.toLowerCase();
+        let score = 0;
+
+        for (const term of terms) {
+          if (faq.label.toLowerCase().includes(term)) score += 5;
+          if (haystack.includes(term)) score += 2;
+        }
+
+        if (faq.label.toLowerCase().includes(query)) score += 8;
+        if (haystack.includes(query)) score += 3;
+
+        return { faq, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map((item) => item.faq);
+
+    return candidates;
+  }, [bootstrap?.page.faqs, draft]);
   const adminInboxCount = bootstrap?.adminInbox.length || 0;
+
+  useEffect(() => {
+    if (messages.length > 0) setTopicsExpanded(false);
+  }, [messages.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -438,33 +484,80 @@ export default function GuidedAssistantHost() {
         <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid rgba(15,66,88,0.08)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: "#0B2540" }}>
-              {showingFollowUps ? "Next options" : "Choose a topic"}
+              {showingFollowUps ? "Next options" : "Suggested questions"}
             </div>
-            {showingFollowUps && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {showingFollowUps && (
+                <button
+                  type="button"
+                  onClick={() => void sendFaq("conversation-restart")}
+                  style={{ ...miniButtonStyle, fontSize: 11 }}
+                >
+                  Start over
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => void sendFaq("conversation-restart")}
+                onClick={() => setTopicsExpanded((value) => !value)}
                 style={{ ...miniButtonStyle, fontSize: 11 }}
               >
-                Start over
+                {topicsExpanded ? "Hide" : "Show"}
               </button>
-            )}
+            </div>
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {visibleFaqs.map((faq) => (
-              <button
-                key={faq.id}
-                type="button"
-                onClick={() => void sendFaq(faq.id)}
-                style={{
-                  ...topicButtonStyle,
-                  cursor: "pointer",
-                }}
-              >
-                {faq.label}
-              </button>
-            ))}
-          </div>
+          {topicsExpanded ? (
+            <div
+              style={{
+                maxHeight: 190,
+                overflowY: "auto",
+                paddingRight: 4,
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {visibleFaqs.map((faq) => (
+                  <button
+                    key={faq.id}
+                    type="button"
+                    onClick={() => void sendFaq(faq.id)}
+                    style={{
+                      ...topicButtonStyle,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {faq.label}
+                  </button>
+                ))}
+              </div>
+              {!showingFollowUps && quickStartFaqs.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: "#667085", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+                    Quick Starts
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {quickStartFaqs.map((faq) => (
+                      <button
+                        key={faq.id}
+                        type="button"
+                        onClick={() => void sendFaq(faq.id)}
+                        style={{
+                          ...secondaryTopicButtonStyle,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {faq.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: "#667085", lineHeight: 1.6 }}>
+              {visibleFaqs.length} guided questions available here. Open this panel when you want ready-made prompts, or type below to see closest matches.
+            </div>
+          )}
         </div>
 
         <div ref={messagesRef} style={{ overflowY: "auto", padding: "18px 18px 14px", display: "grid", gap: 12 }}>
@@ -606,9 +699,34 @@ export default function GuidedAssistantHost() {
             placeholder="Type a question if you want help beyond the guided options."
             style={{ width: "100%", resize: "vertical" }}
           />
+          {matchedDraftFaqs.length > 0 && (
+            <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#667085", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Closest guided matches
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {matchedDraftFaqs.map((faq) => (
+                  <button
+                    key={faq.id}
+                    type="button"
+                    onClick={() => {
+                      setDraft("");
+                      void sendFaq(faq.id);
+                    }}
+                    style={{
+                      ...secondaryTopicButtonStyle,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {faq.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
             <div style={{ fontSize: 11, color: "#667085" }}>
-              Clear questions may be answered automatically. If not, you can choose to forward the question to an admin.
+              Type a few keywords to see the closest guided matches. If nothing fits, send the question normally and the assistant will still try to answer it.
             </div>
             <button type="button" onClick={() => void submitQuestion()} disabled={!draft.trim() || loading} style={sendButtonStyle(!draft.trim() || loading)}>
               Send
@@ -661,6 +779,17 @@ const topicButtonStyle: CSSProperties = {
   fontSize: 12,
   fontWeight: 800,
   boxShadow: "0 8px 16px rgba(13,30,60,0.05)",
+};
+
+const secondaryTopicButtonStyle: CSSProperties = {
+  borderRadius: 14,
+  border: "1px solid rgba(15,66,88,0.10)",
+  padding: "9px 12px",
+  background: "#ffffff",
+  color: "#0f4258",
+  fontSize: 12,
+  fontWeight: 700,
+  boxShadow: "0 6px 14px rgba(13,30,60,0.04)",
 };
 
 const secondaryActionButtonStyle: CSSProperties = {

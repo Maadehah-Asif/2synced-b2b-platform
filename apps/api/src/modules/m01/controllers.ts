@@ -1122,6 +1122,218 @@ export async function previewLeadsCode(req: Request, res: Response) {
   }
 }
 
+function normalizeHeaderKey(value: string) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function findColumnIndex(header: string[], candidates: string[]) {
+  const normalized = header.map((item) => normalizeHeaderKey(item));
+  for (const candidate of candidates) {
+    const target = normalizeHeaderKey(candidate);
+    const index = normalized.indexOf(target);
+    if (index >= 0) return index;
+  }
+  return -1;
+}
+
+function toPercentLike(value: unknown) {
+  const raw = parseFloat(String(value ?? '').replace(/,/g, '').trim());
+  if (!Number.isFinite(raw)) return null;
+  if (raw >= 0 && raw <= 1) return raw * 100;
+  return raw;
+}
+
+function bucketConfidence(value: number) {
+  if (value < 50) return '<50';
+  if (value < 65) return '50-64';
+  if (value < 80) return '65-79';
+  if (value < 90) return '80-89';
+  return '90+';
+}
+
+function titleCaseLabel(value: unknown) {
+  const cleaned = String(value || '').trim().toLowerCase();
+  if (!cleaned) return 'Unlabeled';
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+// GET /m01/leads/:id/dashboard - aggregate dashboard stats from the final scored CSV
+export async function getLeadsDashboardData(req: Request, res: Response) {
+  try {
+    const id = String(req.params.id || '');
+    const workspace = (req.query.workspace as string) || null;
+    if (!mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'invalid id' });
+    const doc = await LeadsCodeFile.findById(id).lean();
+    if (!doc) return res.status(404).json({ error: 'not found' });
+    if (workspace && String(doc.workspace) !== String(workspace)) return res.status(403).json({ error: 'forbidden' });
+
+    const db = mongoose.connection.db;
+    if (!db) return res.status(500).json({ error: 'db not ready' });
+    const bucket = new mongoose.mongo.GridFSBucket(db as any, { bucketName: 'm01_leads' });
+    const downloadStream = bucket.openDownloadStream(doc.fileId);
+    const parser = parse({ bom: true });
+
+    let header: string[] = [];
+    let total = 0;
+    let sumConfidence = 0;
+    let sumHighProbability = 0;
+    let sumMediumProbability = 0;
+    let sumLowProbability = 0;
+    let qualityDimensionName = 'Source';
+    let qualityDimensionColumn = '';
+    const labelCounts: Record<string, number> = { High: 0, Medium: 0, Low: 0, Unlabeled: 0 };
+    const confidenceBands: Record<string, number> = { '<50': 0, '50-64': 0, '65-79': 0, '80-89': 0, '90+': 0 };
+    const dimensionAllCounts: Record<string, number> = {};
+    const dimensionHighCounts: Record<string, number> = {};
+    const topLeads: Array<{ leadId: string; name: string; company: string; segment: string; label: string; confidence: number }> = [];
+
+    parser.on('readable', () => {
+      let rec: string[] | null;
+      while ((rec = parser.read()) !== null) {
+        if (!header.length) {
+          header = rec.map((cell) => String(cell || '').trim());
+          continue;
+        }
+
+        total += 1;
+        const row = header.reduce<Record<string, string>>((acc, key, index) => {
+          acc[key] = String(rec?.[index] ?? '');
+          return acc;
+        }, {});
+
+        const leadId = row[header[findColumnIndex(header, ['lead_id', 'leadid', 'id'])] || ''] || '';
+        const name = row[header[findColumnIndex(header, ['full_name', 'fullname', 'name'])] || ''] || '';
+        const company = row[header[findColumnIndex(header, ['company', 'company_name'])] || ''] || '';
+        const segment = row[header[findColumnIndex(header, ['segment'])] || ''] || '';
+        const labelColumnIndex = findColumnIndex(header, ['predicted_label', 'predictedlabel', 'label']);
+        const confidenceColumnIndex = findColumnIndex(header, ['confidence']);
+        const pLowIndex = findColumnIndex(header, ['p_low', 'plow', 'prob_low']);
+        const pMediumIndex = findColumnIndex(header, ['p_medium', 'pmedium', 'prob_medium']);
+        const pHighIndex = findColumnIndex(header, ['p_high', 'phigh', 'prob_high']);
+
+        const dimensionCandidates = [
+          { name: 'Source', columns: ['source'] },
+          { name: 'Segment', columns: ['segment'] },
+          { name: 'Owner', columns: ['owner', 'lead_owner'] },
+          { name: 'Industry', columns: ['industry'] },
+          { name: 'Company', columns: ['company', 'company_name'] },
+        ];
+        if (!qualityDimensionColumn) {
+          for (const candidate of dimensionCandidates) {
+            const idx = findColumnIndex(header, candidate.columns);
+            if (idx >= 0) {
+              qualityDimensionColumn = header[idx] || '';
+              qualityDimensionName = candidate.name;
+              break;
+            }
+          }
+        }
+
+        const label = titleCaseLabel(labelColumnIndex >= 0 ? row[header[labelColumnIndex] || ''] : '');
+        labelCounts[label] = (labelCounts[label] || 0) + 1;
+
+        const pLow = toPercentLike(pLowIndex >= 0 ? row[header[pLowIndex] || ''] : '');
+        const pMedium = toPercentLike(pMediumIndex >= 0 ? row[header[pMediumIndex] || ''] : '');
+        const pHigh = toPercentLike(pHighIndex >= 0 ? row[header[pHighIndex] || ''] : '');
+        const confidenceCandidates = [toPercentLike(confidenceColumnIndex >= 0 ? row[header[confidenceColumnIndex] || ''] : ''), pLow, pMedium, pHigh].filter((value): value is number => value !== null);
+        const confidence = confidenceCandidates.length ? Math.max(...confidenceCandidates) : 0;
+
+        sumConfidence += confidence;
+        sumLowProbability += pLow ?? 0;
+        sumMediumProbability += pMedium ?? 0;
+        sumHighProbability += pHigh ?? 0;
+        const confidenceBand = bucketConfidence(confidence);
+        confidenceBands[confidenceBand] = (confidenceBands[confidenceBand] || 0) + 1;
+
+        const dimensionValue = qualityDimensionColumn ? String(row[qualityDimensionColumn] || '').trim() || 'Unknown' : 'All leads';
+        dimensionAllCounts[dimensionValue] = (dimensionAllCounts[dimensionValue] || 0) + 1;
+        if (label === 'High') dimensionHighCounts[dimensionValue] = (dimensionHighCounts[dimensionValue] || 0) + 1;
+
+        const entry = { leadId, name, company, segment, label, confidence };
+        if (topLeads.length < 8) {
+          topLeads.push(entry);
+          topLeads.sort((a, b) => b.confidence - a.confidence);
+        } else if (confidence > topLeads[topLeads.length - 1]!.confidence) {
+          topLeads.pop();
+          topLeads.push(entry);
+          topLeads.sort((a, b) => b.confidence - a.confidence);
+        }
+      }
+    });
+
+    parser.on('end', () => {
+      const averageConfidence = total ? sumConfidence / total : 0;
+      const highShare = total ? (labelCounts.High || 0) / total * 100 : 0;
+      const pie = Object.entries(labelCounts)
+        .filter(([, count]) => count > 0)
+        .map(([label, count]) => ({ label, value: count }));
+      const line = Object.entries(confidenceBands).map(([label, count]) => ({ label, value: count }));
+      const bar = Object.entries(dimensionHighCounts).length ? dimensionHighCounts : dimensionAllCounts;
+      const barLabel = Object.entries(dimensionHighCounts).length
+        ? `High-quality leads by ${qualityDimensionName.toLowerCase()}`
+        : `Lead volume by ${qualityDimensionName.toLowerCase()}`;
+      const bars = Object.entries(bar)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([label, value]) => ({ label, value }));
+
+      return res.json({
+        ok: true,
+        file: {
+          id: String(doc._id),
+          name: doc.name || doc.filename || 'Lead output',
+          filename: doc.filename || doc.name || 'Lead output',
+          createdAt: doc.createdAt,
+        },
+        metrics: {
+          totalLeads: total,
+          averageConfidence,
+          highShare,
+          averageProbabilities: {
+            low: total ? sumLowProbability / total : 0,
+            medium: total ? sumMediumProbability / total : 0,
+            high: total ? sumHighProbability / total : 0,
+          },
+          labelCounts,
+        },
+        charts: {
+          line,
+          pie,
+          bars,
+          barLabel,
+          lineLabel: 'Confidence distribution',
+        },
+        highlights: [
+          highShare >= 45
+            ? 'A large share of the current file is already scoring as high quality, so this batch is a stronger candidate for immediate downstream use.'
+            : 'High-quality predictions are still concentrated in a smaller slice of the file, so review weaker records before pushing them further downstream.',
+          averageConfidence >= 75
+            ? 'Model confidence is broadly stable across the selected file, which makes the current quality picture easier to trust operationally.'
+            : 'Average model confidence is still moderate, so the team should treat lower-confidence records as review candidates rather than immediate priorities.',
+          bars[0]
+            ? `${bars[0].label} currently contributes the strongest visible quality signal in this file based on the chosen grouping.`
+            : 'No grouping signal is strong enough yet to highlight one dominant source of lead quality.',
+        ],
+        topLeads,
+      });
+    });
+
+    parser.on('error', (err: any) => {
+      console.error('[m01.getLeadsDashboardData] parse error', err);
+      return res.status(500).json({ error: 'parse error' });
+    });
+    downloadStream.on('error', (err: any) => {
+      console.error('[m01.getLeadsDashboardData] download error', err);
+      return res.status(500).json({ error: 'download error' });
+    });
+
+    downloadStream.pipe(parser);
+  } catch (e) {
+    console.error('[m01.getLeadsDashboardData]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
 // GET /m01/leads/:id/download - download full CSV from GridFS
 export async function downloadLeadsCode(req: Request, res: Response) {
   try {

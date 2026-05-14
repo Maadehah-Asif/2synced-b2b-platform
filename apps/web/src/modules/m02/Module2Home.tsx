@@ -62,9 +62,9 @@ export default function Module2Home() {
             </div>
             <h3 style={{ margin: '14px 0 12px', fontSize: 28, color: '#0B2540' }}>Where to work inside Intent Signals</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+              <InsightCard title="Intent Dashboard" desc="Open the visual dashboard to compare intent mix, lead-fit alignment, and the strongest high-intent pockets inside a selected final CSV." onClick={() => go(`#/workspace/:workspaceId/m02/dashboard`)} />
               <InsightCard title="Generate Intent Scores" desc="Run the scoring pipeline on prepared datasets before reviewing prioritization and forecast outputs." onClick={() => go(`#/workspace/:workspaceId/m02/generate`)} />
               <InsightCard title="Prioritization Dashboard" desc="Rank leads by conversion likelihood and identify who deserves immediate attention." onClick={() => go(`#/workspace/:workspaceId/m02/prioritization`)} />
-              <InsightCard title="Intent Forecast" desc="Review projected engagement direction and anticipate where interest is increasing." onClick={() => go(`#/workspace/:workspaceId/m02/intent-forecast`)} />
               <InsightCard title="Report Center" desc="Open the written intent report with prioritization summaries and downloadable supporting exports." onClick={() => go(`#/workspace/:workspaceId/m08/m02`)} />
             </div>
           </div>
@@ -85,7 +85,7 @@ export default function Module2Home() {
             <div style={{ display: 'grid', gap: 12 }}>
               <StepCard step="1" title="Prepare intent-ready data first" text="Use the Data Hub upload and merge screens first so the lead and behavior records are ready before any scoring run starts." />
               <StepCard step="2" title="Run Generate Intent Scores first" text="Open Generate Intent Scores when you want to create or refresh the prioritization layer from the prepared dataset." />
-              <StepCard step="3" title="Move into prioritization and forecast" text="Open Prioritization Dashboard when the question is who to act on next, then open Intent Forecast when you want a forward-looking view of rising or cooling interest." />
+              <StepCard step="3" title="Move into prioritization and reporting" text="Open Prioritization Dashboard when the question is who to act on next, then use the report center to summarize the current intent picture and recommended actions." />
             </div>
           </div>
         </section>

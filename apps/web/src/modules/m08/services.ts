@@ -6,6 +6,8 @@ export type ModuleReportMetric = {
   label: string;
   value: string;
   helper: string;
+  statusLabel?: string;
+  statusTone?: 'healthy' | 'warning' | 'critical' | 'neutral';
 };
 
 export type ModuleReportSection = {
@@ -25,10 +27,13 @@ export type ModuleReportExport = {
 
 export type ModuleReportPayload = {
   ok: true;
-  moduleKey: 'm01' | 'm02' | 'm05' | 'm06' | 'm07';
+  moduleKey: 'm01' | 'm02' | 'm03' | 'm05' | 'm06' | 'm07' | 'm09';
   title: string;
   subtitle: string;
   generatedAt: string;
+  reportStatusLabel?: string;
+  reportStatusTone?: 'healthy' | 'warning' | 'critical' | 'neutral';
+  reportStatusSummary?: string;
   overviewTitle: string;
   overviewBody: string[];
   recommendations: string[];

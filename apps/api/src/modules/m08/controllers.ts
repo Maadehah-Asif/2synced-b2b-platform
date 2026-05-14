@@ -6,6 +6,11 @@ import MappingTemplate from '../m01/models/MappingTemplate.js';
 import IntentRun from '../m02/models/IntentRun.js';
 import M2LeadIntentSummary from '../m02/models/M2LeadIntentSummary.js';
 import M2LeadBehaviorEvent from '../m02/models/M2LeadBehaviorEvent.js';
+import Company from '../m03/models/Company.js';
+import ConversationMessage from '../m03/models/ConversationMessage.js';
+import ConversationThread from '../m03/models/ConversationThreads.js';
+import DealHealth from '../m03/models/DealHealth.js';
+import FollowUpReminder from '../m03/models/FollowUpReminder.js';
 import CommunicationThread from '../m05/models/CommunicationThread.js';
 import { Module6Lead } from '../m06/models/Module6Lead.js';
 import { Campaign } from '../m06/models/Campaign.js';
@@ -16,14 +21,17 @@ import { AttributionResult } from '../m06/models/AttributionResult.js';
 import FunnelLead from '../m07/models/FunnelLead.js';
 import StageHistory from '../m07/models/StageHistory.js';
 import Interaction from '../m07/models/Interaction.js';
+import MergedDataset from '../m09/models/MergedDataset.js';
 
-type ModuleKey = 'm01' | 'm02' | 'm05' | 'm06' | 'm07';
+type ModuleKey = 'm01' | 'm02' | 'm03' | 'm05' | 'm06' | 'm07' | 'm09';
 const MODULE5_UPLOAD_PREFIX = 'm05-web-engagement__';
 
 type ReportMetric = {
   label: string;
   value: string;
   helper: string;
+  statusLabel?: string;
+  statusTone?: 'healthy' | 'warning' | 'critical' | 'neutral';
 };
 
 type ReportSection = {
@@ -47,6 +55,9 @@ type ReportPayload = {
   title: string;
   subtitle: string;
   generatedAt: string;
+  reportStatusLabel?: string;
+  reportStatusTone?: 'healthy' | 'warning' | 'critical' | 'neutral';
+  reportStatusSummary?: string;
   overviewTitle: string;
   overviewBody: string[];
   recommendations: string[];
@@ -80,7 +91,7 @@ function getWorkspaceId(req: Request) {
 }
 
 function isModuleKey(value: string): value is ModuleKey {
-  return value === 'm01' || value === 'm02' || value === 'm05' || value === 'm06' || value === 'm07';
+  return value === 'm01' || value === 'm02' || value === 'm03' || value === 'm05' || value === 'm06' || value === 'm07' || value === 'm09';
 }
 
 function formatDate(value: Date | string | null | undefined) {
@@ -132,6 +143,212 @@ function csvText(header: string[], rows: Array<Array<string | number | null | un
     .join('\n');
 }
 
+function statusFromLevel(level: 'healthy' | 'warning' | 'critical' | 'neutral', label: string) {
+  return { statusTone: level, statusLabel: label };
+}
+
+function getUploadModuleTag(item: any) {
+  return String(item?.module || item?.metadata?.module || '').toLowerCase();
+}
+
+async function buildM03Report(workspaceId: string): Promise<ReportBundle> {
+  const [companies, threads, messages, healthRows, followUps] = await Promise.all([
+    Company.find({ workspaceId }).sort({ createdAt: -1 }).lean(),
+    ConversationThread.find({ workspaceId }).sort({ lastMessageAt: -1, updatedAt: -1 }).lean(),
+    ConversationMessage.find({ workspaceId }).sort({ sentAt: -1 }).lean(),
+    DealHealth.find({ workspaceId }).sort({ lastComputedAt: -1 }).lean(),
+    FollowUpReminder.find({ workspaceId }).sort({ dueAt: 1, createdAt: -1 }).lean(),
+  ]);
+
+  const threadIdsSeen = new Set<string>();
+  const latestHealthByThread = [];
+  for (const row of healthRows as any[]) {
+    const key = String(row.threadId || '');
+    if (!key || threadIdsSeen.has(key)) continue;
+    threadIdsSeen.add(key);
+    latestHealthByThread.push(row);
+  }
+
+  const now = Date.now();
+  const pendingFollowUps = (followUps as any[]).filter((item) => item.status === 'pending');
+  const overdueFollowUps = pendingFollowUps.filter((item) => item.dueAt && new Date(item.dueAt).getTime() < now);
+  const channelCounts = new Map<string, number>();
+  const sourceCounts = new Map<string, number>();
+  const companyThreadCounts = new Map<string, number>();
+  const bandCounts = new Map<string, number>();
+
+  for (const thread of threads as any[]) {
+    const channel = thread.channel || 'other';
+    channelCounts.set(channel, (channelCounts.get(channel) || 0) + 1);
+    const source = thread.source || 'upload';
+    sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1);
+    const companyId = thread.companyId ? String(thread.companyId) : 'unassigned';
+    companyThreadCounts.set(companyId, (companyThreadCounts.get(companyId) || 0) + 1);
+  }
+
+  for (const health of latestHealthByThread as any[]) {
+    const band = health.band || 'steady';
+    bandCounts.set(band, (bandCounts.get(band) || 0) + 1);
+  }
+
+  const channelSummary = Array.from(channelCounts.entries())
+    .map(([channel, count]) => ({ channel, count, share: threads.length > 0 ? (count / threads.length) * 100 : 0 }))
+    .sort((a, b) => b.count - a.count);
+  const sourceSummary = Array.from(sourceCounts.entries())
+    .map(([source, count]) => ({ source, count }))
+    .sort((a, b) => b.count - a.count);
+  const bandSummary = Array.from(bandCounts.entries())
+    .map(([band, count]) => ({ band, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const companiesById = new Map((companies as any[]).map((company) => [String(company._id), company]));
+  const topCompanies = Array.from(companyThreadCounts.entries())
+    .map(([companyId, count]) => ({
+      companyId,
+      name: companyId === 'unassigned' ? 'Unassigned company' : (companiesById.get(companyId)?.name || 'Unknown company'),
+      domain: companyId === 'unassigned' ? '' : (companiesById.get(companyId)?.primaryDomain || ''),
+      count,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+
+  const atRiskCount = bandCounts.get('at_risk') || 0;
+  const healthyCount = bandCounts.get('healthy') || 0;
+  const latestThread = (threads as any[])[0];
+  const busiestChannel = channelSummary[0];
+
+  return {
+    payload: {
+      ok: true,
+      moduleKey: 'm03',
+      title: 'Conversation Intelligence Report',
+      subtitle: 'Workspace-level view of conversation coverage, channel activity, deal health pressure, and follow-up workload.',
+      generatedAt: new Date().toISOString(),
+      reportStatusLabel: threads.length === 0 ? 'Critical Setup Gap' : overdueFollowUps.length > 0 || atRiskCount > 0 ? 'Needs Attention' : 'Ready',
+      reportStatusTone: threads.length === 0 ? 'critical' : overdueFollowUps.length > 0 || atRiskCount > 0 ? 'warning' : 'healthy',
+      reportStatusSummary: threads.length === 0
+        ? 'No conversation thread history is available yet, so Module 3 cannot support risk reading or action planning.'
+        : overdueFollowUps.length > 0
+          ? `${formatNumber(overdueFollowUps.length)} follow-up items are already overdue, so current conversation visibility is not yet translating into timely action.`
+          : `Conversation coverage is active and the current follow-up queue is broadly under control, which makes this module usable as a management signal layer.`,
+      overviewTitle: 'Executive Summary',
+      overviewBody: [
+        `Conversation Intelligence is the message-level operating layer for commercial teams. Its purpose is to convert conversation records into visibility on account activity, follow-up pressure, and health signals that help sales and marketing respond faster.`,
+        threads.length > 0
+          ? `${formatNumber(threads.length)} conversation threads and ${formatNumber(messages.length)} messages are currently available. ${busiestChannel ? `${busiestChannel.channel} is the busiest tracked channel at ${formatPercent(busiestChannel.share, 1)} of thread volume.` : ''}`
+          : 'No conversation threads are currently stored, so conversation reporting is still in setup mode.',
+        latestHealthByThread.length > 0
+          ? `${formatNumber(atRiskCount)} latest deal-health records are currently marked at risk, while ${formatNumber(healthyCount)} are healthy. ${formatNumber(overdueFollowUps.length)} follow-ups are already overdue and should be reviewed first.`
+          : 'Deal-health records have not been computed yet, so the report is currently focused on raw conversation coverage rather than account risk.',
+      ],
+      recommendations: [
+        threads.length === 0 ? 'Import or manually log conversation records first so account-level insight can be generated from real communication history.' : 'Keep conversation intake current so health scoring and follow-up decisions continue to reflect recent account behavior.',
+        overdueFollowUps.length > 0 ? `Clear the ${formatNumber(overdueFollowUps.length)} overdue follow-ups first; aging follow-up backlog usually weakens response quality and deal momentum.` : 'The current follow-up queue is not showing overdue backlog pressure.',
+        atRiskCount > 0 ? `Review the ${formatNumber(atRiskCount)} at-risk deal-health records with thread context so commercial teams can intervene before engagement weakens further.` : 'No at-risk deal-health band is dominating the current workspace, so teams can focus more on consistency than rescue work.',
+      ],
+      metricCards: [
+        { label: 'Tracked Companies', value: formatNumber(companies.length), helper: `${formatNumber(topCompanies.length)} companies currently appear in thread activity summaries.`, ...statusFromLevel(companies.length > 0 ? 'healthy' : 'critical', companies.length > 0 ? 'Coverage Active' : 'No Coverage') },
+        { label: 'Conversation Threads', value: formatNumber(threads.length), helper: `${formatNumber(messages.length)} total messages are linked to those threads.`, ...statusFromLevel(threads.length > 0 ? 'healthy' : 'critical', threads.length > 0 ? 'Thread History Active' : 'No Thread History') },
+        { label: 'At-Risk Deals', value: formatNumber(atRiskCount), helper: `${formatNumber(healthyCount)} latest health records are currently healthy.`, ...statusFromLevel(atRiskCount === 0 ? 'healthy' : atRiskCount <= 5 ? 'warning' : 'critical', atRiskCount === 0 ? 'Stable' : atRiskCount <= 5 ? 'Watchlist' : 'Risk Pressure') },
+        { label: 'Pending Follow-Ups', value: formatNumber(pendingFollowUps.length), helper: `${formatNumber(overdueFollowUps.length)} are already overdue.`, ...statusFromLevel(overdueFollowUps.length === 0 ? 'healthy' : overdueFollowUps.length <= 5 ? 'warning' : 'critical', overdueFollowUps.length === 0 ? 'Controlled' : overdueFollowUps.length <= 5 ? 'Backlog Building' : 'Backlog Risk') },
+      ],
+      highlights: [
+        latestThread ? `The latest tracked thread is "${latestThread.subject || 'Untitled thread'}", which confirms current activity, but managers should compare that recency against the overdue follow-up queue before assuming response discipline is healthy.` : 'No tracked conversation thread exists yet.',
+        busiestChannel ? `${busiestChannel.channel} is the most visible conversation channel. If one channel dominates heavily, managers should check whether response quality in other channels is being under-read.` : 'No channel mix can be calculated yet.',
+        latestHealthByThread.length > 0 ? `${formatNumber(latestHealthByThread.length)} latest deal-health records exist, which means Module 3 is now capable of management-level risk reading rather than just message storage.` : 'No latest deal-health records are available yet.',
+      ],
+      sections: [
+        {
+          key: 'coverage-summary',
+          title: 'Conversation Coverage Summary',
+          description: 'Current state of account coverage, communication activity, and action workload in Module 3.',
+          columns: ['Area', 'Current State', 'Interpretation'],
+          rows: [
+            ['Tracked companies', formatNumber(companies.length), companies.length > 0 ? 'Account-level conversation coverage exists.' : 'No company coverage is available yet.'],
+            ['Conversation threads', formatNumber(threads.length), threads.length > 0 ? 'Thread-level communication history is available.' : 'No thread history is stored yet.'],
+            ['Deal health records', formatNumber(latestHealthByThread.length), latestHealthByThread.length > 0 ? 'Health signals are available for risk reading.' : 'Health scoring has not been generated yet.'],
+            ['Overdue follow-ups', formatNumber(overdueFollowUps.length), overdueFollowUps.length > 0 ? 'Action backlog is visible and needs response discipline.' : 'No overdue follow-up backlog is visible.'],
+          ],
+        },
+        {
+          key: 'channel-mix',
+          title: 'Channel and Source Mix',
+          description: 'Where conversation volume is coming from and how records are entering the workspace.',
+          columns: ['Type', 'Category', 'Count', 'Share / Commentary'],
+          rows: [
+            ...channelSummary.slice(0, 6).map((item) => ['Channel', item.channel, item.count, formatPercent(item.share, 1)]),
+            ...sourceSummary.slice(0, 3).map((item) => ['Source', item.source, item.count, 'Conversation ingestion source']),
+          ],
+        },
+        {
+          key: 'deal-health',
+          title: 'Deal Health Distribution',
+          description: 'Latest available health status across conversation-linked accounts and deals.',
+          columns: ['Health Band', 'Count', 'Interpretation'],
+          rows: bandSummary.map((item) => [
+            item.band,
+            item.count,
+            item.band === 'at_risk' ? 'Requires intervention and follow-up attention.' : item.band === 'healthy' ? 'Strong communication health signal.' : 'Stable but should continue to be monitored.',
+          ]),
+        },
+        {
+          key: 'follow-up-queue',
+          title: 'Follow-Up Queue',
+          description: 'Current follow-up reminders that represent pending or overdue action for the commercial team.',
+          columns: ['Status', 'Due', 'Thread ID', 'Reason'],
+          rows: (followUps as any[]).slice(0, 12).map((item) => [
+            item.status || 'pending',
+            formatDateTime(item.snoozedUntil || item.dueAt),
+            String(item.threadId || ''),
+            item.reason || 'No reason recorded',
+          ]),
+        },
+        {
+          key: 'company-activity',
+          title: 'Most Active Companies',
+          description: 'Companies with the highest visible conversation-thread volume in the workspace.',
+          columns: ['Company', 'Primary Domain', 'Thread Count'],
+          rows: topCompanies.map((item) => [item.name, item.domain || 'N/A', item.count]),
+        },
+      ],
+      exports: [
+        { key: 'companies', label: 'Companies CSV', description: 'Tracked companies with conversation coverage in this workspace.', filename: 'm03_companies_report.csv' },
+        { key: 'threads', label: 'Conversation Threads CSV', description: 'Thread-level activity and recency records.', filename: 'm03_conversation_threads_report.csv' },
+        { key: 'messages', label: 'Messages CSV', description: 'Message-level records supporting analytics and health signals.', filename: 'm03_messages_report.csv' },
+        { key: 'deal-health', label: 'Deal Health CSV', description: 'Latest and historical deal-health scoring records.', filename: 'm03_deal_health_report.csv' },
+        { key: 'follow-ups', label: 'Follow-Ups CSV', description: 'Follow-up reminder queue and due-state detail.', filename: 'm03_followups_report.csv' },
+      ],
+    },
+    csv: {
+      companies: {
+        filename: 'm03_companies_report.csv',
+        header: ['company_id', 'name', 'primary_domain', 'aliases', 'created_at'],
+        rows: (companies as any[]).map((item) => [String(item._id), item.name || '', item.primaryDomain || '', Array.isArray(item.aliases) ? item.aliases.join(' | ') : '', formatDateTime(item.createdAt)]),
+      },
+      threads: {
+        filename: 'm03_conversation_threads_report.csv',
+        header: ['thread_id', 'subject', 'channel', 'source', 'message_count', 'first_message_at', 'last_message_at'],
+        rows: (threads as any[]).map((item) => [String(item._id), item.subject || '', item.channel || 'other', item.source || 'upload', Number(item.messageCount || 0), formatDateTime(item.firstMessageAt), formatDateTime(item.lastMessageAt)]),
+      },
+      messages: {
+        filename: 'm03_messages_report.csv',
+        header: ['message_id', 'thread_id', 'channel', 'direction', 'sender_name', 'sender_role', 'sent_at', 'subject'],
+        rows: (messages as any[]).map((item) => [String(item._id), String(item.threadId || ''), item.channel || 'other', item.direction || 'inbound', item.sender?.name || '', item.sender?.role || '', formatDateTime(item.sentAt), item.subject || '']),
+      },
+      'deal-health': {
+        filename: 'm03_deal_health_report.csv',
+        header: ['thread_id', 'deal_id', 'score', 'band', 'trend', 'probability_healthy', 'last_computed_at', 'summary'],
+        rows: (healthRows as any[]).map((item) => [String(item.threadId || ''), item.dealId ? String(item.dealId) : '', Number(item.score || 0), item.band || 'steady', item.trend || 'flat', Number(item.probabilityHealthy || 0), formatDateTime(item.lastComputedAt), item.summary || '']),
+      },
+      'follow-ups': {
+        filename: 'm03_followups_report.csv',
+        header: ['followup_id', 'thread_id', 'status', 'due_at', 'snoozed_until', 'reason', 'created_at'],
+        rows: (followUps as any[]).map((item) => [String(item._id), String(item.threadId || ''), item.status || 'pending', formatDateTime(item.dueAt), formatDateTime(item.snoozedUntil), item.reason || '', formatDateTime(item.createdAt)]),
+      },
+    },
+  };
+}
+
 async function buildM01Report(workspaceId: string): Promise<ReportBundle> {
   const [uploads, mergedFiles, leadOutputs, templateCount] = await Promise.all([
     UploadFile.find({ workspace: workspaceId }).sort({ createdAt: -1 }).lean(),
@@ -160,6 +377,11 @@ async function buildM01Report(workspaceId: string): Promise<ReportBundle> {
       title: 'Lead Intake and Scoring Readiness Report',
       subtitle: 'Executive view of source intake, transformation progress, and readiness of lead datasets for downstream decision modules.',
       generatedAt: new Date().toISOString(),
+      reportStatusLabel: readinessLevel === 'High' ? 'Ready' : readinessLevel === 'Moderate' ? 'Needs Attention' : 'Critical Setup Gap',
+      reportStatusTone: readinessLevel === 'High' ? 'healthy' : readinessLevel === 'Moderate' ? 'warning' : 'critical',
+      reportStatusSummary: processingGap > 0
+        ? `${formatNumber(processingGap)} merged dataset(s) still have not been converted into lead-ready outputs, so downstream modules are working with incomplete intake coverage.`
+        : `Merged-to-output conversion is currently controlled, which means Module 1 is operating as a dependable intake gate for downstream scoring and analysis.`,
       overviewTitle: 'Executive Summary',
       overviewBody: [
         `Lead Quality & Scoring is the workspace intake-control layer. Its purpose is to convert raw lead-source files into standardized, decision-ready assets that downstream scoring, attribution, and funnel workflows can rely on.`,
@@ -169,20 +391,20 @@ async function buildM01Report(workspaceId: string): Promise<ReportBundle> {
           : `Merged datasets are being translated into lead-ready outputs without a current backlog, indicating strong operational readiness for downstream analytics and activation use.`,
       ],
       recommendations: [
-        processingGap > 0 ? 'Prioritize lead-output generation for every merged dataset so later modules do not operate on partially prepared intake batches.' : 'Maintain the current conversion cadence so every merged dataset continues to produce a lead-ready output without delay.',
-        templateCount === 0 ? 'Introduce at least one approved mapping template to reduce merge inconsistency and improve operational repeatability.' : 'Continue enforcing mapping-template use so merge logic remains stable across new source files.',
-        latestUpload && !latestLeadOutput ? 'Hold downstream scoring and activation until the latest uploaded batch has been converted into a validated lead-ready output.' : 'The current state supports downstream scoring and analysis, provided users validate the latest generated output before operational use.',
+        processingGap > 0 ? `${formatNumber(processingGap)} merged dataset(s) are still waiting for lead-output generation. Clear that backlog before the next scoring or attribution cycle.` : 'No merged-output backlog is visible. Preserve the current conversion cadence so every new merge produces a lead-ready artifact quickly.',
+        templateCount === 0 ? 'No approved mapping template is stored for this workspace. Create one before the next major intake batch to reduce merge inconsistency.' : `${formatNumber(templateCount)} mapping template(s) are available. Keep using them so field structure stays stable across uploads.`,
+        latestUpload && !latestLeadOutput ? `The latest uploaded batch (${latestUpload.originalName || latestUpload.filename}) has not yet produced a lead-ready artifact. Pause downstream operational use until that conversion is complete.` : 'The latest uploaded and generated assets are aligned closely enough for downstream review, subject to normal validation checks.',
       ],
       metricCards: [
-        { label: 'Source Batches', value: formatNumber(activeUploads.length), helper: `${formatNumber(archivedUploads.length)} archived batches retained for audit history.` },
-        { label: 'Merged Datasets', value: formatNumber(mergedFiles.length), helper: `${formatPercent(mergeCoverage, 1)} of active uploads have a merged output.` },
-        { label: 'Lead-Ready Outputs', value: formatNumber(leadOutputs.length), helper: `${formatPercent(artifactCoverage, 1)} of merged datasets have generated lead artifacts.` },
-        { label: 'Pipeline Backlog', value: formatNumber(processingGap), helper: `${formatNumber(totalUploadBytes / (1024 * 1024), 1)} MB of intake volume tracked across the workspace.` },
+        { label: 'Source Batches', value: formatNumber(activeUploads.length), helper: `${formatNumber(archivedUploads.length)} archived batches retained for audit history.`, ...statusFromLevel(activeUploads.length > 0 ? 'healthy' : 'critical', activeUploads.length > 0 ? 'Active Intake' : 'No Intake') },
+        { label: 'Merged Datasets', value: formatNumber(mergedFiles.length), helper: `${formatPercent(mergeCoverage, 1)} of active uploads have a merged output.`, ...statusFromLevel(mergeCoverage >= 80 ? 'healthy' : mergeCoverage >= 40 ? 'warning' : 'critical', mergeCoverage >= 80 ? 'Strong Coverage' : mergeCoverage >= 40 ? 'Partial Coverage' : 'Weak Coverage') },
+        { label: 'Lead-Ready Outputs', value: formatNumber(leadOutputs.length), helper: `${formatPercent(artifactCoverage, 1)} of merged datasets have generated lead artifacts.`, ...statusFromLevel(artifactCoverage >= 80 ? 'healthy' : artifactCoverage >= 40 ? 'warning' : 'critical', artifactCoverage >= 80 ? 'Operational' : artifactCoverage >= 40 ? 'Incomplete' : 'Blocked') },
+        { label: 'Pipeline Backlog', value: formatNumber(processingGap), helper: `${formatNumber(totalUploadBytes / (1024 * 1024), 1)} MB of intake volume tracked across the workspace.`, ...statusFromLevel(processingGap === 0 ? 'healthy' : processingGap <= 2 ? 'warning' : 'critical', processingGap === 0 ? 'Controlled' : processingGap <= 2 ? 'Open Backlog' : 'Backlog Risk') },
       ],
       highlights: [
-        latestUpload ? `The most recent intake batch is ${latestUpload.originalName || latestUpload.filename}, confirming that source ingestion is active.` : 'No source uploads have been recorded yet.',
-        latestMerge ? `${formatNumber(mergedFiles.length)} merged datasets are available to standardize lead structure before scoring and prioritization.` : 'No merged datasets exist yet, so standardization is incomplete.',
-        latestLeadOutput ? `Lead-ready output generation is active, with ${latestLeadOutput.filename} representing the latest downstream-ready asset.` : 'No lead-ready output has been generated yet, which blocks downstream scoring readiness.',
+        latestUpload ? `Source intake is active, but management should confirm whether ${latestUpload.originalName || latestUpload.filename} has already moved into merge and lead-output conversion.` : 'No source uploads have been recorded yet, so Module 1 cannot currently support downstream scoring readiness.',
+        latestMerge ? `${formatNumber(mergedFiles.length)} merged dataset(s) are available, which means standardization is happening, but only ${formatNumber(leadOutputs.length)} lead-ready artifact(s) exist behind them.` : 'No merged datasets exist yet, so raw intake has not progressed into a usable standard structure.',
+        latestLeadOutput ? `${latestLeadOutput.filename} is the latest generated asset, which means downstream modules can work from an output file rather than raw intake, provided backlog remains controlled.` : 'No lead-ready output has been generated yet, which means downstream users are still blocked at the intake-preparation stage.',
       ],
       sections: [
         {
@@ -345,6 +567,13 @@ async function buildM02Report(workspaceId: string): Promise<ReportBundle> {
       title: 'Intent Prioritization Report',
       subtitle: 'Current intent mix, lead urgency, and observed behavior momentum for the workspace.',
       generatedAt: new Date().toISOString(),
+      reportStatusLabel: totalLeads === 0 ? 'Critical Setup Gap' : hotShare >= 20 && totalBehaviorEvents > 0 ? 'Ready' : 'Needs Attention',
+      reportStatusTone: totalLeads === 0 ? 'critical' : hotShare >= 20 && totalBehaviorEvents > 0 ? 'healthy' : 'warning',
+      reportStatusSummary: totalLeads === 0
+        ? 'No scored leads are currently available, so the prioritization layer is not yet usable for revenue-facing decisions.'
+        : totalBehaviorEvents === 0
+          ? 'Leads are scored, but the report is missing behavior telemetry, so intent confidence is weaker than the headline queue suggests.'
+          : `Intent prioritization is active with ${formatNumber(hotPipeline)} HOT/BLAZING leads in view, but managers should still validate whether that queue is being acted on quickly enough.`,
       overviewTitle: 'Executive Summary',
       overviewBody: [
         `Intent Signals converts prepared lead data into action priority. Its purpose is to show which leads deserve immediate outreach, which should be nurtured, and where engagement is still too weak for commercial follow-up.`,
@@ -356,20 +585,20 @@ async function buildM02Report(workspaceId: string): Promise<ReportBundle> {
           : 'Behavior telemetry has not been uploaded yet, which limits confidence in intent interpretation.',
       ],
       recommendations: [
-        hotPipeline > 0 ? 'Route HOT and BLAZING leads into immediate sales follow-up with stricter SLA ownership.' : 'Generate and upload current scored lead data before attempting priority-based action planning.',
-        totalBehaviorEvents === 0 ? 'Upload behavior-event data to strengthen intent confidence and support better urgency decisions.' : 'Continue refreshing behavior-event data so intent scores reflect recent engagement rather than static lead state.',
-        urgentCount > 0 ? `Review the ${formatNumber(urgentCount)} urgent-escalation leads separately from the main queue so they are not buried inside broader prioritization views.` : 'No urgent escalation leads are currently flagged, so the standard prioritization sequence can remain unchanged.',
+        hotPipeline > 0 ? `${formatNumber(hotPipeline)} HOT/BLAZING leads are already visible. Route them into an explicit same-day follow-up lane instead of leaving them inside the general queue.` : 'No high-intent opportunity pool is visible yet. Refresh scored lead output before using Module 2 for action planning.',
+        totalBehaviorEvents === 0 ? 'Behavior-event coverage is missing. Upload telemetry before the next prioritization review so urgency is based on live engagement rather than static scores alone.' : `Behavior telemetry is active across ${formatNumber(totalBehaviorEvents)} events. Keep refreshing it so current engagement can continue to reshape the queue.`,
+        urgentCount > 0 ? `${formatNumber(urgentCount)} urgent-escalation leads should be handled as a separate management list so they are not diluted by standard nurture traffic.` : 'No urgent escalation cohort is currently flagged, so the normal priority sequence can remain unchanged.',
       ],
       metricCards: [
-        { label: 'Scored Leads', value: formatNumber(totalLeads), helper: latestRun ? `Latest run status: ${latestRun.status}.` : 'No scoring run recorded yet.' },
-        { label: 'Average Intent', value: formatPercent(avgIntent, 1), helper: 'Mean intent score across stored intent-scoring leads.' },
-        { label: 'Urgent Escalations', value: formatNumber(urgentCount), helper: 'Leads marked for immediate follow-up.' },
-        { label: 'Behavior Events', value: formatNumber(totalBehaviorEvents), helper: `Mean event engagement score: ${formatNumber(avgBehaviorEngagement, 2)}.` },
+        { label: 'Scored Leads', value: formatNumber(totalLeads), helper: latestRun ? `Latest run status: ${latestRun.status}.` : 'No scoring run recorded yet.', ...statusFromLevel(totalLeads > 0 ? 'healthy' : 'critical', totalLeads > 0 ? 'Queue Available' : 'No Queue') },
+        { label: 'Average Intent', value: formatPercent(avgIntent, 1), helper: 'Mean intent score across stored intent-scoring leads.', ...statusFromLevel(avgIntent >= 60 ? 'healthy' : avgIntent >= 35 ? 'warning' : 'critical', avgIntent >= 60 ? 'Strong Demand' : avgIntent >= 35 ? 'Mixed Demand' : 'Weak Demand') },
+        { label: 'Urgent Escalations', value: formatNumber(urgentCount), helper: 'Leads marked for immediate follow-up.', ...statusFromLevel(urgentCount === 0 ? 'healthy' : urgentCount <= 10 ? 'warning' : 'critical', urgentCount === 0 ? 'Controlled' : urgentCount <= 10 ? 'Watchlist' : 'Escalation Risk') },
+        { label: 'Behavior Events', value: formatNumber(totalBehaviorEvents), helper: `Mean event engagement score: ${formatNumber(avgBehaviorEngagement, 2)}.`, ...statusFromLevel(totalBehaviorEvents > 0 ? 'healthy' : 'critical', totalBehaviorEvents > 0 ? 'Telemetry Active' : 'Telemetry Missing') },
       ],
       highlights: [
-        latestRun ? `Latest intent run finished with status ${latestRun.status} on ${formatDateTime(latestRun.createdAt)}.` : 'No intent scoring run exists yet for this workspace.',
-        totalLeads > 0 ? `${formatNumber(segmentStats.find((item) => item.segment === 'HOT')?.count || 0)} HOT and ${formatNumber(segmentStats.find((item) => item.segment === 'BLAZING')?.count || 0)} BLAZING leads are currently surfaced for action.` : 'No prioritized leads are stored yet.',
-        totalBehaviorEvents > 0 ? `${formatNumber(totalBehaviorEvents)} behavior events have been uploaded, with ${behaviorByType[0]?.eventType || 'no dominant type'} currently dominating activity.` : 'Behavior telemetry has not been uploaded yet.',
+        latestRun ? `The latest intent run completed with status ${latestRun.status}. Management should treat that run as the active decision baseline until the next scoring refresh.` : 'No intent scoring run exists yet, so Module 2 is not ready for action planning.',
+        totalLeads > 0 ? `${formatNumber(segmentStats.find((item) => item.segment === 'HOT')?.count || 0)} HOT and ${formatNumber(segmentStats.find((item) => item.segment === 'BLAZING')?.count || 0)} BLAZING leads are surfaced, which means the queue contains a real immediate-action cohort rather than just nurture traffic.` : 'No prioritized leads are stored yet.',
+        totalBehaviorEvents > 0 ? `${behaviorByType[0]?.eventType || 'Current'} behavior currently dominates telemetry, which should guide which outreach motion gets commercial attention first.` : 'Behavior telemetry has not been uploaded yet, so score confidence is weaker than it should be.',
       ],
       sections: [
         {
@@ -507,6 +736,13 @@ async function buildM05Report(workspaceId: string): Promise<ReportBundle> {
       title: 'Sales and Marketing Alignment Report',
       subtitle: 'Shared operational view across prioritized demand, pipeline coverage, web-signal availability, and cross-team follow-through.',
       generatedAt: new Date().toISOString(),
+      reportStatusLabel: sharedLeads.length === 0 ? 'Critical Setup Gap' : hotPipelineCoverage >= 70 && highPriorityThreads.length === 0 ? 'Ready' : 'Needs Attention',
+      reportStatusTone: sharedLeads.length === 0 ? 'critical' : hotPipelineCoverage >= 70 && highPriorityThreads.length === 0 ? 'healthy' : 'warning',
+      reportStatusSummary: sharedLeads.length === 0
+        ? 'The shared operating lead base is missing, so Module 5 cannot yet function as a true alignment layer.'
+        : highPriorityThreads.length > 0
+          ? `${formatNumber(highPriorityThreads.length)} high-priority communication thread(s) remain unresolved, so alignment visibility exists but follow-through is still exposed.`
+          : `Alignment coverage is usable, but managers should still monitor whether high-intent leads are consistently making it into visible stage tracking.`,
       overviewTitle: 'Executive Summary',
       overviewBody: [
         `Sales & Marketing Alignment is the shared operating layer between commercial teams. Its purpose is to align lead readiness, intent priority, funnel visibility, website engagement context, and communication follow-through into one management view.`,
@@ -523,15 +759,15 @@ async function buildM05Report(workspaceId: string): Promise<ReportBundle> {
         highPriorityThreads.length > 0 ? `Resolve the ${formatNumber(highPriorityThreads.length)} high-priority communication threads quickly so alignment blockers do not remain open without ownership.` : 'No high-priority unresolved communication threads are currently open, which supports a healthier cross-team operating rhythm.',
       ],
       metricCards: [
-        { label: 'Shared Leads', value: formatNumber(sharedLeads.length), helper: `${formatNumber(prioritizedSharedLeadCount)} leads already connect to prioritization coverage.` },
-        { label: 'High-Intent Leads', value: formatNumber(hotRows.length), helper: `${formatPercent(hotPipelineCoverage, 1)} of HOT and BLAZING leads already appear in stage tracking.` },
-        { label: 'Web Datasets', value: formatNumber(activeUploads.length), helper: latestUpload ? `Latest validated dataset: ${latestUpload.originalName || latestUpload.filename}.` : 'No active Module 5 engagement dataset is available.' },
-        { label: 'Open Threads', value: formatNumber(openThreads.length), helper: `${formatNumber(highPriorityThreads.length)} high-priority issues remain unresolved.` },
+        { label: 'Shared Leads', value: formatNumber(sharedLeads.length), helper: `${formatNumber(prioritizedSharedLeadCount)} leads already connect to prioritization coverage.`, ...statusFromLevel(sharedLeads.length > 0 ? 'healthy' : 'critical', sharedLeads.length > 0 ? 'Base Available' : 'Base Missing') },
+        { label: 'High-Intent Leads', value: formatNumber(hotRows.length), helper: `${formatPercent(hotPipelineCoverage, 1)} of HOT and BLAZING leads already appear in stage tracking.`, ...statusFromLevel(hotPipelineCoverage >= 70 ? 'healthy' : hotPipelineCoverage >= 40 ? 'warning' : 'critical', hotPipelineCoverage >= 70 ? 'Well Covered' : hotPipelineCoverage >= 40 ? 'Partial Handoff' : 'Handoff Risk') },
+        { label: 'Web Datasets', value: formatNumber(activeUploads.length), helper: latestUpload ? `Latest validated dataset: ${latestUpload.originalName || latestUpload.filename}.` : 'No active Module 5 engagement dataset is available.', ...statusFromLevel(activeUploads.length > 0 ? 'healthy' : 'warning', activeUploads.length > 0 ? 'Telemetry Available' : 'Telemetry Thin') },
+        { label: 'Open Threads', value: formatNumber(openThreads.length), helper: `${formatNumber(highPriorityThreads.length)} high-priority issues remain unresolved.`, ...statusFromLevel(highPriorityThreads.length === 0 ? 'healthy' : highPriorityThreads.length <= 3 ? 'warning' : 'critical', highPriorityThreads.length === 0 ? 'Controlled' : highPriorityThreads.length <= 3 ? 'Follow-Up Needed' : 'Collaboration Risk') },
       ],
       highlights: [
-        `${formatNumber(sharedLeads.length)} shared leads, ${formatNumber(prioritizedRows.length)} prioritized rows, ${formatNumber(stageRows.length)} stage records, and ${formatNumber(threads.length)} active communication threads are currently available for alignment reporting.`,
-        activeUploads.length > 0 ? `${formatNumber(activeUploads.length)} active web-engagement datasets are available to enrich cross-team interpretation.` : 'No active web-engagement dataset is currently available for Module 5.',
-        latestThread ? `The latest communication thread is "${latestThread.title}", which confirms cross-team follow-through is being tracked inside the platform.` : 'No communication threads exist yet, so alignment follow-through is not being documented in the hub.',
+        `${formatNumber(sharedLeads.length)} shared leads, ${formatNumber(prioritizedRows.length)} prioritized rows, ${formatNumber(stageRows.length)} stage records, and ${formatNumber(threads.length)} communication threads give this module enough evidence to act as a real alignment summary rather than a placeholder screen.`,
+        activeUploads.length > 0 ? `${formatNumber(activeUploads.length)} active web-engagement dataset(s) are available, which means sales and marketing discussions can reference real web-signal context instead of pipeline data alone.` : 'No active web-engagement dataset is currently available for Module 5, so alignment discussions are missing a live website signal layer.',
+        latestThread ? `The latest communication thread is "${latestThread.title}", which confirms cross-team follow-through is being tracked, but unresolved high-priority threads should be treated as operational drag.` : 'No communication threads exist yet, so alignment follow-through is not being documented in the hub.',
       ],
       sections: [
         {
@@ -723,6 +959,13 @@ async function buildM06Report(workspaceId: string): Promise<ReportBundle> {
       title: 'Revenue Attribution and ROI Report',
       subtitle: 'Professional revenue view across campaigns, deal outcomes, journey coverage, and attributed performance.',
       generatedAt: new Date().toISOString(),
+      reportStatusLabel: totalRevenue === 0 ? 'Critical Setup Gap' : attributionCoverage >= 80 && roi >= 0 ? 'Ready' : 'Needs Attention',
+      reportStatusTone: totalRevenue === 0 ? 'critical' : attributionCoverage >= 80 && roi >= 0 ? 'healthy' : 'warning',
+      reportStatusSummary: totalRevenue === 0
+        ? 'No closed-won revenue is currently available, so this module cannot yet produce a fully commercial report.'
+        : attributionCoverage < 80
+          ? `${formatPercent(attributionCoverage, 1)} of realized revenue is currently attributed. Management should treat the ROI view as directionally useful, but not yet fully explained.`
+          : `Revenue, spend, and attribution are sufficiently connected for management review. The main question is now channel efficiency rather than basic coverage.`,
       overviewTitle: 'Executive Summary',
       overviewBody: [
         `Revenue Insight is the commercial performance layer of the workspace. Its purpose is to connect campaigns, touches, deals, and attribution logic into a clear view of revenue contribution, spend efficiency, and return on marketing activity.`,
@@ -734,20 +977,20 @@ async function buildM06Report(workspaceId: string): Promise<ReportBundle> {
           : 'No campaign ranking is currently available because attribution output is missing or campaign records are incomplete.',
       ],
       recommendations: [
-        latestRun ? 'Use the current attribution run as the reporting baseline, but rerun attribution whenever material campaign, touch, or deal changes are imported.' : 'Complete an attribution run before relying on ROI interpretation; without it, commercial reporting remains only partially populated.',
-        totalSpend > 0 && attributedRevenue < totalSpend ? 'Review underperforming campaign groups and reduce spend concentration where attributed revenue is not covering current investment.' : 'Current spend is broadly supported by attributed performance; focus on scaling the highest-return campaign and channel mix.',
-        touches.length === 0 ? 'Upload touchpoint data immediately, because journey coverage is required for credible attribution reporting.' : 'Maintain touchpoint completeness so revenue can continue to be explained through attributable journey evidence rather than treated as unattributed outcome.',
+        latestRun ? `Use the latest attribution run as the current baseline, but rerun it immediately after any material import to touches, campaigns, or deals.` : 'No completed attribution run is available. Create one before using this report in a commercial review.',
+        totalSpend > 0 && attributedRevenue < totalSpend ? `Attributed revenue (${formatCurrency(attributedRevenue)}) is still below tracked spend (${formatCurrency(totalSpend)}). Reduce or question low-efficiency campaign groups before increasing budget.` : 'Current spend is broadly covered by attributed performance; focus next on scaling the highest-return campaign and channel mix.',
+        touches.length === 0 ? 'Touchpoint coverage is missing entirely. Upload touch data before the next revenue review, otherwise attribution confidence remains structurally weak.' : `Maintain touchpoint completeness across ${formatNumber(touches.length)} recorded touches so revenue can keep being explained through journey evidence rather than treated as unattributed outcome.`,
       ],
       metricCards: [
-        { label: 'Closed-Won Revenue', value: formatCurrency(totalRevenue), helper: `${formatNumber(closedWonDeals.length)} won deals currently tracked.` },
-        { label: 'Attributed Revenue', value: formatCurrency(attributedRevenue), helper: `${formatCurrency(unattributedRevenue)} remains unattributed.` },
-        { label: 'Campaign Spend', value: formatCurrency(totalSpend), helper: `${formatNumber(campaigns.length)} campaigns and ${formatNumber(leads.length)} leads included.` },
-        { label: 'Attributed ROI', value: formatPercent(roi, 1), helper: `Average won-deal size: ${formatCurrency(avgDealSize)}.` },
+        { label: 'Closed-Won Revenue', value: formatCurrency(totalRevenue), helper: `${formatNumber(closedWonDeals.length)} won deals currently tracked.`, ...statusFromLevel(totalRevenue > 0 ? 'healthy' : 'critical', totalRevenue > 0 ? 'Commercial Data Live' : 'No Revenue Base') },
+        { label: 'Attributed Revenue', value: formatCurrency(attributedRevenue), helper: `${formatCurrency(unattributedRevenue)} remains unattributed.`, ...statusFromLevel(attributionCoverage >= 80 ? 'healthy' : attributionCoverage >= 50 ? 'warning' : 'critical', attributionCoverage >= 80 ? 'Strong Coverage' : attributionCoverage >= 50 ? 'Partial Coverage' : 'Weak Coverage') },
+        { label: 'Campaign Spend', value: formatCurrency(totalSpend), helper: `${formatNumber(campaigns.length)} campaigns and ${formatNumber(leads.length)} leads included.`, ...statusFromLevel(totalSpend > 0 ? 'neutral' : 'warning', totalSpend > 0 ? 'Tracked Spend' : 'No Spend Base') },
+        { label: 'Attributed ROI', value: formatPercent(roi, 1), helper: `Average won-deal size: ${formatCurrency(avgDealSize)}.`, ...statusFromLevel(roi >= 0 ? 'healthy' : roi >= -20 ? 'warning' : 'critical', roi >= 0 ? 'Return Positive' : roi >= -20 ? 'Return Under Pressure' : 'Return Negative') },
       ],
       highlights: [
-        latestRun ? `Latest attribution run (${latestRun.model_type}) completed on ${formatDateTime(latestRun.timestamp)}.` : 'No completed attribution run exists yet, so attributed revenue remains unavailable.',
-        `${formatNumber(leads.length)} leads, ${formatNumber(campaigns.length)} campaigns, ${formatNumber(touches.length)} touches, and ${formatNumber(deals.length)} deals are currently available for reporting.`,
-        closedWonDeals.length > 0 ? `${formatCurrency(totalRevenue)} in closed-won revenue is recorded, with ${formatCurrency(attributedRevenue)} currently attributed.` : 'No closed-won deals are stored yet.',
+        latestRun ? `The latest attribution run (${latestRun.model_type}) is the current reporting baseline; managers should not compare ROI across runs casually without re-baselining the inputs.` : 'No completed attribution run exists yet, so attributed revenue remains unavailable.',
+        `${formatNumber(leads.length)} leads, ${formatNumber(campaigns.length)} campaigns, ${formatNumber(touches.length)} touches, and ${formatNumber(deals.length)} deals are currently available, which is enough to produce a real commercial view if attribution coverage is acceptable.`,
+        closedWonDeals.length > 0 ? `${formatCurrency(totalRevenue)} in closed-won revenue is recorded, but only ${formatCurrency(attributedRevenue)} is currently attributed, so the remaining gap should shape how confidently managers read channel ROI.` : 'No closed-won deals are stored yet.',
       ],
       sections: [
         {
@@ -885,6 +1128,13 @@ async function buildM07Report(workspaceId: string): Promise<ReportBundle> {
       title: 'Funnel Health and Leakage Report',
       subtitle: 'Operational funnel health across stage occupancy, stalled leads, interaction volume, and drop-off reasons.',
       generatedAt: new Date().toISOString(),
+      reportStatusLabel: activeStages.length === 0 ? 'Critical Setup Gap' : worstLeak || stalledLeads.length > 0 ? 'Needs Attention' : 'Ready',
+      reportStatusTone: activeStages.length === 0 ? 'critical' : worstLeak || stalledLeads.length > 0 ? 'warning' : 'healthy',
+      reportStatusSummary: activeStages.length === 0
+        ? 'No live stage occupancy is visible, so the funnel cannot yet be managed as an in-flight operating system.'
+        : worstLeak
+          ? `${worstLeak.stageName} is currently the clearest leakage point, and it should be treated as the first management intervention area.`
+          : `The funnel has live occupancy and no dominant leakage pattern is currently standing out above the rest.`,
       overviewTitle: 'Executive Summary',
       overviewBody: [
         `Funnel Insight is the pipeline-diagnostics layer of the workspace. Its purpose is to show where leads are currently sitting, where they are being lost, and which points in the journey require operational intervention.`,
@@ -896,20 +1146,20 @@ async function buildM07Report(workspaceId: string): Promise<ReportBundle> {
           : 'No dropped-stage pattern is currently available, so leakage interpretation is limited.',
       ],
       recommendations: [
-        worstLeak ? `Investigate the ${worstLeak.stageName} stage first, because it currently represents the clearest concentration of funnel loss.` : 'Populate stage outcomes and exit reasons before relying on leakage conclusions.',
-        stalledLeads.length > 0 ? 'Review the longest-stalled active leads manually; extended time-in-stage usually signals follow-up failure, qualification gaps, or process delay.' : 'No major stall pattern is currently visible in active stage records.',
-        interactions.length === 0 ? 'Upload interaction history so funnel interpretation can be linked to actual outreach behavior instead of stage status alone.' : 'Maintain interaction freshness so stage movement can be interpreted against current engagement evidence.',
+        worstLeak ? `Investigate ${worstLeak.stageName} first. It currently carries the most visible leakage pattern, which means process fixes elsewhere will have lower immediate impact.` : 'Populate stage outcomes and exit reasons before relying on leakage conclusions.',
+        stalledLeads.length > 0 ? `Review the longest-stalled active leads now; the oldest open record has been sitting for ${formatNumber(stalledLeads[0]?.daysOpen || 0)} day(s), which is a direct workflow-delay risk.` : 'No major stall pattern is currently visible in active stage records.',
+        interactions.length === 0 ? 'Interaction history is missing. Upload it before the next funnel review so stage movement can be explained by real outreach behavior.' : `Maintain interaction freshness across ${formatNumber(interactions.length)} interactions so stall and drop patterns can keep being read against actual engagement evidence.`,
       ],
       metricCards: [
-        { label: 'Funnel Leads', value: formatNumber(leads.length), helper: 'Shared lead table currently active in funnel analysis.' },
-        { label: 'Active Stages', value: formatNumber(activeStages.length), helper: `${formatNumber(droppedStages.length)} dropped-stage records stored.` },
-        { label: 'Interactions', value: formatNumber(interactions.length), helper: 'Observed interaction history available for journey reading.' },
-        { label: 'Avg Stage Duration', value: `${formatNumber(stageDuration[0]?.avgDays || 0, 1)} days`, helper: 'Longest average completed stage duration currently observed.' },
+        { label: 'Funnel Leads', value: formatNumber(leads.length), helper: 'Shared lead table currently active in funnel analysis.', ...statusFromLevel(leads.length > 0 ? 'healthy' : 'critical', leads.length > 0 ? 'Funnel Base Live' : 'Base Missing') },
+        { label: 'Active Stages', value: formatNumber(activeStages.length), helper: `${formatNumber(droppedStages.length)} dropped-stage records stored.`, ...statusFromLevel(activeStages.length > 0 ? 'healthy' : 'critical', activeStages.length > 0 ? 'Live Occupancy' : 'No Occupancy') },
+        { label: 'Interactions', value: formatNumber(interactions.length), helper: 'Observed interaction history available for journey reading.', ...statusFromLevel(interactions.length > 0 ? 'healthy' : 'warning', interactions.length > 0 ? 'Journey Evidence' : 'Evidence Thin') },
+        { label: 'Avg Stage Duration', value: `${formatNumber(stageDuration[0]?.avgDays || 0, 1)} days`, helper: 'Longest average completed stage duration currently observed.', ...statusFromLevel((stageDuration[0]?.avgDays || 0) <= 21 ? 'healthy' : (stageDuration[0]?.avgDays || 0) <= 35 ? 'warning' : 'critical', (stageDuration[0]?.avgDays || 0) <= 21 ? 'Pace Acceptable' : (stageDuration[0]?.avgDays || 0) <= 35 ? 'Pace Slowing' : 'Delay Risk') },
       ],
       highlights: [
-        `${formatNumber(leads.length)} funnel leads, ${formatNumber(stages.length)} stage-history entries, and ${formatNumber(interactions.length)} interactions are currently available.`,
-        activeStages.length > 0 ? `${formatNumber(activeStages.length)} active stage records indicate current in-funnel volume.` : 'There are no active stage records yet.',
-        droppedStages.length > 0 ? `${formatNumber(droppedStages.length)} dropped stage records are available for leakage review.` : 'No dropped stage records exist yet.',
+        `${formatNumber(leads.length)} funnel leads, ${formatNumber(stages.length)} stage-history entries, and ${formatNumber(interactions.length)} interactions are currently available, which gives this module enough evidence to describe live funnel pressure rather than static counts alone.`,
+        activeStages.length > 0 ? `${formatNumber(activeStages.length)} active stage records indicate live in-funnel volume, so managers can use this module for current-state operational review rather than just historical reporting.` : 'There are no active stage records yet.',
+        droppedStages.length > 0 ? `${formatNumber(droppedStages.length)} dropped-stage records are available, so leakage analysis can now move from anecdotal discussion into a measurable pattern review.` : 'No dropped stage records exist yet.',
       ],
       sections: [
         {
@@ -981,12 +1231,197 @@ async function buildM07Report(workspaceId: string): Promise<ReportBundle> {
   };
 }
 
+async function buildM09Report(workspaceId: string): Promise<ReportBundle> {
+  const [workspaceUploads, mergedDatasets] = await Promise.all([
+    UploadFile.find({ workspace: workspaceId }).sort({ createdAt: -1 }).lean(),
+    (MergedDataset as any).find({ workspace: workspaceId }).sort({ createdAt: -1 }).lean(),
+  ]);
+
+  const uploads = (workspaceUploads as any[]).filter((item) => getUploadModuleTag(item) === 'm09');
+  const activeUploads = uploads.filter((item) => item.status !== 'archived');
+  const archivedUploads = uploads.filter((item) => item.status === 'archived');
+  const totalRowsBefore = (mergedDatasets as any[]).reduce((sum, item) => sum + Number(item.rowCountBeforeMerge || 0), 0);
+  const totalRowsAfter = (mergedDatasets as any[]).reduce((sum, item) => sum + Number(item.rowCountAfterMerge || 0), 0);
+  const totalDuplicates = (mergedDatasets as any[]).reduce((sum, item) => sum + Number(item.duplicateCount || 0), 0);
+  const duplicateReduction = totalRowsBefore > 0 ? (totalDuplicates / totalRowsBefore) * 100 : 0;
+  const latestMerged = (mergedDatasets as any[])[0];
+  const latestWarnings = Array.isArray(latestMerged?.validationSummary?.warnings) ? latestMerged.validationSummary.warnings : [];
+
+  const channelCounts = new Map<string, number>();
+  const latestSampleRows = Array.isArray(latestMerged?.sampleRows) ? latestMerged.sampleRows : [];
+  for (const row of latestSampleRows) {
+    const channel = String((row as any)?.channel || (row as any)?.platform || 'unknown');
+    channelCounts.set(channel, (channelCounts.get(channel) || 0) + 1);
+  }
+  const sampledChannelMix = Array.from(channelCounts.entries())
+    .map(([channel, count]) => ({
+      channel,
+      count,
+      share: latestSampleRows.length > 0 ? (count / latestSampleRows.length) * 100 : 0,
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  const mergeQualityRows = (mergedDatasets as any[]).map((item) => {
+    const warnings = Array.isArray(item.validationSummary?.warnings) ? item.validationSummary.warnings.length : 0;
+    const before = Number(item.rowCountBeforeMerge || 0);
+    const after = Number(item.rowCountAfterMerge || 0);
+    const duplicates = Number(item.duplicateCount || 0);
+    return {
+      title: item.title || item.filename || 'Merged dataset',
+      before,
+      after,
+      duplicates,
+      warnings,
+      duplicateRate: before > 0 ? (duplicates / before) * 100 : 0,
+      createdAt: item.createdAt,
+    };
+  });
+
+  return {
+    payload: {
+      ok: true,
+      moduleKey: 'm09',
+      title: 'Campaign Performance Optimization Report',
+      subtitle: 'Operational view of Module 9 campaign dataset readiness, merge quality, duplicate reduction, and simulator input health.',
+      generatedAt: new Date().toISOString(),
+      reportStatusLabel: mergedDatasets.length === 0 ? 'Critical Setup Gap' : latestWarnings.length > 0 ? 'Needs Attention' : 'Ready',
+      reportStatusTone: mergedDatasets.length === 0 ? 'critical' : latestWarnings.length > 0 ? 'warning' : 'healthy',
+      reportStatusSummary: mergedDatasets.length === 0
+        ? 'No merged campaign dataset is available yet, so the simulator and optimization workflows do not have a trustworthy baseline.'
+        : latestWarnings.length > 0
+          ? `The latest merged dataset still carries ${formatNumber(latestWarnings.length)} warning(s), so optimization outputs should be treated cautiously until those mapping or completeness issues are reviewed.`
+          : `Merged campaign data is available with no visible warning pressure on the latest dataset, which makes Module 9 ready for scenario planning work.`,
+      overviewTitle: 'Executive Summary',
+      overviewBody: [
+        `Campaign Performance Optimization depends on a clean merged campaign dataset before scenario testing can be trusted. This report focuses on input readiness, merge quality, and whether the optimization workspace has enough normalized campaign detail to support baseline selection and what-if analysis.`,
+        mergedDatasets.length > 0
+          ? `${formatNumber(activeUploads.length)} active Module 9 uploads have produced ${formatNumber(mergedDatasets.length)} merged campaign datasets. Across those merged outputs, ${formatNumber(totalRowsAfter)} normalized rows remain available after duplicate handling.`
+          : 'No merged Module 9 dataset is currently available, so optimization reporting is still at the intake stage.',
+        totalDuplicates > 0
+          ? `${formatNumber(totalDuplicates)} duplicate campaign rows have already been collapsed during merge, representing ${formatPercent(duplicateReduction, 1)} duplicate reduction against pre-merge row volume.`
+          : 'No duplicate campaign rows have been collapsed yet, which usually means either the input set is already clean or merged output volume is still limited.',
+      ],
+      recommendations: [
+        mergedDatasets.length === 0 ? 'Create at least one merged Module 9 campaign dataset before relying on simulator or optimization outputs.' : 'Keep using merged datasets as the optimization baseline so scenario testing is grounded in normalized campaign records rather than raw uploads.',
+        latestWarnings.length > 0 ? `Resolve the ${formatNumber(latestWarnings.length)} latest merge warning(s), especially around missing spend or channel mapping, before the next simulator review.` : 'The latest merged dataset does not currently show validation warnings that materially weaken optimization reading.',
+        activeUploads.length === 0 ? 'No active Module 9 upload library is visible. Upload campaign CSVs before the next optimization cycle so the merged baseline does not go stale.' : `There are ${formatNumber(activeUploads.length)} active Module 9 upload(s). Refresh them on a regular cadence so merged baselines stay relevant.`,
+      ],
+      metricCards: [
+        { label: 'Active Uploads', value: formatNumber(activeUploads.length), helper: `${formatNumber(archivedUploads.length)} archived campaign files remain available for audit history.`, ...statusFromLevel(activeUploads.length > 0 ? 'healthy' : 'warning', activeUploads.length > 0 ? 'Library Active' : 'Library Thin') },
+        { label: 'Merged Datasets', value: formatNumber(mergedDatasets.length), helper: latestMerged ? `Latest merged dataset: ${latestMerged.title || latestMerged.filename}.` : 'No merged campaign dataset exists yet.', ...statusFromLevel(mergedDatasets.length > 0 ? 'healthy' : 'critical', mergedDatasets.length > 0 ? 'Baseline Available' : 'No Baseline') },
+        { label: 'Rows After Merge', value: formatNumber(totalRowsAfter), helper: `${formatNumber(totalRowsBefore)} rows were evaluated before deduplication.`, ...statusFromLevel(totalRowsAfter > 0 ? 'healthy' : 'critical', totalRowsAfter > 0 ? 'Usable Rows' : 'No Usable Rows') },
+        { label: 'Duplicates Removed', value: formatNumber(totalDuplicates), helper: `${formatPercent(duplicateReduction, 1)} duplicate reduction across merged datasets.`, ...statusFromLevel(duplicateReduction <= 10 ? 'healthy' : duplicateReduction <= 25 ? 'warning' : 'critical', duplicateReduction <= 10 ? 'Clean Merge' : duplicateReduction <= 25 ? 'Moderate Cleanup' : 'Heavy Cleanup') },
+      ],
+      highlights: [
+        latestMerged ? `The latest merged output was created on ${formatDateTime(latestMerged.createdAt)} and keeps ${formatNumber(latestMerged.rowCountAfterMerge || 0)} normalized campaign rows available for simulator work, which is the real operating baseline for Module 9.` : 'No merged campaign output exists yet.',
+        latestWarnings.length > 0 ? `${formatNumber(latestWarnings.length)} warning(s) remain attached to the latest merged dataset, so the optimization story is still partly a data-quality story rather than purely a performance story.` : 'The latest merged dataset does not currently show warning pressure.',
+        sampledChannelMix[0] ? `${sampledChannelMix[0].channel} is the most visible channel in the latest merged sample rows, which means optimization attention may become biased if the dataset is not diversified.` : 'No sampled campaign rows are currently available for channel interpretation.',
+      ],
+      sections: [
+        {
+          key: 'dataset-readiness',
+          title: 'Dataset Readiness Summary',
+          description: 'Whether Module 9 currently has enough structured campaign data to support optimization workflows.',
+          columns: ['Area', 'Current State', 'Interpretation'],
+          rows: [
+            ['Active upload library', formatNumber(activeUploads.length), activeUploads.length > 0 ? 'Campaign source files are available in the workspace.' : 'No Module 9 source uploads are available yet.'],
+            ['Merged outputs', formatNumber(mergedDatasets.length), mergedDatasets.length > 0 ? 'Merged campaign datasets are available for simulator baseline selection.' : 'Merged campaign output is missing.'],
+            ['Rows after merge', formatNumber(totalRowsAfter), totalRowsAfter > 0 ? 'Simulator-ready campaign rows are available.' : 'No normalized merged campaign rows are available.'],
+            ['Latest warning count', formatNumber(latestWarnings.length), latestWarnings.length > 0 ? 'Merge warnings may weaken optimization confidence.' : 'No current warning pressure is visible on the latest merge.'],
+          ],
+        },
+        {
+          key: 'merge-quality',
+          title: 'Merge Quality by Dataset',
+          description: 'How each merged dataset performed in row retention, duplicate handling, and warning load.',
+          columns: ['Dataset', 'Rows Before', 'Rows After', 'Duplicates', 'Duplicate Rate', 'Warnings', 'Created'],
+          rows: mergeQualityRows.slice(0, 10).map((item) => [
+            item.title,
+            formatNumber(item.before),
+            formatNumber(item.after),
+            formatNumber(item.duplicates),
+            formatPercent(item.duplicateRate, 1),
+            formatNumber(item.warnings),
+            formatDateTime(item.createdAt),
+          ]),
+        },
+        {
+          key: 'latest-sample',
+          title: 'Latest Merged Campaign Sample',
+          description: 'Sample normalized campaign rows from the latest merged dataset used by baseline selection and scenario tools.',
+          columns: ['Campaign', 'Channel', 'Spend', 'ROI', 'Launch Weekday', 'Touches/User'],
+          rows: latestSampleRows.slice(0, 10).map((row: any) => [
+            row.campaign_name || row.campaign_id || 'Untitled campaign',
+            row.channel || row.platform || 'unknown',
+            row.spend ?? 'N/A',
+            row.roi ?? 'N/A',
+            row.launch_weekday || 'N/A',
+            row.touches_per_user ?? 'N/A',
+          ]),
+        },
+        {
+          key: 'channel-sample-mix',
+          title: 'Latest Sample Channel Mix',
+          description: 'Channel distribution visible inside the latest merged sample rows.',
+          columns: ['Channel', 'Sample Count', 'Sample Share'],
+          rows: sampledChannelMix.map((item) => [item.channel, item.count, formatPercent(item.share, 1)]),
+        },
+        {
+          key: 'upload-library',
+          title: 'Campaign Upload Library',
+          description: 'Module 9-tagged campaign files available to the optimization workflow.',
+          columns: ['File', 'Status', 'Size KB', 'Uploaded'],
+          rows: uploads.slice(0, 10).map((item: any) => [
+            item.originalName || item.filename || 'Campaign CSV',
+            item.status || 'active',
+            formatNumber((Number(item.length || 0) / 1024), 1),
+            formatDateTime(item.createdAt),
+          ]),
+        },
+      ],
+      exports: [
+        { key: 'uploads', label: 'Campaign Uploads CSV', description: 'Module 9-tagged raw campaign file library.', filename: 'm09_campaign_uploads_report.csv' },
+        { key: 'merged-datasets', label: 'Merged Datasets CSV', description: 'Merged campaign dataset register and merge-quality metadata.', filename: 'm09_merged_datasets_report.csv' },
+        { key: 'latest-sample', label: 'Latest Sample Rows CSV', description: 'Sample normalized campaign rows from the latest merged dataset.', filename: 'm09_latest_sample_rows_report.csv' },
+        { key: 'merge-warnings', label: 'Merge Warnings CSV', description: 'Latest merged-dataset warning inventory for review.', filename: 'm09_merge_warnings_report.csv' },
+      ],
+    },
+    csv: {
+      uploads: {
+        filename: 'm09_campaign_uploads_report.csv',
+        header: ['upload_id', 'filename', 'original_name', 'status', 'size_bytes', 'created_at'],
+        rows: uploads.map((item: any) => [String(item._id), item.filename || '', item.originalName || '', item.status || 'active', Number(item.length || 0), formatDateTime(item.createdAt)]),
+      },
+      'merged-datasets': {
+        filename: 'm09_merged_datasets_report.csv',
+        header: ['merged_id', 'title', 'row_count_before_merge', 'row_count_after_merge', 'duplicate_count', 'warning_count', 'created_at'],
+        rows: (mergedDatasets as any[]).map((item) => [String(item._id), item.title || item.filename || 'Merged dataset', Number(item.rowCountBeforeMerge || 0), Number(item.rowCountAfterMerge || 0), Number(item.duplicateCount || 0), Array.isArray(item.validationSummary?.warnings) ? item.validationSummary.warnings.length : 0, formatDateTime(item.createdAt)]),
+      },
+      'latest-sample': {
+        filename: 'm09_latest_sample_rows_report.csv',
+        header: ['campaign_id', 'campaign_name', 'channel', 'platform', 'spend', 'roi', 'launch_weekday', 'launch_hour_bucket', 'touches_per_user'],
+        rows: latestSampleRows.map((row: any) => [row.campaign_id || '', row.campaign_name || '', row.channel || '', row.platform || '', row.spend ?? '', row.roi ?? '', row.launch_weekday || '', row.launch_hour_bucket || '', row.touches_per_user ?? '']),
+      },
+      'merge-warnings': {
+        filename: 'm09_merge_warnings_report.csv',
+        header: ['merged_dataset', 'warning'],
+        rows: (mergedDatasets as any[]).flatMap((item) => {
+          const warnings = Array.isArray(item.validationSummary?.warnings) ? item.validationSummary.warnings : [];
+          return warnings.map((warning: string) => [item.title || item.filename || 'Merged dataset', warning]);
+        }),
+      },
+    },
+  };
+}
+
 async function buildReport(moduleKey: ModuleKey, workspaceId: string) {
   if (moduleKey === 'm01') return buildM01Report(workspaceId);
   if (moduleKey === 'm02') return buildM02Report(workspaceId);
+  if (moduleKey === 'm03') return buildM03Report(workspaceId);
   if (moduleKey === 'm05') return buildM05Report(workspaceId);
   if (moduleKey === 'm06') return buildM06Report(workspaceId);
-  return buildM07Report(workspaceId);
+  if (moduleKey === 'm07') return buildM07Report(workspaceId);
+  return buildM09Report(workspaceId);
 }
 
 export async function getModuleReport(req: Request, res: Response) {

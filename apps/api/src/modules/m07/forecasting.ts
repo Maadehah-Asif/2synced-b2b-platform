@@ -65,6 +65,133 @@ function slope(values: number[]) {
   return denominator === 0 ? 0 : numerator / denominator;
 }
 
+function naiveForecast(values: number[], horizon: number) {
+  const last = values[values.length - 1] ?? 0;
+  return Array.from({ length: horizon }, () => last);
+}
+
+function movingAverageForecast(values: number[], horizon: number, window = 3) {
+  const working = [...values];
+  const output: number[] = [];
+  for (let step = 0; step < horizon; step += 1) {
+    const recent = working.slice(Math.max(0, working.length - window));
+    const avg = recent.length ? recent.reduce((sum, value) => sum + value, 0) / recent.length : 0;
+    output.push(avg);
+    working.push(avg);
+  }
+  return output;
+}
+
+function exponentialSmoothingForecast(values: number[], horizon: number, alpha = 0.45) {
+  if (!values.length) return Array.from({ length: horizon }, () => 0);
+  let level = values[0] ?? 0;
+  for (let index = 1; index < values.length; index += 1) {
+    level = alpha * values[index]! + (1 - alpha) * level;
+  }
+  return Array.from({ length: horizon }, () => level);
+}
+
+function linearRegressionForecast(values: number[], horizon: number) {
+  const trendSlope = slope(values);
+  const last = values[values.length - 1] ?? 0;
+  return Array.from({ length: horizon }, (_, index) => last + trendSlope * (index + 1));
+}
+
+function mean(values: number[]) {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
+
+function stdDev(values: number[]) {
+  if (!values.length) return 0;
+  const avg = mean(values);
+  const variance = values.reduce((sum, value) => sum + (value - avg) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+function coefficientOfVariation(values: number[]) {
+  const avg = mean(values);
+  if (!values.length || Math.abs(avg) < 1e-9) return null;
+  return stdDev(values) / Math.abs(avg);
+}
+
+function linearR2(values: number[]) {
+  if (values.length < 2) return null;
+  const x = values.map((_, index) => index);
+  const xMean = mean(x);
+  const yMean = mean(values);
+  let numerator = 0;
+  let denominator = 0;
+  for (let index = 0; index < values.length; index += 1) {
+    numerator += (x[index]! - xMean) * (values[index]! - yMean);
+    denominator += (x[index]! - xMean) ** 2;
+  }
+  if (denominator === 0) return 1;
+  const fitSlope = numerator / denominator;
+  const intercept = yMean - fitSlope * xMean;
+  const fitted = x.map((value) => intercept + fitSlope * value);
+  const totalVar = values.reduce((sum, value) => sum + (value - yMean) ** 2, 0);
+  if (totalVar <= 1e-9) return 1;
+  const residualVar = values.reduce((sum, value, index) => sum + (value - fitted[index]!) ** 2, 0);
+  return 1 - residualVar / totalVar;
+}
+
+function autoSelectMethod(values: number[]) {
+  let baseMethod: 'naive' | 'moving_average' | 'exponential_smoothing' | 'linear_regression';
+  if (values.length < 5) baseMethod = 'naive';
+  else if (values.length < 9) baseMethod = 'moving_average';
+  else if (values.length < 16) baseMethod = 'exponential_smoothing';
+  else baseMethod = 'linear_regression';
+
+  if (values.length >= 3) {
+    const lastThreeCv = coefficientOfVariation(values.slice(-3));
+    if (lastThreeCv !== null && lastThreeCv < 0.05) {
+      return { method: 'naive' as const, reason: 'flat recent history' };
+    }
+  }
+
+  if (values.length >= 4) {
+    const previousValues = values.slice(0, -1);
+    const previousStd = stdDev(previousValues);
+    const previousMean = mean(previousValues);
+    const latestValue = values[values.length - 1] ?? 0;
+    if (previousStd > 1e-9 && Math.abs(latestValue - previousMean) > 2 * previousStd) {
+      return { method: 'moving_average' as const, reason: 'latest point behaves like an outlier' };
+    }
+  }
+
+  const overallCv = coefficientOfVariation(values);
+  if (overallCv !== null && overallCv > 0.4) {
+    return { method: 'exponential_smoothing' as const, reason: 'overall history is volatile' };
+  }
+
+  if (baseMethod === 'linear_regression') {
+    const r2 = linearR2(values);
+    if (r2 !== null && r2 < 0.4) {
+      return { method: 'exponential_smoothing' as const, reason: 'trend fit is weak' };
+    }
+  }
+
+  return { method: baseMethod, reason: 'history length threshold' };
+}
+
+function forecastSeries(
+  values: number[],
+  horizon: number,
+  method: 'naive' | 'moving_average' | 'exponential_smoothing' | 'linear_regression',
+) {
+  switch (method) {
+    case 'naive':
+      return naiveForecast(values, horizon);
+    case 'moving_average':
+      return movingAverageForecast(values, horizon);
+    case 'exponential_smoothing':
+      return exponentialSmoothingForecast(values, horizon);
+    case 'linear_regression':
+    default:
+      return linearRegressionForecast(values, horizon);
+  }
+}
+
 function addMonths(label: string, offset: number) {
   const [year, month] = label.split('-').map(Number);
   const date = new Date(year || 1970, (month || 1) - 1 + offset, 1);
@@ -139,24 +266,39 @@ export function runM07Forecast(input: M07ForecastRequest) {
   }
 
   const horizon = Math.max(1, Math.min(12, input.horizonMonths || 3));
-  const conversionSlope = slope(history.map((row) => row.conversionRate).slice(-6));
-  const dropSlope = slope(history.map((row) => row.dropRate).slice(-6));
-  const daysSlope = slope(history.map((row) => row.avgDaysInStage).slice(-6));
-  const fatigueSlope = slope(history.map((row) => row.fatiguedLeads).slice(-6));
-  const enteredSlope = slope(history.map((row) => row.leadsEntered).slice(-6));
+  const conversionSeries = history.map((row) => row.conversionRate);
+  const { method, reason } = autoSelectMethod(conversionSeries);
+  const dropSeries = history.map((row) => row.dropRate);
+  const avgDaysSeries = history.map((row) => row.avgDaysInStage);
+  const fatigueSeries = history.map((row) => row.fatiguedLeads);
+  const enteredSeries = history.map((row) => row.leadsEntered);
+  const conversionForecast = forecastSeries(conversionSeries, horizon, method);
+  const dropForecast = forecastSeries(dropSeries, horizon, method);
+  const daysForecast = forecastSeries(avgDaysSeries, horizon, method);
+  const fatigueForecast = forecastSeries(fatigueSeries, horizon, method);
+  const enteredForecast = forecastSeries(enteredSeries, horizon, method);
   const last = history[history.length - 1]!;
 
   const forecast = Array.from({ length: horizon }, (_, index) => {
-    const step = index + 1;
     return {
-      month: addMonths(last.month, step),
-      projectedConversionRate: Number(Math.max(0, Math.min(100, last.conversionRate + conversionSlope * step)).toFixed(2)),
-      projectedDropRate: Number(Math.max(0, Math.min(100, last.dropRate + dropSlope * step)).toFixed(2)),
-      projectedAvgDaysInStage: Number(Math.max(0, last.avgDaysInStage + daysSlope * step).toFixed(2)),
-      projectedFatiguedLeads: Math.max(0, Math.round(last.fatiguedLeads + fatigueSlope * step)),
-      projectedLeadsEntered: Math.max(0, Math.round(last.leadsEntered + enteredSlope * step)),
+      month: addMonths(last.month, index + 1),
+      projectedConversionRate: Number(Math.max(0, Math.min(100, conversionForecast[index] ?? 0)).toFixed(2)),
+      projectedDropRate: Number(Math.max(0, Math.min(100, dropForecast[index] ?? 0)).toFixed(2)),
+      projectedAvgDaysInStage: Number(Math.max(0, daysForecast[index] ?? 0).toFixed(2)),
+      projectedFatiguedLeads: Math.max(0, Math.round(fatigueForecast[index] ?? 0)),
+      projectedLeadsEntered: Math.max(0, Math.round(enteredForecast[index] ?? 0)),
     };
   });
+
+  const nextConversion = forecast[0]?.projectedConversionRate ?? last.conversionRate;
+  const nextDrop = forecast[0]?.projectedDropRate ?? last.dropRate;
+  const methodLabel = method === 'moving_average'
+    ? 'moving average'
+    : method === 'exponential_smoothing'
+      ? 'exponential smoothing'
+      : method === 'naive'
+        ? 'naive'
+        : 'linear regression';
 
   return {
     ok: true,
@@ -168,6 +310,8 @@ export function runM07Forecast(input: M07ForecastRequest) {
       latestAvgDaysInStage: last.avgDaysInStage,
       projectedConversionRate: forecast[0]?.projectedConversionRate ?? last.conversionRate,
     },
-    explanation: `Funnel forecast uses ${history.length} month buckets${input.source ? ` for source=${input.source}` : ''}${input.stage ? ` and stage=${input.stage}` : ''}. Conversion is ${conversionSlope >= 0 ? 'strengthening' : 'softening'}, while drop pressure is ${dropSlope > 0 ? 'rising' : 'stable'}.`,
+    explanation: `Funnel forecast uses the ${methodLabel} method on ${history.length} month buckets${input.source ? ` for source=${input.source}` : ''}${input.stage ? ` and stage=${input.stage}` : ''}. Conversion is ${nextConversion >= last.conversionRate ? 'strengthening' : 'softening'}, while drop pressure is ${nextDrop > last.dropRate ? 'rising' : 'stable'}.`,
+    forecastMethod: method,
+    selectionReason: reason,
   };
 }

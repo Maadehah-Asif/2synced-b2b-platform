@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { uploadFile, listUploads, previewUpload, previewMerged, listMergedFiles, getMergedFileDetails, getUploadDetails, deleteUpload, restoreUpload, permanentDeleteUpload, mergeUploads, checkUploadsConsistency, fixUploadRecord, createMappingTemplate, listMappingTemplates, getMappingTemplate, updateMappingTemplate, deleteMappingTemplate, listLeadsCodes, getLeadsCodeDetails, previewLeadsCode, generateLeadsCode, downloadLeadsCode, getForecastOptions, forecastLeadQuality } from "./controllers.js";
+import { uploadFile, listUploads, previewUpload, previewMerged, listMergedFiles, getMergedFileDetails, getUploadDetails, deleteUpload, restoreUpload, permanentDeleteUpload, mergeUploads, checkUploadsConsistency, fixUploadRecord, createMappingTemplate, listMappingTemplates, getMappingTemplate, updateMappingTemplate, deleteMappingTemplate, listLeadsCodes, getLeadsCodeDetails, previewLeadsCode, generateLeadsCode, downloadLeadsCode, getForecastOptions, forecastLeadQuality, getLeadsDashboardData } from "./controllers.js";
 import { attachOptionalUser } from "../core/auth/middleware.js";
 
 const router = Router();
@@ -44,6 +44,7 @@ router.post("/uploads/:id/fix", fixUploadRecord);
 
 // Leads Code
 router.get('/leads', listLeadsCodes);
+router.get('/leads/:id/dashboard', getLeadsDashboardData);
 router.get('/leads/:id/preview', previewLeadsCode);
 router.get('/leads/:id/download', downloadLeadsCode);
 router.get('/leads/:id', getLeadsCodeDetails);

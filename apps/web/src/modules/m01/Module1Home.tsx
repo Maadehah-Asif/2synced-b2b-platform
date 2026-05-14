@@ -63,16 +63,16 @@ export default function Module1Home(){
             <h3 style={{ margin: '14px 0 12px', fontSize: 28, color: '#0B2540' }}>Open lead-quality workflows</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
               <ActionCard
+                title="Dashboard"
+                desc="Open the visual scoring dashboard to compare label mix, confidence spread, and the strongest lead-quality pockets in a selected final CSV."
+                action="Open Dashboard"
+                onClick={() => go(`#/workspace/:workspaceId/m01/dashboard`)}
+              />
+              <ActionCard
                 title="Lead View"
                 desc="Open the lead records area to review created lead sets, inspect details, and manage module 1 lead-ready outputs."
                 action="Open Lead View"
                 onClick={() => go(`#/workspace/:workspaceId/m01/leads`)}
-              />
-              <ActionCard
-                title="Lead Quality Forecast"
-                desc="Project average lead score, high-quality share, and data hygiene pressure before future batches reach downstream modules."
-                action="Open Forecast"
-                onClick={() => go(`#/workspace/:workspaceId/m01/forecast`)}
               />
               <ActionCard
                 title="Report Center"
@@ -99,7 +99,7 @@ export default function Module1Home(){
             <div style={{ display: 'grid', gap: 12 }}>
               <StepCard step="1" title="Start in Data Hub" text="Upload raw lead files and review merged CSVs in the workspace Data Hub first so Module 1 receives cleaner source records." />
               <StepCard step="2" title="Open Lead View for record review" text="Use Lead View when you need to inspect the created Module 1 lead records, confirm field completeness, and catch quality issues before scoring-dependent work." />
-              <StepCard step="3" title="Open Lead Quality Forecast next" text="Use the forecast screen after the lead set looks stable so you can estimate lead-score direction and decide whether the dataset is ready for downstream intent, revenue, or funnel work." />
+              <StepCard step="3" title="Finish in the report center" text="Use the report screen once the lead set looks stable so you can review the current quality picture and share summary findings with the team." />
             </div>
           </div>
         </section>

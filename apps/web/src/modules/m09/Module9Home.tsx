@@ -3,21 +3,31 @@ import ModuleBackButton from '../../components/ModuleBackButton'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'
 
 export default function Module9Home() {
+  const workspaceId = getWorkspaceIdFromHash()
   const cards = [
     {
       title: 'Cross-Channel Performance',
       body: 'Compare campaign results from multiple channels in one place so budget and attention can move based on a shared performance view.',
       action: 'Open Performance',
+      path: '/m09/import',
     },
     {
       title: 'Fatigue & Pacing Checks',
       body: 'Track where spend pace, frequency pressure, or campaign fatigue signals suggest that current delivery is becoming inefficient.',
       action: 'Open Monitoring',
+      path: '/m09/simulator',
     },
     {
       title: 'Optimization Recommendations',
       body: 'Translate campaign signals into concrete next moves such as budget shifts, refresh decisions, or channel-level changes.',
       action: 'Open Recommendations',
+      path: '/m09/simulator-dev',
+    },
+    {
+      title: 'Report Center',
+      body: 'Open the written campaign-optimization report with dataset-readiness, merge-quality, and downloadable supporting exports.',
+      action: 'Open Report',
+      path: '/m08/m09',
     },
   ]
 
@@ -78,7 +88,7 @@ export default function Module9Home() {
             <h3 style={{ margin: '14px 0 12px', fontSize: 28, color: '#0B2540' }}>Open optimization focus areas</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
               {cards.map((card) => (
-                <ActionCard key={card.title} title={card.title} desc={card.body} action={card.action} />
+                <ActionCard key={card.title} title={card.title} desc={card.body} action={card.action} path={card.path} workspaceId={workspaceId} />
               ))}
             </div>
           </div>
@@ -108,11 +118,14 @@ export default function Module9Home() {
   )
 }
 
-function ActionCard({ title, desc, action }: { title: string; desc: string; action: string }) {
+function ActionCard({ title, desc, action, path, workspaceId }: { title: string; desc: string; action: string; path: string; workspaceId: string | null }) {
   return (
     <button
       type="button"
-      onClick={() => { /* no-op for landing cards */ }}
+      onClick={() => {
+        const destination = workspaceId ? `#/workspace/${workspaceId}${path}` : '#/workspaces'
+        window.location.hash = destination
+      }}
       style={{
         cursor: 'pointer',
         borderRadius: 18,

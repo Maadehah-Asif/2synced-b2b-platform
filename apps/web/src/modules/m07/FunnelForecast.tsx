@@ -40,6 +40,8 @@ type FunnelForecastResult = {
   kpis: FunnelForecastKpis
   history: FunnelHistoryRow[]
   forecast: FunnelForecastRow[]
+  forecastMethod?: string
+  selectionReason?: string
   explanation: string
 }
 
@@ -223,6 +225,7 @@ export default function FunnelForecast() {
             <InsightPanel eyebrow="Forecast interpretation" title="What the projection is saying">
               <div style={{ display: 'grid', gap: 12 }}>
                 <InsightNoteCard title="Scenario scope" body={`This projection is using ${source || 'all sources'}, ${stage || 'all stages'}, over a ${horizonMonths}-month horizon.`} />
+                <InsightNoteCard title="Forecast method" body={`The model auto-switches from history length first, then applies overrides in this order: flat recent history, latest-point outlier, overall volatility, and weak linear trend fit. Current method: ${formatMethod(result.forecastMethod || '')}.${result.selectionReason ? ` Current reason: ${result.selectionReason}.` : ''}`} />
                 <InsightNoteCard title="Projected operating implication" body={result.kpis.projectedConversionRate >= result.kpis.latestConversionRate ? 'The forecast suggests conversion may improve from the current baseline, provided the process keeps drop pressure and delay controlled.' : 'The forecast suggests conversion may weaken relative to the current baseline, so leakage and handoff quality should be reviewed early.'} />
                 <InsightNoteCard title="Forecast explanation" body={result.explanation} />
               </div>
@@ -236,4 +239,12 @@ export default function FunnelForecast() {
       </main>
     </Layout>
   )
+}
+
+function formatMethod(method: string) {
+  if (method === 'moving_average') return 'Moving Average'
+  if (method === 'exponential_smoothing') return 'Exponential Smoothing'
+  if (method === 'linear_regression') return 'Linear Trend'
+  if (method === 'naive') return 'Naive'
+  return 'Auto'
 }

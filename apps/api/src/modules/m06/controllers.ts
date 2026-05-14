@@ -3668,6 +3668,7 @@ export async function forecastViaAgent(req: Request, res: Response) {
         trend: 'flat',
         volatility: 0,
         seasonality: 0,
+        forecastMethod: 'naive',
         explanation: 'Forecast agent failed to run. Please try again later or contact support.',
       };
       return res.status(200).json({ ok: false, error: 'agent_failed', result: fallback });

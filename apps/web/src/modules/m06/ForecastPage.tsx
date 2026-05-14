@@ -32,6 +32,8 @@ type AgentResult = {
   trend: string
   volatility: number
   seasonality: number
+  forecastMethod: string
+  selectionReason?: string
   explanation: string
 }
 
@@ -111,6 +113,8 @@ export default function ForecastPage() {
         trend: typeof raw.trend === 'string' ? raw.trend : 'flat',
         volatility: typeof raw.volatility === 'number' ? raw.volatility : 0,
         seasonality: typeof raw.seasonality === 'number' ? raw.seasonality : 0,
+        forecastMethod: typeof raw.forecastMethod === 'string' ? raw.forecastMethod : typeof raw.forecast_method === 'string' ? raw.forecast_method : 'auto',
+        selectionReason: typeof raw.selectionReason === 'string' ? raw.selectionReason : typeof raw.selection_reason === 'string' ? raw.selection_reason : undefined,
         explanation: typeof raw.explanation === 'string' ? raw.explanation : 'Forecast results from the forecasting agent.',
       })
       setForecastPage(1)
@@ -284,6 +288,7 @@ export default function ForecastPage() {
               <InsightPanel eyebrow="Forecast interpretation" title="What this scenario is saying" soft>
                 <div style={{ display: 'grid', gap: 12 }}>
                   <InsightNoteCard title="Current selection" body={`This scenario is modeling ${selectedChannel} over a ${WINDOW_OPTIONS.find((item) => item.key === windowKey)?.label || windowKey} window at ${multiplier.toFixed(1)}x current spend.`} />
+                  <InsightNoteCard title="Forecast method" body={`Auto-selected method: ${formatMethod(result.forecastMethod)}. The switch starts from history length, then overrides in this order when needed: flat recent history, latest-point outlier, overall volatility, and weak linear trend fit.${result.selectionReason ? ` Current reason: ${result.selectionReason}.` : ''}`} />
                   <InsightNoteCard title="Agent explanation" body={result.explanation} />
                   <InsightNoteCard title="Planning guidance" body={result.scenarioROI >= result.baselineROI ? 'The scenario suggests a stronger return profile than baseline, so this channel may justify a controlled budget increase.' : 'The scenario weakens ROI relative to baseline, so this channel should be treated cautiously before increasing spend.'} />
                 </div>
@@ -309,4 +314,12 @@ function formatTrend(trend: string) {
   if (trend === 'upward') return 'Upward'
   if (trend === 'downward') return 'Downward'
   return 'Flat'
+}
+
+function formatMethod(method: string) {
+  if (method === 'moving_average') return 'Moving Average'
+  if (method === 'exponential_smoothing') return 'Exponential Smoothing'
+  if (method === 'linear_regression') return 'Linear Trend'
+  if (method === 'naive') return 'Naive'
+  return method
 }

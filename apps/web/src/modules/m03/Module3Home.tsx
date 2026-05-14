@@ -62,6 +62,13 @@ export default function Module3Home() {
       body: 'View a time-ordered interaction timeline for one organisation to understand thread progression across channels.',
       path: `#/workspace/${workspaceId}/m03/org-timeline`,
     },
+    {
+      tag: 'Report',
+      group: 'insight',
+      title: 'Report Center',
+      body: 'Open the written conversation-intelligence report with coverage summaries, risk highlights, and downloadable supporting exports.',
+      path: `#/workspace/${workspaceId}/m08/m03`,
+    },
   ]
 
   return (
@@ -145,7 +152,7 @@ export default function Module3Home() {
             <div style={{ display: 'grid', gap: 12 }}>
               <StepCard step="1" title="Start with conversation intake" text="Use Conversation Upload for batch ingestion or Manual Conversation Log when one message, call, meeting, or note needs to be captured directly." />
               <StepCard step="2" title="Move into exploration screens" text="Open Company Directory when you want account-by-account access, or open Conversation Explorer when the goal is to search threads by company, channel, health, or recency." />
-              <StepCard step="3" title="Finish with insight and action screens" text="Use Conversation Analytics for overall trends, Deal Health Board for account risk, Follow-Ups for pending actions, and Organisation Timeline when you need one organisation’s full interaction story." />
+              <StepCard step="3" title="Finish with insight, action, and reporting" text="Use Conversation Analytics for overall trends, Deal Health Board for account risk, Follow-Ups for pending actions, Organisation Timeline when you need one organisation's full interaction story, and Report Center when you need a written module summary." />
             </div>
           </div>
         </section>

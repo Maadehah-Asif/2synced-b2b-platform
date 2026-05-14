@@ -55,7 +55,117 @@ def _parse_window(window: str) -> int:
     return mapping.get(w, 3)
 
 
-def run_forecast(campaign_id: Optional[int], forecast_window: str, spend_multiplier: float, channel: Optional[str] = None) -> Dict[str, Any]:
+def _naive_forecast(values: np.ndarray, horizon: int) -> np.ndarray:
+    last = float(values[-1]) if values.size else 0.0
+    return np.full(horizon, last, dtype=float)
+
+
+def _moving_average_forecast(values: np.ndarray, horizon: int, window: int = 3) -> np.ndarray:
+    working = list(float(v) for v in values.tolist())
+    output = []
+    for _ in range(horizon):
+        recent = working[-window:] if len(working) >= window else working
+        avg = float(np.mean(recent)) if recent else 0.0
+        output.append(avg)
+        working.append(avg)
+    return np.asarray(output, dtype=float)
+
+
+def _exp_smoothing_forecast(values: np.ndarray, horizon: int, alpha: float = 0.45) -> np.ndarray:
+    if values.size == 0:
+        return np.zeros(horizon, dtype=float)
+    level = float(values[0])
+    for current in values[1:]:
+        level = alpha * float(current) + (1.0 - alpha) * level
+    return np.full(horizon, level, dtype=float)
+
+
+def _linear_regression_forecast(values: np.ndarray, horizon: int) -> tuple[np.ndarray, float]:
+    t = np.arange(len(values), dtype=float).reshape(-1, 1)
+    model = LinearRegression()
+    model.fit(t, values.astype(float))
+    future_t = np.arange(len(values), len(values) + horizon, dtype=float).reshape(-1, 1)
+    prediction = model.predict(future_t)
+    slope = float(model.coef_[0]) if model.coef_.size > 0 else 0.0
+    return np.asarray(prediction, dtype=float), slope
+
+
+def _safe_cv(values: np.ndarray) -> Optional[float]:
+    if values.size == 0:
+        return None
+    mean = float(np.mean(values))
+    if abs(mean) < 1e-9:
+        return None
+    return float(np.std(values) / abs(mean))
+
+
+def _linear_r2(values: np.ndarray) -> Optional[float]:
+    if values.size < 2:
+        return None
+    t = np.arange(len(values), dtype=float).reshape(-1, 1)
+    model = LinearRegression()
+    model.fit(t, values.astype(float))
+    prediction = model.predict(t)
+    total_var = float(np.sum((values - np.mean(values)) ** 2))
+    if total_var <= 1e-9:
+        return 1.0
+    residual_var = float(np.sum((values - prediction) ** 2))
+    return float(1.0 - (residual_var / total_var))
+
+
+def _compute_forecast(values: np.ndarray, horizon: int, method: str) -> tuple[np.ndarray, float]:
+    normalized = (method or "linear_regression").strip().lower()
+    if normalized == "naive":
+        return _naive_forecast(values, horizon), 0.0
+    if normalized == "moving_average":
+        forecast = _moving_average_forecast(values, horizon)
+        slope = float(forecast[0] - values[-1]) if values.size and forecast.size else 0.0
+        return forecast, slope
+    if normalized == "exponential_smoothing":
+        forecast = _exp_smoothing_forecast(values, horizon)
+        slope = float(forecast[0] - values[-1]) if values.size and forecast.size else 0.0
+        return forecast, slope
+    forecast, slope = _linear_regression_forecast(values, horizon)
+    return forecast, slope
+
+
+def _auto_select_method(values: np.ndarray) -> tuple[str, str]:
+    point_count = int(values.size)
+    if point_count < 5:
+        base_method = "naive"
+    elif point_count < 9:
+        base_method = "moving_average"
+    elif point_count < 16:
+        base_method = "exponential_smoothing"
+    else:
+        base_method = "linear_regression"
+
+    if point_count >= 3:
+        last_three = values[-3:]
+        last_three_cv = _safe_cv(last_three)
+        if last_three_cv is not None and last_three_cv < 0.05:
+            return "naive", "flat recent history"
+
+    if point_count >= 4:
+        prior = values[:-1]
+        prior_std = float(np.std(prior))
+        prior_mean = float(np.mean(prior))
+        if prior_std > 1e-9 and abs(float(values[-1]) - prior_mean) > (2.0 * prior_std):
+            return "moving_average", "latest point behaves like an outlier"
+
+    overall_cv = _safe_cv(values)
+    if overall_cv is not None and overall_cv > 0.4:
+        return "exponential_smoothing", "overall history is volatile"
+
+    if base_method == "linear_regression":
+        r2 = _linear_r2(values)
+        if r2 is not None and r2 < 0.4:
+            return "exponential_smoothing", "trend fit is weak"
+
+    return base_method, "history length threshold"
+
+
+def run_forecast(campaign_id: Optional[int], forecast_window: str, spend_multiplier: float, channel: Optional[str] = None, method: str = "auto") -> Dict[str, Any]:
     """Run ROI forecast for a single campaign or channel.
 
     Returns:
@@ -120,17 +230,6 @@ def run_forecast(campaign_id: Optional[int], forecast_window: str, spend_multipl
     df = df.sort_values("month").reset_index(drop=True)
     df["roi_clean"] = df["roi"].fillna(df["roi"].median())
 
-    # Time index for trend model
-    df["t"] = np.arange(len(df))
-    X = df[["t"]].values.astype(float)
-    y = df["roi_clean"].values.astype(float)
-
-    # Simple linear regression trend
-    model = LinearRegression()
-    model.fit(X, y)
-    trend_pred = model.predict(X)
-    slope = float(model.coef_[0]) if model.coef_.size > 0 else 0.0
-
     # Moving averages
     df["ma3"] = df["roi_clean"].rolling(window=3, min_periods=1).mean()
     df["ma6"] = df["roi_clean"].rolling(window=6, min_periods=1).mean()
@@ -151,15 +250,14 @@ def run_forecast(campaign_id: Optional[int], forecast_window: str, spend_multipl
 
     # Determine forecast horizon
     horizon = _parse_window(forecast_window)
-
     last_month = df["month"].max()
     if pd.isna(last_month):
         last_month = pd.Timestamp.utcnow().normalize()
 
     future_index = pd.date_range(last_month + MonthBegin(1), periods=horizon, freq="MS")
-    future_t = np.arange(len(df), len(df) + horizon).reshape(-1, 1)
-
-    trend_future = model.predict(future_t)
+    roi_values = df["roi_clean"].values.astype(float)
+    selected_method, auto_reason = _auto_select_method(roi_values) if method in ("", "auto") else (method, "manual override")
+    trend_future, slope = _compute_forecast(roi_values, horizon, selected_method)
     adj_future = []
     for i, dt in enumerate(future_index):
         mnum = int(dt.month)
@@ -220,8 +318,10 @@ def run_forecast(campaign_id: Optional[int], forecast_window: str, spend_multipl
         scope = f"channel '{channel}'"
     else:
         scope = f"campaign {campaign_id}"
+    method_label = selected_method.replace("_", " ")
     explanation = (
-        f"Forecast for {scope} over {horizon} month(s). "
+        f"Forecast for {scope} over {horizon} month(s) using {method_label}. "
+        f"Selection reason: {auto_reason}. "
         f"Historical ROI trend slope: {slope:.3f}; volatility: {volatility:.2f}. "
         f"Seasonality strength (0=none, higher=stronger): {seasonality_strength:.2f}. "
         f"Scenario scales baseline ROI by spend multiplier {spend_multiplier:.2f}."
@@ -237,6 +337,8 @@ def run_forecast(campaign_id: Optional[int], forecast_window: str, spend_multipl
         "trend": trend,
         "volatility": float(volatility),
         "seasonality": float(seasonality_strength),
+        "forecast_method": selected_method,
+        "selection_reason": auto_reason,
         "explanation": explanation,
     }
 
@@ -252,6 +354,13 @@ def _main() -> None:
         required=False,
         default=1.0,
         help="Spend multiplier scenario (e.g. 1.2 for +20%)",
+    )
+    parser.add_argument(
+        "--method",
+        type=str,
+        required=False,
+        default="auto",
+        help="Forecast method: naive, moving_average, exponential_smoothing, linear_regression",
     )
 
     args = parser.parse_args()
@@ -270,7 +379,7 @@ def _main() -> None:
         }))
         return
 
-    result = run_forecast(campaign_id, args.window, args.multiplier, channel)
+    result = run_forecast(campaign_id, args.window, args.multiplier, channel, args.method)
     print(json.dumps(result, ensure_ascii=False))
 
 

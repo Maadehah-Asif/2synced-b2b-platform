@@ -17,8 +17,9 @@ import MergeCSV from './modules/m01/MergeCSV'
 import Module6Main from './modules/m06/Module6Main'
 import Module6Home from './modules/m06/Module6Home'
 import Module1Home from './modules/m01/Module1Home'
-import LeadScoreForecast from './modules/m01/LeadScoreForecast'
 import Module2Home from './modules/m02/Module2Home'
+import LeadDashboard from './modules/m01/LeadDashboard'
+import IntentDashboard from './modules/m02/IntentDashboard'
 import Module3Home from './modules/m03/Module3Home'
 import ConversationUpload from './modules/m03/ConversationUpload'
 import ConversationManualLog from './modules/m03/ConversationManualLog'
@@ -58,7 +59,6 @@ import AllocationDashboard from './modules/m06/AllocationDashboard'
 import RoiCalculation from './modules/m06/RoiCalculation'
 import GenerateIntent from './modules/m02/GenerateIntent'
 import Prioritization from './modules/m02/Prioritization'
-import IntentForecast from './modules/m02/IntentForecast'
 import UploadM02 from './modules/m02/Upload'
 import UploadPreviewM02 from './modules/m02/UploadPreview'
 import MergedListM02 from './modules/m02/MergedList'
@@ -95,9 +95,9 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m06/element3')) return <RoiDashboard />
   if (route.startsWith('#/workspace/') && route.includes('/m06/element1')) return <Module6Main />
   if (route.startsWith('#/workspace/') && route.includes('/m06/forecast')) return <ForecastPage />
+  if (route.startsWith('#/workspace/') && route.includes('/m08/')) return <ModuleReportPage />
   // Module 6 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m06') && !route.includes('/m06/')) return <Module6Home />
-  if (route.startsWith('#/workspace/') && route.includes('/m08/')) return <ModuleReportPage />
   if (route.startsWith('#/workspace/') && route.includes('/m06/campaigns/manage')) return <Module6Campaigns />
   if (route.startsWith('#/workspace/') && route.includes('/m06/campaigns')) return <Module6Campaigns />
   if (route.startsWith('#/workspace/') && route.includes('/m06/touch-workspace')) return <Module6TouchWorkspace />
@@ -114,7 +114,7 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m01/upload/preview')) return <UploadPreview />
   if (route.startsWith('#/workspace/') && route.includes('/m01/merged/preview')) return <UploadPreview />
   if (route.startsWith('#/workspace/') && route.includes('/m01/leads/preview')) return <UploadPreview />
-  if (route.startsWith('#/workspace/') && route.includes('/m01/forecast')) return <LeadScoreForecast />
+  if (route.startsWith('#/workspace/') && route.includes('/m01/dashboard')) return <LeadDashboard />
   if (route.startsWith('#/workspace/') && route.includes('/m01/merge-columns')) return <MergeCSV />
   if (route.startsWith('#/workspace/') && route.includes('/m01/merged')) return <MergedList />
   if (route.startsWith('#/workspace/') && route.includes('/m01/leads')) return <LeadsList />
@@ -123,13 +123,13 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m02/upload/preview')) return <UploadPreviewM02 />
   if (route.startsWith('#/workspace/') && route.includes('/m02/merged/preview')) return <UploadPreviewM02 />
   if (route.startsWith('#/workspace/') && route.includes('/m02/leads/preview')) return <UploadPreviewM02 />
+  if (route.startsWith('#/workspace/') && route.includes('/m02/dashboard')) return <IntentDashboard />
   if (route.startsWith('#/workspace/') && route.includes('/m02/merge-columns')) return <MergeCSVM02 />
   if (route.startsWith('#/workspace/') && route.includes('/m02/merged')) return <MergedListM02 />
   if (route.startsWith('#/workspace/') && route.includes('/m02/leads')) return <LeadsListM02 />
   if (route.startsWith('#/workspace/') && route.includes('/m02/upload')) return <UploadM02 />
   if (route.startsWith('#/workspace/') && route.includes('/m02/generate')) return <GenerateIntent />
   if (route.startsWith('#/workspace/') && route.includes('/m02/prioritization')) return <Prioritization />
-  if (route.startsWith('#/workspace/') && route.includes('/m02/intent-forecast')) return <IntentForecast />
   if (route.startsWith('#/workspace/') && route.includes('/m02/upload-wizard')) return <UploadWizardM02 />
   // Module 2 workspace home (no trailing slash)
   if (route.startsWith('#/workspace/') && route.includes('/m02') && !route.includes('/m02/')) return <Module2Home />

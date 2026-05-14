@@ -143,6 +143,15 @@ function Module5Landing({ workspaceId }: { workspaceId: string | null }) {
               action="Open Hub"
               onClick={() => setModule5View('communication')}
             />
+            <ActionCard
+              title="Report Center"
+              desc="Open the written alignment report with cross-team readiness summaries and downloadable supporting exports."
+              action="Open Report"
+              onClick={() => {
+                if (workspaceId) window.location.hash = `#/workspace/${workspaceId}/m08/m05`
+                else window.location.hash = '#/workspaces'
+              }}
+            />
           </div>
         </div>
 
@@ -162,7 +171,7 @@ function Module5Landing({ workspaceId }: { workspaceId: string | null }) {
           <div style={{ display: 'grid', gap: 12 }}>
             <StepCard step="1" title="Start with web engagement intake when needed" text="Open Web Engagement Data Manager first when fresh website activity files still need upload, preview, archive, or replacement before any alignment analysis begins." />
             <StepCard step="2" title="Open Overview and Pipeline next" text="Use Overview Dashboard for the fastest shared picture, then move into Unified Pipeline when you need lead readiness, funnel movement, and ownership context together." />
-            <StepCard step="3" title="Finish with focused alignment screens" text={workspaceId ? 'Open Web Engagement Visualization for website signals, Shortcoming Analyzer for weak-point diagnosis, and Communication Hub when the next step is shared action between sales and marketing.' : 'Open this module from a workspace so the alignment screens can work together as one shared operating layer.'} />
+            <StepCard step="3" title="Finish with focused alignment screens" text={workspaceId ? 'Open Web Engagement Visualization for website signals, Shortcoming Analyzer for weak-point diagnosis, Communication Hub for shared action between sales and marketing, and Report Center when you need a written alignment summary.' : 'Open this module from a workspace so the alignment screens can work together as one shared operating layer.'} />
           </div>
         </div>
       </section>

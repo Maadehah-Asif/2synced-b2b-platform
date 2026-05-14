@@ -6,7 +6,7 @@ import { downloadModuleReportExport, fetchModuleReport, type ModuleReportPayload
 
 function getModuleKeyFromHash() {
   const hash = window.location.hash || '';
-  const match = hash.match(/\/m08\/(m01|m02|m05|m06|m07)(?:\/|$)/i);
+  const match = hash.match(/\/m08\/(m01|m02|m03|m05|m06|m07|m09)(?:\/|$)/i);
   return match ? match[1].toLowerCase() : null;
 }
 
@@ -21,10 +21,16 @@ function getModuleBadge(moduleKey: string | null) {
       return 'Lead Quality & Scoring';
     case 'm02':
       return 'Intent Signals';
+    case 'm03':
+      return 'Conversation Intelligence';
+    case 'm05':
+      return 'Sales & Marketing Alignment';
     case 'm06':
       return 'Revenue Insight';
     case 'm07':
       return 'Funnel Insight';
+    case 'm09':
+      return 'Campaign Optimization';
     default:
       return 'Report';
   }
@@ -59,6 +65,15 @@ function getReportTemplate(moduleKey: string | null) {
         recommendationsHeading: '4. Alignment Actions',
         appendixPrefix: 'Appendix',
       };
+    case 'm03':
+      return {
+        coverLabel: 'Conversation Intelligence Report',
+        summaryHeading: '1. Conversation Summary',
+        snapshotHeading: '2. Conversation Performance Snapshot',
+        findingsHeading: '3. Conversation Findings',
+        recommendationsHeading: '4. Recommended Conversation Actions',
+        appendixPrefix: 'Appendix',
+      };
     case 'm06':
       return {
         coverLabel: 'Revenue Attribution Report',
@@ -75,6 +90,15 @@ function getReportTemplate(moduleKey: string | null) {
         snapshotHeading: '2. Funnel Performance Snapshot',
         findingsHeading: '3. Funnel Findings',
         recommendationsHeading: '4. Recommended Funnel Actions',
+        appendixPrefix: 'Appendix',
+      };
+    case 'm09':
+      return {
+        coverLabel: 'Campaign Optimization Report',
+        summaryHeading: '1. Optimization Summary',
+        snapshotHeading: '2. Campaign Data Snapshot',
+        findingsHeading: '3. Optimization Findings',
+        recommendationsHeading: '4. Recommended Optimization Actions',
         appendixPrefix: 'Appendix',
       };
     default:
@@ -100,15 +124,25 @@ function getReportTheme() {
   };
 }
 
+function getStatusColors(tone?: 'healthy' | 'warning' | 'critical' | 'neutral') {
+  if (tone === 'healthy') return { bg: 'rgba(16, 185, 129, 0.16)', border: 'rgba(16, 185, 129, 0.24)', text: '#ecfdf5', solidText: '#047857' };
+  if (tone === 'warning') return { bg: 'rgba(245, 158, 11, 0.18)', border: 'rgba(245, 158, 11, 0.28)', text: '#fffbeb', solidText: '#b45309' };
+  if (tone === 'critical') return { bg: 'rgba(239, 68, 68, 0.18)', border: 'rgba(239, 68, 68, 0.28)', text: '#fef2f2', solidText: '#b42318' };
+  return { bg: 'rgba(255,255,255,0.14)', border: 'rgba(255,255,255,0.18)', text: '#fff', solidText: '#475467' };
+}
+
 export default function ModuleReportPage() {
   const [report, setReport] = useState<ModuleReportPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [printReady, setPrintReady] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const workspaceId = getWorkspaceIdFromHash();
   const moduleKey = getModuleKeyFromHash();
   const template = getReportTemplate(moduleKey);
   const theme = getReportTheme();
+  const reportStatusColors = getStatusColors(report?.reportStatusTone);
+  const thresholdGuide = getThresholdGuide(moduleKey);
 
   useEffect(() => {
     let active = true;
@@ -353,6 +387,20 @@ export default function ModuleReportPage() {
                 </div>
               </div>
               <div className="report-actions" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {thresholdGuide ? (
+                  <button
+                    type="button"
+                    className="btn-outline btn-sm"
+                    onClick={() => setShowGuide((current) => !current)}
+                    style={{
+                      background: 'rgba(255,255,255,0.14)',
+                      color: '#fff',
+                      borderColor: 'rgba(255,255,255,0.2)',
+                    }}
+                  >
+                    {showGuide ? 'Hide Thresholds' : 'Thresholds & Signals'}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="btn-outline btn-sm"
@@ -376,6 +424,11 @@ export default function ModuleReportPage() {
                 <div style={{ color: 'rgba(255,255,255,0.76)', fontSize: 12 }}>
                   Generated {new Date(report.generatedAt).toLocaleString()}
                 </div>
+                {report.reportStatusSummary ? (
+                  <div style={{ color: 'rgba(255,255,255,0.92)', fontSize: 14, maxWidth: 820, lineHeight: 1.75, fontWeight: 700 }}>
+                    {report.reportStatusSummary}
+                  </div>
+                ) : null}
                 <div style={{ color: 'rgba(255,255,255,0.80)', fontSize: 14, maxWidth: 820, lineHeight: 1.75 }}>
                   This document is designed to be exported as a written PDF report. Use the PDF action above for the narrative report, and use the CSV downloads below only when you need raw supporting data tables.
                 </div>
@@ -383,6 +436,59 @@ export default function ModuleReportPage() {
             ) : null}
           </div>
         </section>
+
+        {thresholdGuide ? (
+          <section
+            style={{
+              marginTop: 14,
+              borderRadius: 18,
+              border: '1px solid rgba(15,66,88,0.08)',
+              background: 'linear-gradient(180deg, rgba(255,255,255,1), rgba(245,249,253,0.98))',
+              boxShadow: '0 12px 30px rgba(13,30,60,0.05)',
+              padding: showGuide ? 18 : '12px 16px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#6B7A90' }}>
+                  Threshold Guide
+                </div>
+                <div style={{ marginTop: 4, fontSize: 16, fontWeight: 900, color: '#0B2540' }}>
+                  {thresholdGuide.title}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGuide((current) => !current)}
+                style={{
+                  borderRadius: 999,
+                  padding: '8px 12px',
+                  border: '1px solid rgba(15,66,88,0.12)',
+                  background: '#fff',
+                  color: '#0B2540',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                {showGuide ? 'Hide Details' : 'Show Details'}
+              </button>
+            </div>
+            {showGuide ? (
+              <div style={{ marginTop: 14, display: 'grid', gap: 14 }}>
+                <div style={{ fontSize: 14, lineHeight: 1.75, color: '#415274' }}>{thresholdGuide.summary}</div>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {thresholdGuide.items.map((item) => (
+                    <div key={item.label} style={{ borderRadius: 14, border: '1px solid rgba(15,66,88,0.08)', background: '#fff', padding: 14 }}>
+                      <div style={{ fontSize: 14, fontWeight: 900, color: '#0B2540' }}>{item.label}</div>
+                      <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.7, color: '#415274' }}>{item.body}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         {loading ? <div style={{ marginTop: 18 }}>Loading report...</div> : null}
         {!loading && message ? <div style={{ marginTop: 18, color: '#b42318' }}>{message}</div> : null}
@@ -393,6 +499,11 @@ export default function ModuleReportPage() {
               {report.metricCards.map((metric) => (
                 <div key={metric.label} className="report-card" style={{ borderRadius: 20, padding: 20, border: '1px solid rgba(15,66,88,0.08)', background: 'linear-gradient(180deg, rgba(255,255,255,1), rgba(246,249,252,0.98))', boxShadow: '0 16px 38px rgba(13,30,60,0.05)' }}>
                   <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#6B7A90' }}>{metric.label}</div>
+                  {metric.statusLabel ? (
+                    <div style={{ marginTop: 10, display: 'inline-flex', padding: '6px 10px', borderRadius: 999, background: getStatusColors(metric.statusTone).bg, border: `1px solid ${getStatusColors(metric.statusTone).border}`, color: getStatusColors(metric.statusTone).solidText, fontSize: 11, fontWeight: 900, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                      {metric.statusLabel}
+                    </div>
+                  ) : null}
                   <div style={{ marginTop: 10, fontSize: 30, fontWeight: 900, color: '#0B2540' }}>{metric.value}</div>
                   <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.6, color: '#415274' }}>{metric.helper}</div>
                 </div>
@@ -451,8 +562,8 @@ export default function ModuleReportPage() {
               </div>
 
               <div className="report-card report-downloads" style={{ borderRadius: 22, padding: 22, background: '#fff', border: '1px solid rgba(15,66,88,0.08)', boxShadow: '0 16px 38px rgba(13,30,60,0.05)' }}>
-                <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: theme.accentBg, color: theme.accentText, fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                  Downloads
+                <div style={{ display: 'inline-flex', padding: '6px 11px', borderRadius: 999, background: 'rgba(15,66,88,0.12)', color: theme.accentText, fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                  Export Center
                 </div>
                 <div style={{ marginTop: 14, fontSize: 25, fontWeight: 900, color: '#0B2540', lineHeight: 1.2 }}>
                   Supporting Data Exports
@@ -460,16 +571,36 @@ export default function ModuleReportPage() {
                 <div style={{ marginTop: 8, fontSize: 14, color: '#415274', lineHeight: 1.7 }}>
                   Use the PDF action for the written report. Use the CSV downloads below only when you need the underlying structured data for audit, analysis, or spreadsheet work.
                 </div>
+                <div style={{ marginTop: 14, padding: 14, borderRadius: 18, background: 'linear-gradient(135deg, rgba(15,66,88,0.08) 0%, rgba(72,177,217,0.10) 100%)', border: '1px solid rgba(15,66,88,0.08)' }}>
+                  <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#0B2540' }}>
+                    Click Any Export To Download CSV
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 13, color: '#415274', lineHeight: 1.65 }}>
+                    These are direct action buttons for the raw supporting datasets used behind this report.
+                  </div>
+                </div>
                 <div style={{ marginTop: 14, display: 'grid', gap: 12 }}>
                   {report.exports.map((item) => (
                     <button
                       key={item.key}
                       type="button"
                       onClick={() => handleExport(item.key, item.filename)}
-                      style={{ borderRadius: 16, padding: 16, border: '1px solid rgba(15,66,88,0.08)', background: '#fff', textAlign: 'left', cursor: 'pointer' }}
+                      style={{
+                        borderRadius: 18,
+                        padding: 18,
+                        border: '1px solid rgba(15,66,88,0.12)',
+                        background: 'linear-gradient(145deg, #0f4258 0%, #195b74 50%, #1e6b88 100%)',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        color: '#fff',
+                        boxShadow: '0 12px 24px rgba(13,30,60,0.10)',
+                      }}
                     >
-                      <div style={{ fontSize: 16, fontWeight: 800, color: '#0B2540' }}>{item.label}</div>
-                      <div style={{ marginTop: 6, fontSize: 13, color: '#415274', lineHeight: 1.65 }}>{item.description}</div>
+                      <div style={{ display: 'inline-flex', padding: '5px 9px', borderRadius: 999, background: 'rgba(255,255,255,0.14)', fontSize: 11, fontWeight: 900, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                        Download CSV
+                      </div>
+                      <div style={{ marginTop: 10, fontSize: 17, fontWeight: 900, color: '#fff' }}>{item.label}</div>
+                      <div style={{ marginTop: 6, fontSize: 13, color: 'rgba(255,255,255,0.88)', lineHeight: 1.65 }}>{item.description}</div>
                     </button>
                   ))}
                 </div>
@@ -483,7 +614,8 @@ export default function ModuleReportPage() {
                   Supporting Detail
                 </div>
                   <div style={{ marginTop: 14, fontSize: 24, fontWeight: 900, color: '#0B2540' }}>{section.title}</div>
-                  <div style={{ marginTop: 8, fontSize: 14, color: '#415274', lineHeight: 1.65 }}>{section.description}</div>
+                  <div style={{ marginTop: 8, fontSize: 12, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#6B7A90' }}>What To Look For</div>
+                  <div style={{ marginTop: 6, fontSize: 14, color: '#415274', lineHeight: 1.65 }}>{section.description}</div>
                   <table className="report-table" style={{ width: '100%', borderCollapse: 'collapse', marginTop: 18 }}>
                     <thead>
                       <tr>
@@ -667,3 +799,50 @@ const printTd: React.CSSProperties = {
   lineHeight: 1.6,
   color: '#1f2937',
 };
+
+function getThresholdGuide(moduleKey: string | null) {
+  switch (moduleKey) {
+    case 'm01':
+      return {
+        title: 'Lead-quality signal rules',
+        summary: 'This guide explains the practical signals behind the lead-quality view so users know how records are being interpreted before they read the report details.',
+        items: [
+          { label: 'Predicted label', body: 'Rows are grouped into low, medium, or high quality based on the model output written into the final scored CSV.' },
+          { label: 'Confidence', body: 'Confidence is read from the prediction output and grouped into bands so the team can quickly see whether the file is mostly clear-cut or still mixed.' },
+          { label: 'Grouping pockets', body: 'When source, segment, owner, industry, or company columns exist, the dashboard highlights where the strongest quality concentration is sitting.' },
+        ],
+      };
+    case 'm02':
+      return {
+        title: 'Intent-priority signal rules',
+        summary: 'This guide explains how the intent layer separates urgent leads from broader nurture pools when the report and dashboard summarize a final intent run.',
+        items: [
+          { label: 'High-intent threshold', body: 'Intent scores in the upper band are treated as the strongest action pool, while lower bands feed mid-term nurture and cold follow-up.' },
+          { label: 'Hot quadrant', body: 'A lead is treated as hot when both lead fit and intent are strong, which helps the team separate immediate opportunities from weaker-fit traffic.' },
+          { label: 'Horizon labels', body: 'Short-, medium-, and long-term intent labels are read from the generated CSV so the report can explain near-term urgency versus later nurture value.' },
+        ],
+      };
+    case 'm06':
+      return {
+        title: 'Revenue and forecast thresholds',
+        summary: 'This guide explains the main signal thresholds used around attribution coverage, ROI interpretation, and the low-data forecasting logic so users can read the report with the right context.',
+        items: [
+          { label: 'Attribution coverage', body: 'Higher coverage means a larger share of visible revenue is linked back to campaign-touch evidence. Lower coverage means ROI and spend decisions should be read more cautiously.' },
+          { label: 'Low-data forecast switching', body: 'When very little monthly history exists, the forecast flow switches to simpler methods first: under 5 points uses Naive, 5 to 8 uses Moving Average, 9 to 15 uses Exponential Smoothing, and 16 or more can use Linear Regression.' },
+          { label: 'Signal overrides', body: 'The forecast logic can still override that base choice: very flat recent values fall back to Naive, an obvious last-point spike prefers Moving Average, noisy data prefers Exponential Smoothing, and weak trend fit avoids Linear Regression.' },
+        ],
+      };
+    case 'm07':
+      return {
+        title: 'Funnel-forecast signal rules',
+        summary: 'This guide explains how funnel forecasting decides whether stage movement should be read as stable, noisy, flat, or trend-led before the report is interpreted.',
+        items: [
+          { label: 'Base switch by history size', body: 'Under 5 monthly points uses Naive, 5 to 8 uses Moving Average, 9 to 15 uses Exponential Smoothing, and 16 or more can use Linear Regression.' },
+          { label: 'Override order', body: 'If multiple signals appear, flatness wins first, then outlier checks, then volatility, and finally weak trend fit. This keeps one noisy spike from misleading the forecast.' },
+          { label: 'Why this is used', body: 'Most SME funnel histories start small, so stable classical methods are safer than heavier models while real monthly history is still building up.' },
+        ],
+      };
+    default:
+      return null;
+  }
+}

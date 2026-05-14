@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Layout from '../../components/Layout';
+import ModuleBackButton from '../../components/ModuleBackButton';
 import { getWorkspaceIdFromHash } from '../../utils/workspace';
 import '../../styles/dataPreview.css';
 
@@ -102,37 +103,19 @@ export default function UploadPreviewM02(){
     }
   }
 
-  function goBack(){
-    try {
-      const prev = sessionStorage.getItem('m02_preview_return');
-      sessionStorage.removeItem('m02_preview_return');
-      if (prev) {
-        window.location.hash = prev;
-        return;
-      }
-    } catch (_) {}
-    if (kind === 'merged') {
-      window.location.hash = workspace ? `#/workspace/${workspace}/m02/merged` : '#/m02/merged';
-    } else if (kind === 'leads') {
-      window.location.hash = workspace ? `#/workspace/${workspace}/m02/leads` : '#/m02/leads';
-    } else {
-      window.location.hash = workspace ? `#/workspace/${workspace}/m02/upload` : '#/m02/upload';
-    }
-  }
-
   const previewTitle = kind === 'merged' ? 'Merged Dataset' : (kind === 'leads' ? 'Intent Lead Records' : 'Uploaded File');
   const previewType = kind === 'merged' ? 'Merged' : (kind === 'leads' ? 'Leads' : 'Upload');
 
   return (
     <Layout>
       <div className="p-20 data-preview-page">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <ModuleBackButton toSuffix={kind === 'merged' ? '/m02/merged' : kind === 'leads' ? '/m02/leads' : '/m02/upload'} />
+        </div>
         <div className="data-preview-hero">
           <div className="data-preview-hero-copy">
             <div className="data-preview-kicker">
               {kind === 'merged' ? 'Merged Preview' : (kind === 'leads' ? 'Intent Leads Preview' : 'Upload Preview')}
-            </div>
-            <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button type="button" className="btn-outline" onClick={goBack}>Back</button>
             </div>
             <h2 className="data-preview-title">Preview {previewTitle}</h2>
             <p className="data-preview-subtitle">
@@ -181,7 +164,7 @@ export default function UploadPreviewM02(){
               </button>
             </div>
             <button type="button" className="btn-ghost" onClick={() => fetchPage(page, perPage)}>Retry</button>
-            <button type="button" className="btn-primary" onClick={() => setIsFullscreen(true)}>Zoom</button>
+            <button type="button" className="btn-ghost" onClick={() => setIsFullscreen(true)}>Zoom</button>
           </div>
         </div>
 

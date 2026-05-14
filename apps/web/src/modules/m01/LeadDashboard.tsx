@@ -54,7 +54,7 @@ export default function LeadDashboard() {
       setLoadingList(true)
       setError(null)
       try {
-        const params = new URLSearchParams({ workspace: workspaceId })
+        const params = new URLSearchParams({ workspace: workspaceId, outputKind: 'm01' })
         const res = await fetchFromApi(`${API_BASE}/m01/leads?${params.toString()}`, undefined, API_BASE)
         const json = await parseApiJson<{ items: LeadsFile[] }>(res, 'Could not load lead outputs')
         const nextFiles = json.items || []

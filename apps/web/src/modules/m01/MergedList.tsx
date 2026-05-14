@@ -58,12 +58,12 @@ export default function MergedList(){
   return (
     <Layout>
       <div className="p-20 data-merged-page">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <ModuleBackButton toSuffix="/m01" />
+        </div>
         <div className="data-merged-hero">
           <div className="data-merged-hero-copy">
             <div className="data-merged-kicker">Merged Data</div>
-            <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <ModuleBackButton toSuffix="" />
-            </div>
             <h2 className="data-merged-title">Lead Quality Merged CSVs</h2>
             <p className="data-merged-subtitle">
               Review merged datasets created from uploaded lead files, inspect merge details, and open

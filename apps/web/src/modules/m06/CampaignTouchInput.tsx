@@ -459,7 +459,7 @@ export default function CampaignTouchInput(){
       <main className="page-root m06-page">
         <div className="m06-leads-shell">
           <div className="m06-leads-toprow">
-            <ModuleBackButton toSuffix="" />
+            <ModuleBackButton toSuffix="/m06" />
           </div>
 
           <section className="m06-hero">

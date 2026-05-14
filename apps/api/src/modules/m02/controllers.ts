@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { parse } from 'csv-parse';
 import MergedFile from '../m01/models/MergedFile.js';
+import LeadsCodeFile from '../m01/models/LeadsCodeFile.js';
 import IntentRun from './models/IntentRun.js';
 import fs from 'fs';
 import { Readable } from 'stream';
@@ -276,40 +277,175 @@ function bucketIntentScore(value: number) {
   return '85-100';
 }
 
+function bucketDashboardConfidence(value: number) {
+  if (value < 50) return '<50';
+  if (value < 65) return '50-64';
+  if (value < 80) return '65-79';
+  if (value < 90) return '80-89';
+  return '90+';
+}
+
+function titleCaseDashboardLabel(value: string) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return 'Unknown';
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function toDashboardPercent(value: unknown) {
+  const parsed = toDashboardNumber(value);
+  if (parsed === null) return null;
+  if (parsed <= 1) return parsed * 100;
+  return parsed;
+}
+
+async function getCsvHeaderFromBucket(bucket: mongoose.mongo.GridFSBucket, fileId: mongoose.Types.ObjectId | mongoose.mongo.ObjectId) {
+  return new Promise<string[]>((resolve, reject) => {
+    const downloadStream = bucket.openDownloadStream(fileId as any);
+    const parser = parse({ bom: true });
+    let resolved = false;
+
+    const finish = (header: string[]) => {
+      if (resolved) return;
+      resolved = true;
+      try { downloadStream.destroy(); } catch (_) {}
+      try { parser.destroy(); } catch (_) {}
+      resolve(header);
+    };
+
+    parser.on('readable', () => {
+      let rec: string[] | null;
+      while ((rec = parser.read()) !== null) {
+        finish(rec.map((cell) => String(cell || '').trim()));
+        return;
+      }
+    });
+    parser.on('end', () => finish([]));
+    parser.on('error', (err) => {
+      if (resolved) return;
+      resolved = true;
+      reject(err);
+    });
+    downloadStream.on('error', (err) => {
+      if (resolved) return;
+      resolved = true;
+      reject(err);
+    });
+
+    downloadStream.pipe(parser);
+  });
+}
+
+async function isIntentDashboardFile(bucket: mongoose.mongo.GridFSBucket, fileId: mongoose.Types.ObjectId | mongoose.mongo.ObjectId) {
+  const header = await getCsvHeaderFromBucket(bucket, fileId);
+  return findDashboardColumn(header, ['intent_score', 'intentsegment', 'intent_segment']) >= 0;
+}
+
+// GET /m02/dashboard-files?workspace=
+export async function listIntentDashboardFiles(req: Request, res: Response) {
+  try {
+    const workspace = (req.query.workspace as string) || null;
+    if (!workspace || !mongoose.isValidObjectId(workspace)) return res.status(400).json({ error: 'workspace is required' });
+
+    const db = mongoose.connection.db;
+    if (!db) return res.status(500).json({ error: 'db not ready' });
+    const bucket = new mongoose.mongo.GridFSBucket(db as any, { bucketName: 'm01_leads' });
+    const docs = await LeadsCodeFile.find({ workspace }).sort({ createdAt: -1 }).limit(200).lean();
+    const items: Array<{ _id: string; name?: string; filename?: string; createdAt?: Date }> = [];
+
+    for (const doc of docs) {
+      try {
+        if (await isIntentDashboardFile(bucket, doc.fileId as any)) {
+          items.push({
+            _id: String(doc._id),
+            name: doc.name || undefined,
+            filename: doc.filename || undefined,
+            createdAt: doc.createdAt,
+          });
+        }
+      } catch (err) {
+        console.warn('[m02.listIntentDashboardFiles] skipped file', String(doc._id), err);
+      }
+    }
+
+    return res.json({ ok: true, items });
+  } catch (e) {
+    console.error('[m02.listIntentDashboardFiles]', e);
+    return res.status(500).json({ error: 'internal' });
+  }
+}
+
 export async function getIntentDashboardData(req: Request, res: Response) {
   try {
     const id = String(req.params.id || '');
+    const workspace = (req.query.workspace as string) || null;
     if (!mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'invalid id' });
-    const run = await IntentRun.findById(id).lean();
-    if (!run || !run.fileId) return res.status(404).json({ error: 'not found or not ready' });
+    const doc = await LeadsCodeFile.findById(id).lean();
+    if (!doc) return res.status(404).json({ error: 'not found' });
+    if (workspace && String(doc.workspace) !== String(workspace)) return res.status(403).json({ error: 'forbidden' });
 
-    const db = mongoose.connection.db as any;
-    const bucket = new mongoose.mongo.GridFSBucket(db, { bucketName: 'm02_intent' });
-    const downloadStream = bucket.openDownloadStream(run.fileId);
+    const db = mongoose.connection.db;
+    if (!db) return res.status(500).json({ error: 'db not ready' });
+    const bucket = new mongoose.mongo.GridFSBucket(db as any, { bucketName: 'm01_leads' });
+    const downloadStream = bucket.openDownloadStream(doc.fileId);
     const parser = parse({ bom: true });
 
     let header: string[] = [];
     let total = 0;
-    let sumLead = 0;
     let sumIntent = 0;
-    let hotQuadrant = 0;
-    let urgentPool = 0;
-    let avgShortHigh = 0;
-    let avgMediumHigh = 0;
-    let avgLongHigh = 0;
+    let sumConfidence = 0;
+    let sumHighProbability = 0;
+    let sumMediumProbability = 0;
+    let sumLowProbability = 0;
     let groupingName = 'Source';
     let groupingColumn = '';
-    const categoryCounts: Record<string, number> = { High: 0, Medium: 0, Low: 0 };
+    const categoryCounts: Record<string, number> = { Hot: 0, Warm: 0, Cold: 0, Blazing: 0, Unknown: 0 };
     const scoreBands: Record<string, number> = { '0-24': 0, '25-49': 0, '50-69': 0, '70-84': 0, '85-100': 0 };
+    const confidenceBands: Record<string, number> = { '<50': 0, '50-64': 0, '65-79': 0, '80-89': 0, '90+': 0 };
     const groupingCounts: Record<string, number> = {};
     const groupingHighCounts: Record<string, number> = {};
-    const topLeads: Array<{ leadId: string; company: string; segment: string; intentScore: number; leadScore: number; category: string }> = [];
+    const topLeads: Array<{ leadId: string; name: string; company: string; segment: string; intentSegment: string; intentScore: number; confidence: number }> = [];
+
+    let leadIdIndex = -1;
+    let nameIndex = -1;
+    let companyIndex = -1;
+    let segmentIndex = -1;
+    let intentScoreIndex = -1;
+    let intentSegmentIndex = -1;
+    let confidenceIndex = -1;
+    let pLowIndex = -1;
+    let pMediumIndex = -1;
+    let pHighIndex = -1;
 
     parser.on('readable', () => {
       let rec: string[] | null;
       while ((rec = parser.read()) !== null) {
         if (!header.length) {
           header = rec.map((cell) => String(cell || '').trim());
+          leadIdIndex = findDashboardColumn(header, ['lead_id', 'leadid', 'id']);
+          nameIndex = findDashboardColumn(header, ['full_name', 'fullname', 'name']);
+          companyIndex = findDashboardColumn(header, ['company', 'company_name']);
+          segmentIndex = findDashboardColumn(header, ['segment']);
+          intentScoreIndex = findDashboardColumn(header, ['intent_score', 'intentscore']);
+          intentSegmentIndex = findDashboardColumn(header, ['intent_segment', 'intentsegment']);
+          confidenceIndex = findDashboardColumn(header, ['confidence']);
+          pLowIndex = findDashboardColumn(header, ['p_low', 'plow', 'prob_low']);
+          pMediumIndex = findDashboardColumn(header, ['p_medium', 'pmedium', 'prob_medium']);
+          pHighIndex = findDashboardColumn(header, ['p_high', 'phigh', 'prob_high']);
+
+          const groupingCandidates = [
+            { name: 'Source', columns: ['source'] },
+            { name: 'Segment', columns: ['segment'] },
+            { name: 'Industry', columns: ['industry'] },
+            { name: 'Company', columns: ['company', 'company_name'] },
+          ];
+          for (const candidate of groupingCandidates) {
+            const idx = findDashboardColumn(header, candidate.columns);
+            if (idx >= 0) {
+              groupingColumn = header[idx] || '';
+              groupingName = candidate.name;
+              break;
+            }
+          }
           continue;
         }
 
@@ -319,110 +455,88 @@ export async function getIntentDashboardData(req: Request, res: Response) {
           return acc;
         }, {});
 
-        const leadScoreIndex = findDashboardColumn(header, ['LeadScore', 'lead_score', 'leadscore']);
-        const intentScoreIndex = findDashboardColumn(header, ['IntentScore', 'intent_score', 'intentscore']);
-        const categoryIndex = findDashboardColumn(header, ['IntentCategory', 'intent_category']);
-        const shortIndex = findDashboardColumn(header, ['ShortTermIntent', 'short_term_intent']);
-        const mediumIndex = findDashboardColumn(header, ['MediumTermIntent', 'medium_term_intent']);
-        const longIndex = findDashboardColumn(header, ['LongTermIntent', 'long_term_intent']);
-
-        const groupingCandidates = [
-          { name: 'Source', columns: ['source'] },
-          { name: 'Segment', columns: ['segment'] },
-          { name: 'Industry', columns: ['industry'] },
-          { name: 'Company', columns: ['company'] },
-        ];
-        if (!groupingColumn) {
-          for (const candidate of groupingCandidates) {
-            const idx = findDashboardColumn(header, candidate.columns);
-            if (idx >= 0) {
-              groupingColumn = header[idx] || '';
-              groupingName = candidate.name;
-              break;
-            }
-          }
-        }
-
-        const leadId = row[header[findDashboardColumn(header, ['lead_id', 'leadid', 'id'])] || ''] || '';
-        const company = row[header[findDashboardColumn(header, ['company'])] || ''] || '';
-        const segment = row[header[findDashboardColumn(header, ['segment'])] || ''] || '';
-        const leadScore = toDashboardNumber(leadScoreIndex >= 0 ? row[header[leadScoreIndex] || ''] : '') ?? 0;
+        const leadId = row[header[leadIdIndex] || ''] || '';
+        const name = row[header[nameIndex] || ''] || '';
+        const company = row[header[companyIndex] || ''] || '';
+        const segment = row[header[segmentIndex] || ''] || '';
         const intentScore = toDashboardNumber(intentScoreIndex >= 0 ? row[header[intentScoreIndex] || ''] : '') ?? 0;
-        const categoryRaw = String(categoryIndex >= 0 ? row[header[categoryIndex] || ''] : '').trim();
-        const category = categoryRaw || (intentScore >= 70 ? 'High' : (intentScore >= 35 ? 'Medium' : 'Low'));
-        const shortTerm = String(shortIndex >= 0 ? row[header[shortIndex] || ''] : '').trim();
-        const mediumTerm = String(mediumIndex >= 0 ? row[header[mediumIndex] || ''] : '').trim();
-        const longTerm = String(longIndex >= 0 ? row[header[longIndex] || ''] : '').trim();
+        const intentSegment = titleCaseDashboardLabel(intentSegmentIndex >= 0 ? row[header[intentSegmentIndex] || ''] : '');
+        const pLow = toDashboardPercent(pLowIndex >= 0 ? row[header[pLowIndex] || ''] : '');
+        const pMedium = toDashboardPercent(pMediumIndex >= 0 ? row[header[pMediumIndex] || ''] : '');
+        const pHigh = toDashboardPercent(pHighIndex >= 0 ? row[header[pHighIndex] || ''] : '');
+        const confidenceCandidates = [toDashboardPercent(confidenceIndex >= 0 ? row[header[confidenceIndex] || ''] : ''), pLow, pMedium, pHigh].filter((value): value is number => value !== null);
+        const confidence = confidenceCandidates.length ? Math.max(...confidenceCandidates) : 0;
 
-        categoryCounts[category] = (categoryCounts[category] || 0) + 1;
-        const scoreBand = bucketIntentScore(intentScore);
-        scoreBands[scoreBand] = (scoreBands[scoreBand] || 0) + 1;
-        sumLead += leadScore;
+        categoryCounts[intentSegment] = (categoryCounts[intentSegment] || 0) + 1;
+        scoreBands[bucketIntentScore(intentScore)] = (scoreBands[bucketIntentScore(intentScore)] || 0) + 1;
+        confidenceBands[bucketDashboardConfidence(confidence)] = (confidenceBands[bucketDashboardConfidence(confidence)] || 0) + 1;
         sumIntent += intentScore;
-
-        if (leadScore >= 70 && intentScore >= 70) hotQuadrant += 1;
-        if (intentScore >= 85 || category === 'High') urgentPool += 1;
-        if (shortTerm.toLowerCase() === 'high') avgShortHigh += 1;
-        if (mediumTerm.toLowerCase() === 'high') avgMediumHigh += 1;
-        if (longTerm.toLowerCase() === 'high') avgLongHigh += 1;
+        sumConfidence += confidence;
+        sumLowProbability += pLow ?? 0;
+        sumMediumProbability += pMedium ?? 0;
+        sumHighProbability += pHigh ?? 0;
 
         const groupValue = groupingColumn ? String(row[groupingColumn] || '').trim() || 'Unknown' : 'All leads';
         groupingCounts[groupValue] = (groupingCounts[groupValue] || 0) + 1;
-        if (category === 'High') groupingHighCounts[groupValue] = (groupingHighCounts[groupValue] || 0) + 1;
+        if (intentScore >= 70 || intentSegment === 'Hot' || intentSegment === 'Blazing') {
+          groupingHighCounts[groupValue] = (groupingHighCounts[groupValue] || 0) + 1;
+        }
 
-        const lead = { leadId, company, segment, intentScore, leadScore, category };
+        const lead = { leadId, name, company, segment, intentSegment, intentScore, confidence };
         if (topLeads.length < 8) {
           topLeads.push(lead);
-          topLeads.sort((a, b) => b.intentScore - a.intentScore);
-        } else if (intentScore > topLeads[topLeads.length - 1]!.intentScore) {
+          topLeads.sort((a, b) => b.intentScore - a.intentScore || b.confidence - a.confidence);
+        } else if (intentScore > topLeads[topLeads.length - 1]!.intentScore || (intentScore === topLeads[topLeads.length - 1]!.intentScore && confidence > topLeads[topLeads.length - 1]!.confidence)) {
           topLeads.pop();
           topLeads.push(lead);
-          topLeads.sort((a, b) => b.intentScore - a.intentScore);
+          topLeads.sort((a, b) => b.intentScore - a.intentScore || b.confidence - a.confidence);
         }
       }
     });
 
     parser.on('end', () => {
-      const averageLead = total ? sumLead / total : 0;
       const averageIntent = total ? sumIntent / total : 0;
-      const highIntentShare = total ? ((categoryCounts.High || 0) / total) * 100 : 0;
+      const averageConfidence = total ? sumConfidence / total : 0;
+      const highIntentCount = (categoryCounts.Hot || 0) + (categoryCounts.Blazing || 0);
+      const highIntentShare = total ? (highIntentCount / total) * 100 : 0;
       const barsSource = Object.entries(groupingHighCounts).length ? groupingHighCounts : groupingCounts;
       return res.json({
         ok: true,
-        run: {
-          id: String(run._id),
-          filename: run.filename || 'intent_run.csv',
-          createdAt: run.createdAt,
-          status: run.status,
+        file: {
+          id: String(doc._id),
+          name: doc.name || doc.filename || 'Intent output',
+          filename: doc.filename || doc.name || 'Intent output',
+          createdAt: doc.createdAt,
         },
         metrics: {
-          total,
-          averageLead,
+          totalLeads: total,
           averageIntent,
+          averageConfidence,
           highIntentShare,
-          hotQuadrant,
-          horizonHighShare: {
-            shortTerm: total ? (avgShortHigh / total) * 100 : 0,
-            mediumTerm: total ? (avgMediumHigh / total) * 100 : 0,
-            longTerm: total ? (avgLongHigh / total) * 100 : 0,
+          averageProbabilities: {
+            low: total ? sumLowProbability / total : 0,
+            medium: total ? sumMediumProbability / total : 0,
+            high: total ? sumHighProbability / total : 0,
           },
+          segmentCounts: categoryCounts,
         },
         charts: {
           pie: Object.entries(categoryCounts).filter(([, value]) => value > 0).map(([label, value]) => ({ label, value })),
           line: Object.entries(scoreBands).map(([label, value]) => ({ label, value })),
           bars: Object.entries(barsSource).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label, value })),
-          barLabel: Object.entries(groupingHighCounts).length ? `High-intent leads by ${groupingName.toLowerCase()}` : `Lead volume by ${groupingName.toLowerCase()}`,
+          barLabel: Object.entries(groupingHighCounts).length ? `Hot and blazing leads by ${groupingName.toLowerCase()}` : `Lead volume by ${groupingName.toLowerCase()}`,
+          lineLabel: 'Intent-score distribution',
         },
         highlights: [
           highIntentShare >= 40
-            ? 'The selected run contains a meaningful share of high-intent records, so the file is ready for tighter sales follow-up prioritization.'
-            : 'High-intent records still form a smaller share of the selected run, so broad outreach should be balanced with nurturing actions.',
-          hotQuadrant > 0
-            ? `${hotQuadrant} leads sit in the hot quadrant with both strong fit and strong intent, making them the clearest immediate action pool.`
-            : 'No leads currently fall into the strongest fit-plus-intent quadrant, so prioritization should lean more on intent momentum than immediate conversion confidence.',
+            ? 'A large share of this selected file is already sitting in the hot or blazing intent bands, so the output is ready for tighter immediate outreach.'
+            : 'Hot and blazing intent rows are still concentrated in a smaller share of the file, so this output still needs a balance between fast follow-up and nurture.',
+          averageConfidence >= 75
+            ? 'Model confidence is broadly stable across the selected intent output, which makes the intent picture easier to trust operationally.'
+            : 'Average confidence is still moderate, so lower-confidence rows should be reviewed before the team treats them as clear demand signals.',
           topLeads[0]
-            ? `${topLeads[0].company || topLeads[0].leadId} is currently one of the strongest visible intent signals in this run and should be reviewed early by the team.`
-            : 'No standout lead is visible yet because the selected run has limited usable scoring information.',
+            ? `${topLeads[0].company || topLeads[0].leadId} currently shows one of the strongest visible intent signals in this file and should be reviewed early by the team.`
+            : 'No standout lead is visible yet because the selected file has limited usable intent scoring information.',
         ],
         topLeads,
       });

@@ -1002,6 +1002,7 @@ export async function listLeadsCodes(req: Request, res: Response) {
     const workspace = (req.query.workspace as string) || null;
     const q = (req.query.q as string) || '';
     const sort = (req.query.sort as string) || 'createdAt_desc';
+    const outputKind = (req.query.outputKind as string) || '';
     const dbSort: any = {};
     if (sort === 'createdAt_asc') dbSort.createdAt = 1;
     else if (sort === 'name_asc') dbSort.name = 1;
@@ -1010,7 +1011,78 @@ export async function listLeadsCodes(req: Request, res: Response) {
     if (workspace && !mongoose.isValidObjectId(workspace)) return res.status(400).json({ error: 'invalid workspace id' });
     const filter: any = workspace ? { workspace } : {};
     if (q && q.trim()) filter.$or = [{ name: { $regex: q, $options: 'i' } }, { filename: { $regex: q, $options: 'i' } }];
-    const items = await LeadsCodeFile.find(filter).sort(dbSort).limit(500).lean();
+    const docs = await LeadsCodeFile.find(filter).sort(dbSort).limit(500).lean();
+    if (outputKind !== 'm01' && outputKind !== 'm02') return res.json({ ok: true, items: docs });
+
+    const db = mongoose.connection.db;
+    if (!db) return res.status(500).json({ error: 'db not ready' });
+    const bucket = new mongoose.mongo.GridFSBucket(db as any, { bucketName: 'm01_leads' });
+
+    const inspectHeader = (fileId: any) => new Promise<string[]>((resolve, reject) => {
+      const downloadStream = bucket.openDownloadStream(fileId);
+      const parser = parse({ bom: true });
+      let done = false;
+      const finish = (header: string[]) => {
+        if (done) return;
+        done = true;
+        try { downloadStream.destroy(); } catch (_) {}
+        try { parser.destroy(); } catch (_) {}
+        resolve(header);
+      };
+      parser.on('readable', () => {
+        let rec: string[] | null;
+        while ((rec = parser.read()) !== null) {
+          finish(rec.map((cell) => String(cell || '').trim()));
+          return;
+        }
+      });
+      parser.on('end', () => finish([]));
+      parser.on('error', (err) => {
+        if (done) return;
+        done = true;
+        reject(err);
+      });
+      downloadStream.on('error', (err) => {
+        if (done) return;
+        done = true;
+        reject(err);
+      });
+      downloadStream.pipe(parser);
+    });
+
+    const items: typeof docs = [];
+    const heuristicMatches = (doc: any) => {
+      const label = `${doc?.name || ''} ${doc?.filename || ''}`.toLowerCase();
+      const looksIntent = /intent|m02|priorit/i.test(label);
+      return outputKind === 'm02' ? looksIntent : !looksIntent;
+    };
+    for (const doc of docs) {
+      try {
+        const storedModuleKey = String((doc as any).moduleKey || '').trim();
+        if (storedModuleKey === outputKind) {
+          items.push(doc);
+          continue;
+        }
+        if (storedModuleKey && storedModuleKey !== outputKind) continue;
+        const header = await inspectHeader(doc.fileId);
+        const hasIntentColumns = findColumnIndex(header, ['intent_score', 'intent_segment', 'intentsegment']) >= 0;
+        const detectedModuleKey = hasIntentColumns ? 'm02' : 'm01';
+        try {
+          await LeadsCodeFile.updateOne({ _id: doc._id, moduleKey: { $exists: false } }, { $set: { moduleKey: detectedModuleKey } }).exec();
+        } catch (updateErr) {
+          console.warn('[m01.listLeadsCodes] could not backfill moduleKey', String(doc._id), updateErr);
+        }
+        if ((outputKind === 'm01' && !hasIntentColumns) || (outputKind === 'm02' && hasIntentColumns)) {
+          items.push(doc);
+        }
+      } catch (err) {
+        console.warn('[m01.listLeadsCodes] skipped file during output inspection', String(doc._id), err);
+        if (heuristicMatches(doc)) items.push(doc);
+      }
+    }
+    if (!items.length && docs.length) {
+      return res.json({ ok: true, items: docs.filter(heuristicMatches) });
+    }
     return res.json({ ok: true, items });
   } catch (e) {
     console.error('[m01.listLeadsCodes]', e);
@@ -1488,10 +1560,10 @@ export async function generateLeadsCode(req: Request, res: Response) {
         .on('finish', () => resolve());
     });
 
-    // 4) Run Python inference via testing_catboost.py (now defaulting to RandomForest) with no args
+    // 4) Run Python inference via testing_catboost.py using the per-module catboost.pkl artifact
     const pyExe = process.env.M01_ML_PYTHON || process.env.PYTHON || 'python';
     const scriptPath = path.join(mlDir, 'm01', 'testing_catboost.py');
-    const modelPath = path.join(mlDir, 'models', moduleKey, 'randomforest.pkl');
+    const modelPath = path.join(mlDir, 'models', moduleKey, 'catboost.pkl');
     const childEnv = { ...process.env, MODULE_KEY: moduleKey, MODEL_PATH: modelPath };
     const child = spawn(pyExe, [scriptPath], { cwd: mlDir, stdio: 'inherit', env: childEnv });
     const exitCode: number = await new Promise((resolve) => child.on('close', (code) => resolve(code ?? 1)));
@@ -1581,6 +1653,7 @@ export async function generateLeadsCode(req: Request, res: Response) {
       inputFilename,
       outputFileId: outputUploadStream.id,
       outputFilename,
+      moduleKey,
     });
 
     return res.json({ ok: true, leadsId: created._id });

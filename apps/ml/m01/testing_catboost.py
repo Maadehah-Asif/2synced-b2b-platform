@@ -12,13 +12,13 @@ DATA_DIR = os.path.join(ROOT_DIR, "data")
 MODEL_DIR = os.path.join(ROOT_DIR, "models")
 
 # pick which trained model you want to score with:
-# default (Module 1) -> models/m01/randomforest.pkl
-# for Module 2 -> models/m02/randomforest.pkl
+# default (Module 1) -> models/m01/catboost.pkl
+# for Module 2 -> models/m02/catboost.pkl
 MODULE_KEY = os.environ.get("MODULE_KEY", "m01")
 if MODULE_KEY == "m02":
-    MODEL_PATH = os.path.join(MODEL_DIR, "m02", "randomforest.pkl")
+    MODEL_PATH = os.path.join(MODEL_DIR, "m02", "catboost.pkl")
 else:
-    MODEL_PATH = os.path.join(MODEL_DIR, "m01", "randomforest.pkl")
+    MODEL_PATH = os.path.join(MODEL_DIR, "m01", "catboost.pkl")
 # explicit override if provided
 MODEL_PATH = os.environ.get("MODEL_PATH", MODEL_PATH)
 # enable intent outputs only for Module 2 (or explicit override)

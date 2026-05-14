@@ -9,76 +9,78 @@ import BarChart from '../m06/BarChart'
 import PieChart from '../m06/PieChart'
 import TimelineChart from '../m06/TimelineChart'
 
-type IntentRun = {
+type IntentFile = {
   _id: string
+  name?: string
   filename?: string
   createdAt?: string
-  status?: string
 }
 
 type DashboardPoint = { label: string; value: number }
 type IntentDashboardResponse = {
-  run: { id: string; filename: string; createdAt?: string; status?: string }
+  file: { id: string; name: string; filename: string; createdAt?: string }
   metrics: {
-    total: number
-    averageLead: number
+    totalLeads: number
     averageIntent: number
+    averageConfidence: number
     highIntentShare: number
-    hotQuadrant: number
-    horizonHighShare: { shortTerm: number; mediumTerm: number; longTerm: number }
+    averageProbabilities: { low: number; medium: number; high: number }
+    segmentCounts: Record<string, number>
   }
   charts: {
-    pie: DashboardPoint[]
     line: DashboardPoint[]
+    pie: DashboardPoint[]
     bars: DashboardPoint[]
     barLabel: string
+    lineLabel: string
   }
   highlights: string[]
-  topLeads: Array<{ leadId: string; company: string; segment: string; intentScore: number; leadScore: number; category: string }>
+  topLeads: Array<{ leadId: string; name: string; company: string; segment: string; intentSegment: string; intentScore: number; confidence: number }>
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
 export default function IntentDashboard() {
   const workspaceId = useWorkspaceId({ redirectToWorkspaces: true })
-  const [runs, setRuns] = useState<IntentRun[]>([])
+  const [files, setFiles] = useState<IntentFile[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [dashboard, setDashboard] = useState<IntentDashboardResponse | null>(null)
-  const [loadingRuns, setLoadingRuns] = useState(false)
+  const [loadingList, setLoadingList] = useState(false)
   const [loadingDashboard, setLoadingDashboard] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function loadRuns() {
+    async function loadFiles() {
       if (!workspaceId) return
-      setLoadingRuns(true)
+      setLoadingList(true)
       setError(null)
       try {
         const params = new URLSearchParams({ workspace: workspaceId })
-        const res = await fetchFromApi(`${API_BASE}/m02/intent-runs?${params.toString()}`, undefined, API_BASE)
-        const json = await parseApiJson<{ runs: IntentRun[] }>(res, 'Could not load intent runs')
-        const nextRuns = json.runs || []
-        setRuns(nextRuns)
-        setSelectedId((current) => current || nextRuns[0]?._id || '')
+        const res = await fetchFromApi(`${API_BASE}/m02/dashboard-files?${params.toString()}`, undefined, API_BASE)
+        const json = await parseApiJson<{ items: IntentFile[] }>(res, 'Could not load intent outputs')
+        const nextFiles = json.items || []
+        setFiles(nextFiles)
+        setSelectedId((current) => current || nextFiles[0]?._id || '')
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not load intent runs')
+        setError(e instanceof Error ? e.message : 'Could not load intent outputs')
       } finally {
-        setLoadingRuns(false)
+        setLoadingList(false)
       }
     }
-    void loadRuns()
+    void loadFiles()
   }, [workspaceId])
 
   useEffect(() => {
     async function loadDashboard() {
-      if (!selectedId) {
+      if (!workspaceId || !selectedId) {
         setDashboard(null)
         return
       }
       setLoadingDashboard(true)
       setError(null)
       try {
-        const res = await fetchFromApi(`${API_BASE}/m02/dashboard/${selectedId}`, undefined, API_BASE)
+        const params = new URLSearchParams({ workspace: workspaceId })
+        const res = await fetchFromApi(`${API_BASE}/m02/dashboard/${selectedId}?${params.toString()}`, undefined, API_BASE)
         const json = await parseApiJson<IntentDashboardResponse>(res, 'Could not load the intent dashboard')
         setDashboard(json)
       } catch (e) {
@@ -89,11 +91,11 @@ export default function IntentDashboard() {
       }
     }
     void loadDashboard()
-  }, [selectedId])
+  }, [workspaceId, selectedId])
 
   const lineData = useMemo(() => (dashboard?.charts.line || []).map((item) => ({ month: item.label, total: item.value })), [dashboard])
-  const pieData = dashboard?.charts.pie || []
   const barData = dashboard?.charts.bars || []
+  const pieData = dashboard?.charts.pie || []
 
   return (
     <Layout>
@@ -104,103 +106,98 @@ export default function IntentDashboard() {
 
         <InsightHero
           eyebrow="Intent Signals Dashboard"
-          title="Intent Prioritization Dashboard"
-          subtitle="Choose a final intent CSV and compare intent strength, fit alignment, and where the strongest urgent demand is clustering before the sales team acts."
+          title="Intent Scoring Dashboard"
+          subtitle="Choose a final intent-scored CSV and read the intent mix, score shape, and strongest hot-demand pockets in one visual workspace before the team acts."
         />
 
-        <InsightPanel eyebrow="Dataset selection" title="Choose the final intent CSV" soft rightMeta={<div style={{ fontSize: 13, color: '#5B6C8B' }}>{loadingDashboard ? 'Refreshing dashboard...' : `${runs.length} intent runs available`}</div>}>
+        <InsightPanel eyebrow="Dataset selection" title="Choose the final scored CSV" soft rightMeta={<div style={{ fontSize: 13, color: '#5B6C8B' }}>{loadingDashboard ? 'Refreshing dashboard...' : `${files.length} outputs available`}</div>}>
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'minmax(280px, 420px) 1fr', alignItems: 'end' }}>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, color: '#415274', fontWeight: 700 }}>Final intent CSV</span>
-              <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} disabled={loadingRuns || !runs.length}>
-                {!runs.length ? <option value="">No intent runs yet</option> : null}
-                {runs.map((item) => (
+              <span style={{ fontSize: 13, color: '#415274', fontWeight: 700 }}>Final intent-scored CSV</span>
+              <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} disabled={loadingList || !files.length}>
+                {!files.length ? <option value="">No final outputs yet</option> : null}
+                {files.map((item) => (
                   <option key={item._id} value={item._id}>
-                    {item.filename || 'Intent run'}
+                    {item.name || item.filename || 'Intent output'}
                   </option>
                 ))}
               </select>
             </label>
             <div style={insightTokens.mutedText}>
-              {dashboard?.run?.createdAt
-                ? `Selected run: ${dashboard.run.filename}. Generated on ${new Date(dashboard.run.createdAt).toLocaleDateString()}.`
-                : 'Select an intent output run to build the dashboard from the actual prioritized rows.'}
+              {dashboard?.file?.createdAt
+                ? `Selected file: ${dashboard.file.name}. Generated on ${new Date(dashboard.file.createdAt).toLocaleDateString()}.`
+                : 'Select a generated intent output to build the dashboard from the actual scored rows.'}
             </div>
           </div>
           {error ? <div style={{ marginTop: 12, color: 'crimson' }}>{error}</div> : null}
         </InsightPanel>
 
         <InsightKpiGrid>
-          <InsightKpiCard label="Leads in Run" value={dashboard?.metrics.total ?? 0} note="Total records inside the selected final intent CSV." tone="navy" />
-          <InsightKpiCard label="Avg Lead Score" value={Math.round(dashboard?.metrics.averageLead ?? 0)} note="Average fit or lead quality level carried into the intent layer." tone="slate" />
-          <InsightKpiCard label="Avg Intent Score" value={Math.round(dashboard?.metrics.averageIntent ?? 0)} note="Average buyer-intent strength across the selected run." tone="teal" />
-          <InsightKpiCard label="Hot Quadrant" value={dashboard?.metrics.hotQuadrant ?? 0} note={`${Math.round(dashboard?.metrics.highIntentShare ?? 0)}% of the run is currently high intent.`} tone="amber" />
+          <InsightKpiCard label="Leads in File" value={dashboard?.metrics.totalLeads ?? 0} note="Total scored records in the selected final CSV." tone="navy" />
+          <InsightKpiCard label="Avg Intent Score" value={Math.round(dashboard?.metrics.averageIntent ?? 0)} note="Average buyer-intent strength across the selected output." tone="teal" />
+          <InsightKpiCard label="Avg Confidence" value={`${Math.round(dashboard?.metrics.averageConfidence ?? 0)}%`} note="Higher confidence means the intent classification is less ambiguous." tone="amber" />
+          <InsightKpiCard label="Hot and Blazing Share" value={`${Math.round(dashboard?.metrics.highIntentShare ?? 0)}%`} note={`Low ${Math.round(dashboard?.metrics.averageProbabilities.low ?? 0)}% | Medium ${Math.round(dashboard?.metrics.averageProbabilities.medium ?? 0)}%`} tone="slate" />
         </InsightKpiGrid>
 
         <section style={{ ...insightTokens.equalCol, marginTop: 18 }}>
-          <InsightPanel eyebrow="Intent shape" title="Intent-score distribution">
+          <InsightPanel eyebrow="Intent shape" title={dashboard?.charts.lineLabel || 'Intent-score distribution'}>
             <div style={{ height: 270 }}>
               <TimelineChart data={lineData} height={250} tone="amber" />
             </div>
           </InsightPanel>
 
-          <InsightPanel eyebrow="Heat mix" title="Intent category split" soft>
-            {pieData.length ? <PieChart data={pieData} size={200} /> : <div style={insightTokens.mutedText}>Intent-category mix will appear here once the selected run contains generated intent scores.</div>}
+          <InsightPanel eyebrow="Intent mix" title="Predicted segment split" soft>
+            {pieData.length ? <PieChart data={pieData} size={200} /> : <div style={insightTokens.mutedText}>Intent-segment distribution appears here once the selected file contains scored rows.</div>}
           </InsightPanel>
         </section>
 
         <section style={{ ...insightTokens.twoCol, marginTop: 18 }}>
-          <InsightPanel eyebrow="Where urgency sits" title={dashboard?.charts.barLabel || 'Lead volume by grouping'}>
-            {barData.length ? <BarChart data={barData} height={230} valueFormatter={(value) => String(value)} /> : <div style={insightTokens.mutedText}>Grouping patterns appear here when the file includes source, segment, industry, or company columns.</div>}
+          <InsightPanel eyebrow="Strongest pocket" title={dashboard?.charts.barLabel || 'Lead volume by grouping'}>
+            {barData.length ? <BarChart data={barData} height={230} valueFormatter={(value) => String(value)} /> : <div style={insightTokens.mutedText}>Grouping patterns will appear here when the file includes source, segment, industry, or company columns.</div>}
           </InsightPanel>
 
-          <InsightPanel eyebrow="Horizon readout" title="How the run reads today" soft>
-            <div style={{ display: 'grid', gap: 12 }}>
-              <InsightNoteCard title="Short-term urgency" body={`${Math.round(dashboard?.metrics.horizonHighShare.shortTerm ?? 0)}% of rows are currently marked high in short-term intent, which is the clearest immediate-action pool.`} />
-              <InsightNoteCard title="Medium-term nurture" body={`${Math.round(dashboard?.metrics.horizonHighShare.mediumTerm ?? 0)}% of rows still show medium-window intent strength, which helps the team separate now-leads from next-leads.`} />
-              <InsightNoteCard title="Manager summary" body={(dashboard?.highlights || [])[0] || 'The selected intent run does not yet contain enough visible signals to generate a stronger management summary.'} />
-            </div>
-          </InsightPanel>
-        </section>
-
-        <section style={{ ...insightTokens.twoCol, marginTop: 18 }}>
-          <InsightPanel eyebrow="Priority notes" title="Key signals from the selected run">
+          <InsightPanel eyebrow="Management readout" title="What this file is saying" soft>
             <div style={{ display: 'grid', gap: 12 }}>
               {(dashboard?.highlights || []).map((item, index) => (
                 <InsightNoteCard key={index} title={`Signal ${index + 1}`} body={item} />
               ))}
             </div>
           </InsightPanel>
-
-          <InsightPanel eyebrow="Top accounts" title="Highest-intent rows in the selected run" soft>
-            <div style={insightTokens.tableWrap}>
-              <table style={insightTokens.table}>
-                <thead>
-                  <tr>
-                    <th style={insightTokens.th}>Lead ID</th>
-                    <th style={insightTokens.th}>Company</th>
-                    <th style={insightTokens.th}>Segment</th>
-                    <th style={insightTokens.th}>Lead Score</th>
-                    <th style={insightTokens.th}>Intent Score</th>
-                    <th style={insightTokens.th}>Category</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(dashboard?.topLeads || []).map((row) => (
-                    <tr key={`${row.leadId}-${row.company}`} style={insightTokens.row}>
-                      <td style={insightTokens.tdStrong}>{row.leadId || '—'}</td>
-                      <td style={insightTokens.td}>{row.company || '—'}</td>
-                      <td style={insightTokens.td}>{row.segment || '—'}</td>
-                      <td style={insightTokens.td}>{Math.round(row.leadScore)}</td>
-                      <td style={insightTokens.td}>{Math.round(row.intentScore)}</td>
-                      <td style={insightTokens.td}>{row.category}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </InsightPanel>
         </section>
+
+        <InsightPanel eyebrow="Top scored rows" title="Highest-intent leads in the selected file">
+          <div style={{ ...insightTokens.mutedText, marginBottom: 12 }}>
+            These rows are pulled from the actual selected CSV and ranked by intent score so the team can quickly see which records look hottest right now.
+          </div>
+          <div style={insightTokens.tableWrap}>
+            <table style={insightTokens.table}>
+              <thead>
+                <tr>
+                  <th style={insightTokens.th}>Lead ID</th>
+                  <th style={insightTokens.th}>Name</th>
+                  <th style={insightTokens.th}>Company</th>
+                  <th style={insightTokens.th}>Segment</th>
+                  <th style={insightTokens.th}>Intent Segment</th>
+                  <th style={insightTokens.th}>Intent Score</th>
+                  <th style={insightTokens.th}>Confidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(dashboard?.topLeads || []).map((row) => (
+                  <tr key={`${row.leadId}-${row.name}`} style={insightTokens.row}>
+                    <td style={insightTokens.tdStrong}>{row.leadId || '-'}</td>
+                    <td style={insightTokens.td}>{row.name || '-'}</td>
+                    <td style={insightTokens.td}>{row.company || '-'}</td>
+                    <td style={insightTokens.td}>{row.segment || '-'}</td>
+                    <td style={insightTokens.td}>{row.intentSegment}</td>
+                    <td style={insightTokens.td}>{Math.round(row.intentScore)}</td>
+                    <td style={insightTokens.td}>{Math.round(row.confidence)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </InsightPanel>
       </main>
     </Layout>
   )

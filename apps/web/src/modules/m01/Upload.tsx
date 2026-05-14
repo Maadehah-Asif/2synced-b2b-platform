@@ -432,7 +432,7 @@ export default function Upload(){
     <Layout>
       <div className="p-20 m01-upload-page">
         <div className="m01-upload-toprow">
-          <ModuleBackButton toSuffix="" />
+          <ModuleBackButton toSuffix="/m01" />
         </div>
         <div className="m01-upload-header">
           <div className="m01-upload-header-row">

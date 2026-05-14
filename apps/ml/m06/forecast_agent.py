@@ -113,6 +113,21 @@ def _linear_r2(values: np.ndarray) -> Optional[float]:
     return float(1.0 - (residual_var / total_var))
 
 
+def _normalize_roi_series(values: pd.Series) -> pd.Series:
+    numeric = pd.to_numeric(values, errors="coerce")
+    finite = numeric[np.isfinite(numeric)]
+    if finite.empty:
+        return numeric.fillna(0.0)
+
+    # The synthetic dataset stores ROI as a return ratio (for example 1.95),
+    # while the forecast page presents ROI as a percentage.
+    # Convert ratio-style values to percentage points once so the UI and
+    # backend use the same unit.
+    if float(finite.abs().quantile(0.9)) < 25.0:
+        numeric = numeric * 100.0
+    return numeric.fillna(float(finite.median()))
+
+
 def _compute_forecast(values: np.ndarray, horizon: int, method: str) -> tuple[np.ndarray, float]:
     normalized = (method or "linear_regression").strip().lower()
     if normalized == "naive":
@@ -205,7 +220,8 @@ def run_forecast(campaign_id: Optional[int], forecast_window: str, spend_multipl
         # Build monthly ROI using spend-weighted approach
         if "spend" in df.columns and "revenue" in df.columns:
             monthly = df.groupby("month").agg({"spend": "sum", "revenue": "sum"}).reset_index()
-            monthly["roi"] = (monthly["revenue"].where(monthly["spend"] > 0, 0) / monthly["spend"].where(monthly["spend"] > 0, 1)) * 100.0
+            safe_spend = monthly["spend"].where(monthly["spend"] > 0, np.nan)
+            monthly["roi"] = (((monthly["revenue"] - monthly["spend"]) / safe_spend) * 100.0).fillna(0.0)
             df = monthly
         else:
             # Fallback: average ROI per month if spend/revenue not present
@@ -228,7 +244,7 @@ def run_forecast(campaign_id: Optional[int], forecast_window: str, spend_multipl
         }
 
     df = df.sort_values("month").reset_index(drop=True)
-    df["roi_clean"] = df["roi"].fillna(df["roi"].median())
+    df["roi_clean"] = _normalize_roi_series(df["roi"])
 
     # Moving averages
     df["ma3"] = df["roi_clean"].rolling(window=3, min_periods=1).mean()

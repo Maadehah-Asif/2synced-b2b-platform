@@ -26,7 +26,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--input', required=True, help='Input CSV path without lead_id')
     ap.add_argument('--output', required=True, help='Output CSV path')
-    ap.add_argument('--model', required=True, help='Path to randomforest.pkl')
+    ap.add_argument('--model', required=True, help='Path to catboost.pkl')
     args = ap.parse_args()
 
     model_obj = joblib.load(args.model)

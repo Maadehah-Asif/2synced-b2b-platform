@@ -307,7 +307,7 @@ export default function ForecastPage() {
 
 function formatPct(value: number | null | undefined) {
   if (value === null || value === undefined || Number.isNaN(value)) return '-'
-  return `${Math.round(value)}%`
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`
 }
 
 function formatTrend(trend: string) {

@@ -57,7 +57,6 @@ import JourneyPreview from './modules/m06/JourneyPreview'
 import RunAttributionScreen from './modules/m06/RunAttributionScreen'
 import AllocationDashboard from './modules/m06/AllocationDashboard'
 import RoiCalculation from './modules/m06/RoiCalculation'
-import GenerateIntent from './modules/m02/GenerateIntent'
 import Prioritization from './modules/m02/Prioritization'
 import UploadM02 from './modules/m02/Upload'
 import UploadPreviewM02 from './modules/m02/UploadPreview'
@@ -128,7 +127,6 @@ function App() {
   if (route.startsWith('#/workspace/') && route.includes('/m02/merged')) return <MergedListM02 />
   if (route.startsWith('#/workspace/') && route.includes('/m02/leads')) return <LeadsListM02 />
   if (route.startsWith('#/workspace/') && route.includes('/m02/upload')) return <UploadM02 />
-  if (route.startsWith('#/workspace/') && route.includes('/m02/generate')) return <GenerateIntent />
   if (route.startsWith('#/workspace/') && route.includes('/m02/prioritization')) return <Prioritization />
   if (route.startsWith('#/workspace/') && route.includes('/m02/upload-wizard')) return <UploadWizardM02 />
   // Module 2 workspace home (no trailing slash)

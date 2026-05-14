@@ -11,7 +11,6 @@ type ForecastOptionsResponse = {
   ok?: boolean
   sources?: string[]
   stages?: string[]
-  datasetPath?: string
 }
 
 type FunnelForecastKpis = {
@@ -51,7 +50,6 @@ export default function FunnelForecast() {
   const [source, setSource] = useState('')
   const [stage, setStage] = useState('')
   const [horizonMonths, setHorizonMonths] = useState(3)
-  const [datasetPath, setDatasetPath] = useState('')
   const [result, setResult] = useState<FunnelForecastResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -63,7 +61,6 @@ export default function FunnelForecast() {
         if (!json?.ok) return
         setSources(Array.isArray(json.sources) ? json.sources : [])
         setStages(Array.isArray(json.stages) ? json.stages : [])
-        setDatasetPath(typeof json.datasetPath === 'string' ? json.datasetPath : '')
       })
       .catch(() => {})
   }, [])
@@ -170,7 +167,6 @@ export default function FunnelForecast() {
               </select>
               <button className="btn-primary" onClick={run} disabled={loading}>{loading ? 'Generating…' : 'Generate Forecast'}</button>
             </div>
-            {datasetPath ? <div style={{ marginTop: 10, fontSize: 12, color: '#5a6786' }}>Dataset path: {datasetPath}</div> : null}
             {error ? <div style={{ marginTop: 10, color: 'crimson', fontSize: 13 }}>{error}</div> : null}
           </InsightPanel>
 

@@ -417,7 +417,7 @@ export default function Module7StageWorkspace() {
     <Layout>
       <main className="page-root m07-workspace-page" style={{ padding: 20 }}>
         <div className="m07-workspace-toprow">
-          <ModuleBackButton toSuffix="" />
+          <ModuleBackButton toSuffix="/m07" />
         </div>
 
         {shell(

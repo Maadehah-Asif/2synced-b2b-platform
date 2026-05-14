@@ -16,6 +16,7 @@ const LeadsCodeFileSchema = new Schema({
   inputFilename: { type: String, required: false },
   outputFileId: { type: Schema.Types.ObjectId, required: false }, // GridFS id in bucket m01_leads_outputs
   outputFilename: { type: String, required: false },
+  moduleKey: { type: String, enum: ["m01", "m02"], required: false, index: true },
   createdAt: { type: Date, default: () => new Date(), index: true },
 });
 

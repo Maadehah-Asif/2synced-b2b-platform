@@ -55,12 +55,12 @@ export default function MergedListM02() {
   return (
     <Layout>
       <div className="p-20 data-merged-page">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <ModuleBackButton toSuffix="/m02" />
+        </div>
         <div className="data-merged-hero">
           <div className="data-merged-hero-copy">
             <div className="data-merged-kicker">Merged Data</div>
-            <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <ModuleBackButton toSuffix="" />
-            </div>
             <h2 className="data-merged-title">Intent Data Merged CSVs</h2>
             <p className="data-merged-subtitle">
               Review merged intent and behavior datasets, inspect source composition, and open previews

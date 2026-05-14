@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Layout from '../../components/Layout';
+import ModuleBackButton from '../../components/ModuleBackButton';
 import '../../styles/dataPreview.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
@@ -83,35 +84,16 @@ export default function UploadPreview(){
     }catch(e){ setMessage('Preview error'); }
   }
 
-  function goBack(){
-    try {
-      const prev = sessionStorage.getItem('m01_preview_return');
-      sessionStorage.removeItem('m01_preview_return');
-      if (prev) {
-        window.location.hash = prev;
-        return;
-      }
-    } catch (e) { /* ignore */ }
-    // fallback by kind
-    if (kind === 'merged') {
-      window.location.hash = workspace ? `#/workspace/${workspace}/m01/merged` : '#/m01/merged';
-    } else if (kind === 'leads') {
-      window.location.hash = workspace ? `#/workspace/${workspace}/m01/leads` : '#/m01/leads';
-    } else {
-      window.location.hash = workspace ? `#/workspace/${workspace}/m01/upload` : '#/m01/upload';
-    }
-  }
-
   return (
     <Layout>
       <div className="p-20 data-preview-page">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <ModuleBackButton toSuffix={kind === 'merged' ? '/m01/merged' : kind === 'leads' ? '/m01/leads' : '/m01/upload'} />
+        </div>
         <div className="data-preview-hero">
           <div className="data-preview-hero-copy">
             <div className="data-preview-kicker">
               {kind === 'merged' ? 'Merged Preview' : (kind === 'leads' ? 'Lead Records Preview' : 'Upload Preview')}
-            </div>
-            <div className="mb-12" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button type="button" className="btn-outline" onClick={goBack}>Back</button>
             </div>
             <h2 className="data-preview-title">
               Preview {kind === 'merged' ? 'Merged Dataset' : (kind==='leads' ? 'Lead Records' : 'Uploaded File')}
@@ -157,7 +139,7 @@ export default function UploadPreview(){
               <button type="button" className="btn-ghost" disabled={!hasMore} onClick={() => { const np = page + 1; fetchPage(np, perPage); }}>Next</button>
             </div>
             <button type="button" className="btn-ghost" onClick={() => fetchPage(page, perPage)}>Retry</button>
-            <button type="button" className="btn-primary" onClick={() => setIsFullscreen(true)}>Zoom</button>
+            <button type="button" className="btn-ghost" onClick={() => setIsFullscreen(true)}>Zoom</button>
           </div>
         </div>
 

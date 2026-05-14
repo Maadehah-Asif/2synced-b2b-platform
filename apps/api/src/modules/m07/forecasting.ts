@@ -239,7 +239,6 @@ export function getM07ForecastFilters() {
   return {
     sources: Array.from(new Set(rows.map((row) => row.source))).sort(),
     stages: Array.from(new Set(rows.map((row) => row.stage))).sort(),
-    datasetPath: datasetPath(),
   };
 }
 

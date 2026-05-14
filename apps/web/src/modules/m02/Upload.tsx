@@ -378,16 +378,16 @@ return (
   <Layout>
     <div className="p-20 m02-upload-page">
       <div className="m02-upload-toprow">
-        <ModuleBackButton toSuffix="" />
+        <ModuleBackButton toSuffix="/m02" />
       </div>
       <div className="m02-upload-header">
         <div className="m02-upload-header-row">
           <div className="m02-upload-header-copy">
             <div className="m02-upload-kicker">Intent Input</div>
-            <h2 style={{ margin: 0 }}>Intent Data Uploads</h2>
+            <h2 style={{ margin: 0 }}>Intent Input Uploads</h2>
             <p className="m02-upload-subtitle">
               Add source intent and behavior CSV files, review active batches, and prepare shared records
-              for preview, archive, or merge workflows used by the M02 prioritization flow.
+              for preview, archive, and merge workflows used by the current intent pipeline.
             </p>
           </div>
         </div>
@@ -404,15 +404,21 @@ return (
       </div>
 
       <form onSubmit={handleSubmit} className="m02-upload-toolbar">
-        <div className="m02-upload-file-field">
+        <div className="m02-upload-file-field" style={{ display: 'grid', gap: 8, minWidth: 0, flex: '1 1 520px' }}>
           <span className="m02-upload-field-label">CSV Source File</span>
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              style={{ minWidth: 0, flex: '1 1 320px' }}
+            />
+            <div style={{ fontSize: 13, color: '#5B6C8B', fontWeight: 700 }}>
+              {file?.name || 'No file selected'}
+            </div>
+          </div>
         </div>
-        <button type="submit" className="btn-primary">Upload</button>
+        <button type="submit" className="btn-primary" style={{ alignSelf: 'end', minWidth: 120, whiteSpace: 'nowrap' }}>Upload</button>
       </form>
 
       {message && <div className="mt-8 m02-upload-message">{message}</div>}

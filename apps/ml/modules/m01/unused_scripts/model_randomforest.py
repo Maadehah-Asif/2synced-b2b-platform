@@ -19,7 +19,7 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 MODEL_DIR = os.path.join(BASE_DIR, "models")
 
 INPUT_PATH   = os.path.join(DATA_DIR, "checkmergedtrainable.csv")
-MODEL_PATH   = os.path.join(MODEL_DIR, "m01", "randomforest.pkl")
+MODEL_PATH   = os.path.join(MODEL_DIR, "m01", "catboost.pkl")
 REPORT_PATH  = os.path.join(MODEL_DIR, "m01", "report_rf.txt")
 
 TARGET_COL = "intent_tier"

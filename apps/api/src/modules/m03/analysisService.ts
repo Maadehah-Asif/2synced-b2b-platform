@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Backend
+ * File: analysisService.ts
+ * Purpose: Supports the a na ly si sS er vi ce flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { Types } from "mongoose";
 import ConversationThread, {
   type ConversationThreadDocument,

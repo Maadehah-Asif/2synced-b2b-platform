@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: AllocationDashboard.tsx
+ * Purpose: Supports the A ll oc at io nD as hb oa rd flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useMemo, useState } from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'

@@ -1,3 +1,11 @@
+/**
+ * Module: Funnel Insight (m07)
+ * Layer: Backend
+ * File: forecasting.ts
+ * Purpose: Supports the f or ec as ti ng flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { parse } from 'csv-parse/sync';
@@ -33,6 +41,8 @@ function loadRows(): FunnelForecastRow[] {
   if (!fs.existsSync(csvPath)) {
     throw new Error(`missing_dataset:${csvPath}`);
   }
+  // The forecast layer is intentionally dataset-driven for the demo, so the
+  // CSV on disk is treated as the source of truth instead of Mongo history.
   const content = fs.readFileSync(csvPath, 'utf8');
   const records = parse(content, {
     columns: true,
@@ -136,6 +146,8 @@ function linearR2(values: number[]) {
 }
 
 function autoSelectMethod(values: number[]) {
+  // Method selection follows the low-data policy used across the project:
+  // start with history length, then override based on signal quality.
   let baseMethod: 'naive' | 'moving_average' | 'exponential_smoothing' | 'linear_regression';
   if (values.length < 5) baseMethod = 'naive';
   else if (values.length < 9) baseMethod = 'moving_average';
@@ -266,6 +278,8 @@ export function runM07Forecast(input: M07ForecastRequest) {
 
   const horizon = Math.max(1, Math.min(12, input.horizonMonths || 3));
   const conversionSeries = history.map((row) => row.conversionRate);
+  // Conversion drives method selection because it is the headline operational
+  // KPI on the screen; the same chosen method is then applied to the related series.
   const { method, reason } = autoSelectMethod(conversionSeries);
   const dropSeries = history.map((row) => row.dropRate);
   const avgDaysSeries = history.map((row) => row.avgDaysInStage);

@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Backend
+ * File: touchImportUtils.ts
+ * Purpose: Supports the t ou ch Im po rt Ut il s flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose from 'mongoose';
 import { Campaign } from './models/Campaign.js';
 import Lead from '../m01/models/Lead.js';

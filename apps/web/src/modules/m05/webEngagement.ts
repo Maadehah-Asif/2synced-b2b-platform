@@ -1,3 +1,11 @@
+/**
+ * Module: Sales & Marketing Alignment (m05)
+ * Layer: Frontend
+ * File: webEngagement.ts
+ * Purpose: Supports the w eb En ga ge me nt flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export const MODULE5_UPLOAD_PREFIX = 'm05-web-engagement__'
 
 export type Module5UploadStatus = 'active' | 'archived'

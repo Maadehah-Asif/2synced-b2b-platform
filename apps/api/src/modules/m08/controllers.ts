@@ -1,3 +1,11 @@
+/**
+ * Module: Report Center (m08)
+ * Layer: Backend
+ * File: controllers.ts
+ * Purpose: Supports the c on tr ol le rs flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import type { Request, Response } from 'express';
 import UploadFile from '../m01/models/UploadFile.js';
 import MergedFile from '../m01/models/MergedFile.js';

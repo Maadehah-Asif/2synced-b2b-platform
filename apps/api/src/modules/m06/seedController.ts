@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Backend
+ * File: seedController.ts
+ * Purpose: Supports the s ee dC on tr ol le r flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import type { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { connectDB } from '../../config/db.js';

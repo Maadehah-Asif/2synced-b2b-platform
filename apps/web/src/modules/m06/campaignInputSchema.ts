@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: campaignInputSchema.ts
+ * Purpose: Supports the c am pa ig nI np ut Sc he ma flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export type CampaignFieldKey =
   | 'campaign_id'
   | 'name'

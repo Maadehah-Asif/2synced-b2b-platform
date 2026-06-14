@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Frontend
+ * File: Module3Home.tsx
+ * Purpose: Supports the M od ul e3 Ho me flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
 

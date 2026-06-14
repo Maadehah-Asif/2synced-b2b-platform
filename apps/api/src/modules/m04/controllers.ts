@@ -1,3 +1,11 @@
+/**
+ * Module: Guided Assistant (m04)
+ * Layer: Backend
+ * File: controllers.ts
+ * Purpose: Supports the c on tr ol le rs flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
 import { verifyToken } from "../core/auth/utils/jwt.js";

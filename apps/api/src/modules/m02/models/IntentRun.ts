@@ -1,3 +1,11 @@
+/**
+ * Module: Intent Signals (m02)
+ * Layer: Backend
+ * File: IntentRun.ts
+ * Purpose: Supports the I nt en tR un flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose from 'mongoose';
 
 const { Schema, model } = mongoose;

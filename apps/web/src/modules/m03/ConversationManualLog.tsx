@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Frontend
+ * File: ConversationManualLog.tsx
+ * Purpose: Supports the C on ve rs at io nM an ua lL og flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import type { FormEvent } from "react";
 import { useState } from "react";
 import Layout from "../../components/Layout";

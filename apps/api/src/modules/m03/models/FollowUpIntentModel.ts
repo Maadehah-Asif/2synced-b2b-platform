@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Backend
+ * File: FollowUpIntentModel.ts
+ * Purpose: Supports the F ol lo wU pI nt en tM od el flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 // apps/api/src/modules/m03/FollowUpIntentModel.ts
 // Auto-generated from scikit-learn logistic regression
 // trained on deal_followup_dataset_10k.xlsx

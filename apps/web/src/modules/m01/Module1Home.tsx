@@ -1,3 +1,11 @@
+/**
+ * Module: Lead Quality & Scoring (m01)
+ * Layer: Frontend
+ * File: Module1Home.tsx
+ * Purpose: Supports the M od ul e1 Ho me flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'

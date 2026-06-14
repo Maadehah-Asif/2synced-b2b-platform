@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: ImportPreviewStep.tsx
+ * Purpose: Supports the I mp or tP re vi ew St ep flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useMemo, useState } from 'react';
 import '../../../styles/dataPreview.css';
 

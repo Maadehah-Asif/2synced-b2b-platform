@@ -1,3 +1,11 @@
+/**
+ * Module: Campaign Performance Optimization (m09)
+ * Layer: Backend
+ * File: routes.ts
+ * Purpose: Supports the r ou te s flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { Router, type Request, type Response } from 'express';
 import mongoose from 'mongoose';
 import { Readable } from 'stream';

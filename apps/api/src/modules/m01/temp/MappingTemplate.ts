@@ -1,3 +1,11 @@
+/**
+ * Module: Lead Quality & Scoring (m01)
+ * Layer: Backend
+ * File: MappingTemplate.ts
+ * Purpose: Supports the M ap pi ng Te mp la te flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose from 'mongoose';
 
 const { Schema, model } = mongoose;

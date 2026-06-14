@@ -1,3 +1,11 @@
+/**
+ * Module: Campaign Performance Optimization (m09)
+ * Layer: Backend
+ * File: MergedDataset.ts
+ * Purpose: Supports the M er ge dD at as et flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { type Model } from 'mongoose';
 
 const { Schema, model, models } = mongoose;

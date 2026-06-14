@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: Module6Main.tsx
+ * Purpose: Supports the M od ul e6 Ma in flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'

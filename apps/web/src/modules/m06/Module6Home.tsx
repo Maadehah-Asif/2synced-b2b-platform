@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: Module6Home.tsx
+ * Purpose: Supports the M od ul e6 Ho me flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
 import './module6.css'

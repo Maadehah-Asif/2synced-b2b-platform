@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: leadInputSchema.ts
+ * Purpose: Supports the l ea dI np ut Sc he ma flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export type LeadFieldKey =
   | 'lead_id'
   | 'full_name'

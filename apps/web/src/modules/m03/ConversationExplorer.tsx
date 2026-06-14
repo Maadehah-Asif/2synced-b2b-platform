@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Frontend
+ * File: ConversationExplorer.tsx
+ * Purpose: Supports the C on ve rs at io nE xp lo re r flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useState } from "react";
 import Layout from "../../components/Layout";
 import ModuleBackButton from "../../components/ModuleBackButton";

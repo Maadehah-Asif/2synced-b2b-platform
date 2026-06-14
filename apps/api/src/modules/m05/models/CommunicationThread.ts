@@ -1,3 +1,11 @@
+/**
+ * Module: Sales & Marketing Alignment (m05)
+ * Layer: Backend
+ * File: CommunicationThread.ts
+ * Purpose: Supports the C om mu ni ca ti on Th re ad flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Schema, type Document, type Types } from 'mongoose';
 
 export type CommunicationThreadType =

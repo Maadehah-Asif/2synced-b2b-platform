@@ -1,3 +1,11 @@
+/**
+ * Module: Sales & Marketing Alignment (m05)
+ * Layer: Frontend
+ * File: Module5CommunicationHubPage.tsx
+ * Purpose: Supports the M od ul e5 Co mm un ic at io nH ub Pa ge flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useMemo, useState, type CSSProperties, type DragEvent, type FormEvent } from 'react'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'
 import {

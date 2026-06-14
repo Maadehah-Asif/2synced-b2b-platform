@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: ForecastPage.tsx
+ * Purpose: Supports the F or ec as tP ag e flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useMemo, useState } from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
@@ -56,6 +64,8 @@ export default function ForecastPage() {
   const forecastPageSize = 6
 
   useEffect(() => {
+    // Channel options come from the backend so the forecast UI reflects whatever
+    // the active synthetic dataset currently exposes.
     fetch(`${API_BASE}/m06/forecast/options`)
       .then((res) => res.json())
       .then((json: { channels?: string[] }) => {
@@ -85,6 +95,9 @@ export default function ForecastPage() {
     setError(null)
     setResult(null)
     try {
+      // The frontend sends a lightweight scenario definition only; the Python
+      // agent is responsible for selecting the forecast method and generating
+      // both baseline and scenario ROI series.
       const res = await fetch(`${API_BASE}/m06/forecast-agent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -102,6 +115,8 @@ export default function ForecastPage() {
       if (!json.ok) {
         setError(typeof json.error === 'string' ? json.error : 'Forecast agent was unable to generate a forecast.')
       }
+      // Normalize snake_case agent output into the camelCase shape used by the
+      // React screen so the rest of the component can stay presentation-focused.
       const raw = (json.result || {}) as Partial<AgentResult> & Record<string, unknown>
       setResult({
         history: Array.isArray(raw.history) ? raw.history as AgentHistoryRow[] : [],
@@ -127,6 +142,8 @@ export default function ForecastPage() {
 
   function downloadCSV() {
     if (!result?.forecast.length) return
+    // Export only the forecast rows because the historical series is already
+    // visible in the screen and does not change with download intent.
     const header = ['month', 'baseline_roi', 'scenario_roi', 'confidence_low', 'confidence_high']
     const body = result.forecast.map((row) => [row.month, row.baseline_roi, row.scenario_roi, row.confidence_low, row.confidence_high].join(',')).join('\n')
     const csv = `${header.join(',')}\n${body}`
@@ -153,6 +170,8 @@ export default function ForecastPage() {
   const forecastTableRows = useMemo(() => {
     const rows = result?.forecast || []
     const start = (forecastPage - 1) * forecastPageSize
+    // Keep the table paginated even though chart views show the full horizon;
+    // this makes longer forecast windows easier to review row by row.
     return rows.slice(start, start + forecastPageSize)
   }, [forecastPage, result])
   const scenarioBars = useMemo(

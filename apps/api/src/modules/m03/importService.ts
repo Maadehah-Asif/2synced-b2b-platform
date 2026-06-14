@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Backend
+ * File: importService.ts
+ * Purpose: Supports the i mp or tS er vi ce flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import fs from "node:fs";
 import path from "node:path";
 import { parse } from "csv-parse/sync";

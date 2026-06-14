@@ -1,3 +1,11 @@
+/**
+ * Module: Sales & Marketing Alignment (m05)
+ * Layer: Frontend
+ * File: navigation.ts
+ * Purpose: Supports the n av ig at io n flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export type Module5View = 'home' | 'overview' | 'pipeline' | 'web-engagement' | 'web-visualization' | 'shortcomings' | 'communication'
 
 export function getModule5ViewFromHash(): Module5View {

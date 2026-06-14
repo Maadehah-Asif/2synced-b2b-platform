@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Backend
+ * File: followUpService.ts
+ * Purpose: Supports the f ol lo wU pS er vi ce flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { Types } from "mongoose";
 import FollowUpReminder, {
   type FollowUpReminderDocument,

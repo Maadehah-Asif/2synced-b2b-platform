@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Backend
+ * File: Deal.ts
+ * Purpose: Supports the D ea l flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Schema, Types, Model } from 'mongoose';
 
 export interface DealDoc {

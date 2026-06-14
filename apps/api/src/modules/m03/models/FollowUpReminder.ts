@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Backend
+ * File: FollowUpReminder.ts
+ * Purpose: Supports the F ol lo wU pR em in de r flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Document, Types } from "mongoose";
 
 const { Schema, model } = mongoose;

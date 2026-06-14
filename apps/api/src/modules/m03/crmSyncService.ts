@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Backend
+ * File: crmSyncService.ts
+ * Purpose: Supports the c rm Sy nc Se rv ic e flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { Types } from "mongoose";
 import ConversationThread from "./models/ConversationThreads.js";
 import DealHealth from "./models/DealHealth.js";

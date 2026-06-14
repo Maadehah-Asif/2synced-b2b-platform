@@ -1,3 +1,11 @@
+/**
+ * Module: Intent Signals (m02)
+ * Layer: Backend
+ * File: M2LeadBehaviorEvent.ts
+ * Purpose: Supports the M2 Le ad Be ha vi or Ev en t flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Schema, Types, Model } from 'mongoose';
 import type { IntentSegment } from './M2LeadIntentSummary.js';
 

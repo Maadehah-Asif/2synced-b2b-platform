@@ -1,3 +1,11 @@
+/**
+ * Module: Funnel Insight (m07)
+ * Layer: Frontend
+ * File: LeakageAnalysis.tsx
+ * Purpose: Supports the L ea ka ge An al ys is flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useMemo, useState } from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'

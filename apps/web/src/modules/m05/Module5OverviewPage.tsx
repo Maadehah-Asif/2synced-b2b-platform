@@ -1,3 +1,11 @@
+/**
+ * Module: Sales & Marketing Alignment (m05)
+ * Layer: Frontend
+ * File: Module5OverviewPage.tsx
+ * Purpose: Supports the M od ul e5 Ov er vi ew Pa ge flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'
 import { buildOverviewMetrics, type AlignmentCard, type AttentionRow, type DashboardData, type Module6Lead, type PipelineStagePreview, type PrioritizationRow, type StageRecord, type SummaryCard, type Watchout } from './overview'

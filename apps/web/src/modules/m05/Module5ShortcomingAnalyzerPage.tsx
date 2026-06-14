@@ -1,3 +1,11 @@
+/**
+ * Module: Sales & Marketing Alignment (m05)
+ * Layer: Frontend
+ * File: Module5ShortcomingAnalyzerPage.tsx
+ * Purpose: Supports the M od ul e5 Sh or tc om in gA na ly ze rP ag e flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'
 import { setModule5View } from './navigation'

@@ -1,3 +1,11 @@
+/**
+ * Module: Funnel Insight (m07)
+ * Layer: Frontend
+ * File: Module7Home.tsx
+ * Purpose: Supports the M od ul e7 Ho me flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
 import './module7.css'

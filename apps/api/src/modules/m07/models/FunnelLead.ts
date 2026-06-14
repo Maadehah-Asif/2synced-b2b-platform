@@ -1,3 +1,11 @@
+/**
+ * Module: Funnel Insight (m07)
+ * Layer: Backend
+ * File: FunnelLead.ts
+ * Purpose: Supports the F un ne lL ea d flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Schema, Types, Model } from 'mongoose';
 
 export interface FunnelLeadDoc {

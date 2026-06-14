@@ -1,3 +1,11 @@
+/**
+ * Module: Sales & Marketing Alignment (m05)
+ * Layer: Backend
+ * File: CommunicationMessage.ts
+ * Purpose: Supports the C om mu ni ca ti on Me ss ag e flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Schema, type Document, type Types } from 'mongoose';
 
 export interface CommunicationMessageDocument extends Document {

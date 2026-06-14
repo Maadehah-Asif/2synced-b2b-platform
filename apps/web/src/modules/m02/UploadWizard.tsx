@@ -1,3 +1,11 @@
+/**
+ * Module: Intent Signals (m02)
+ * Layer: Frontend
+ * File: UploadWizard.tsx
+ * Purpose: Supports the U pl oa dW iz ar d flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import { useEffect, useMemo, useRef, useState } from 'react';

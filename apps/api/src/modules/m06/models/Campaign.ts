@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Backend
+ * File: Campaign.ts
+ * Purpose: Supports the C am pa ig n flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Schema, Types, Model } from 'mongoose';
 
 export type Channel = 'email' | 'ads' | 'linkedin' | 'webinar' | 'other';

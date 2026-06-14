@@ -1,3 +1,11 @@
+/**
+ * Module: Campaign Performance Optimization (m09)
+ * Layer: Frontend
+ * File: Module9WhatIfDevToolsPage.tsx
+ * Purpose: Supports the M od ul e9 Wh at If De vT oo ls Pa ge flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import type React from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'

@@ -1,3 +1,11 @@
+/**
+ * Module: Funnel Insight (m07)
+ * Layer: Frontend
+ * File: FunnelForecast.tsx
+ * Purpose: Supports the F un ne lF or ec as t flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useMemo, useState } from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
@@ -55,6 +63,8 @@ export default function FunnelForecast() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    // Load available source/stage filters from the dataset-driven backend so the
+    // forecast scope matches the actual funnel history on disk.
     fetch(`${API_BASE}/m07/forecast/options`)
       .then((response) => response.json())
       .then((json: ForecastOptionsResponse) => {
@@ -69,6 +79,8 @@ export default function FunnelForecast() {
     setLoading(true)
     setError(null)
     try {
+      // The horizon value directly controls how many future monthly buckets the
+      // backend projects for the selected source/stage slice.
       const response = await fetch(`${API_BASE}/m07/forecast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -93,6 +105,8 @@ export default function FunnelForecast() {
   const forecastRows = useMemo(() => result?.forecast || [], [result])
   const trendLabels = useMemo(() => {
     if (!result) return []
+    // Historical and projected labels are merged so the line chart reads as one
+    // continuous operational story instead of two disconnected graphs.
     return [...historyRows.map((row) => row.month), ...forecastRows.map((row) => row.month)]
   }, [forecastRows, historyRows, result])
   const conversionTrendSeries = useMemo(() => {
@@ -118,6 +132,8 @@ export default function FunnelForecast() {
   const stagePressureLabels = useMemo(() => (result ? ['Conversion', 'Drop Rate', 'Avg Days'] : []), [result])
   const stagePressureSeries = useMemo(() => {
     if (!result) return []
+    // Compare the last visible historical point with the furthest projected point
+    // so managers can see the direction of pressure, not just the immediate next month.
     return [
       {
         label: 'Latest',

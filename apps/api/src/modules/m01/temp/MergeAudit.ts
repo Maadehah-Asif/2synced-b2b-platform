@@ -1,3 +1,11 @@
+/**
+ * Module: Lead Quality & Scoring (m01)
+ * Layer: Backend
+ * File: MergeAudit.ts
+ * Purpose: Supports the M er ge Au di t flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose from 'mongoose';
 
 const { Schema, model } = mongoose;

@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: Module6DealsWorkspace.tsx
+ * Purpose: Supports the M od ul e6 De al sW or ks pa ce flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';

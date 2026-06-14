@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: journeys.ts
+ * Purpose: Supports the j ou rn ey s flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { getWorkspaceIdFromHash } from '../../../utils/workspace';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';

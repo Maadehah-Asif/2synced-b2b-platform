@@ -1,3 +1,11 @@
+/**
+ * Module: Lead Quality & Scoring (m01)
+ * Layer: Frontend
+ * File: mergedColumns.ts
+ * Purpose: Supports the m er ge dC ol um ns flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export const MERGED_COLUMNS: Array<{ key: string; label: string; type: string }> = [
   { key: 'lead_id', label: 'lead_id', type: 'int' },
   { key: 'intent_tier', label: 'intent_tier', type: 'int' },

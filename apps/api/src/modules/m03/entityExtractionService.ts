@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Backend
+ * File: entityExtractionService.ts
+ * Purpose: Supports the e nt it yE xt ra ct io nS er vi ce flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { Types } from "mongoose";
 import ConversationThread, {
   type ConversationThreadDocument,

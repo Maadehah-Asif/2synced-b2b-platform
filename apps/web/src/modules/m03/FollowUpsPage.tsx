@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Frontend
+ * File: FollowUpsPage.tsx
+ * Purpose: Supports the F ol lo wU ps Pa ge flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useState } from "react";
 import Layout from "../../components/Layout";
 import ModuleBackButton from "../../components/ModuleBackButton";

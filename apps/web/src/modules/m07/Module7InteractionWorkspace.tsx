@@ -1,3 +1,11 @@
+/**
+ * Module: Funnel Insight (m07)
+ * Layer: Frontend
+ * File: Module7InteractionWorkspace.tsx
+ * Purpose: Supports the M od ul e7 In te ra ct io nW or ks pa ce flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';

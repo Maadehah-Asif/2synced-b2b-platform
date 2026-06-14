@@ -1,3 +1,11 @@
+/**
+ * Module: Sales & Marketing Alignment (m05)
+ * Layer: Backend
+ * File: routes.ts
+ * Purpose: Supports the r ou te s flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { Router } from 'express';
 import { attachOptionalUser } from '../core/auth/middleware.js';
 import {

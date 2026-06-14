@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: Pagination.tsx
+ * Purpose: Supports the P ag in at io n flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 type Props = {
   page: number
   total: number

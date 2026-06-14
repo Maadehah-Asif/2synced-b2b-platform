@@ -1,3 +1,11 @@
+/**
+ * Module: Sales & Marketing Alignment (m05)
+ * Layer: Frontend
+ * File: Module5PipelinePage.tsx
+ * Purpose: Supports the M od ul e5 Pi pe li ne Pa ge flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'
 import type { DashboardData, Module6Lead, PrioritizationRow, StageRecord } from './overview'

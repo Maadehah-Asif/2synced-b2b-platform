@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: dealInputSchema.ts
+ * Purpose: Supports the d ea lI np ut Sc he ma flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export type DealFieldKey = 'deal_id' | 'lead_id' | 'revenue' | 'currency' | 'closed_won' | 'closed_at';
 export type DealFormState = Record<DealFieldKey, string>;
 export type DealMapping = Record<DealFieldKey, string>;

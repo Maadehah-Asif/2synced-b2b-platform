@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Backend
+ * File: MessageSentiment.ts
+ * Purpose: Supports the M es sa ge Se nt im en t flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Document, Types } from "mongoose";
 
 const { Schema, model } = mongoose;

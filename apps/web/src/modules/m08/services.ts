@@ -1,3 +1,11 @@
+/**
+ * Module: Report Center (m08)
+ * Layer: Frontend
+ * File: services.ts
+ * Purpose: Supports the s er vi ce s flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { fetchFromApi, parseApiJson } from '../../utils/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';

@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Backend
+ * File: CampaignSpend.ts
+ * Purpose: Supports the C am pa ig nS pe nd flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Schema, Types, Model } from 'mongoose';
 
 export interface CampaignSpendDoc {

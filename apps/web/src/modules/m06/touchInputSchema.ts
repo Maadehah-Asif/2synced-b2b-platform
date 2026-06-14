@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: touchInputSchema.ts
+ * Purpose: Supports the t ou ch In pu tS ch em a flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export type TouchFieldKey = 'lead_id' | 'campaign_id' | 'channel' | 'type' | 'touched_at' | 'status' | 'metadata';
 export type TouchFormState = Record<TouchFieldKey, string>;
 export type TouchMapping = Record<TouchFieldKey, string>;

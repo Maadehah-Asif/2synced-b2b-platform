@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: BarChart.tsx
+ * Purpose: Supports the B ar Ch ar t flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 type BarDatum = { label: string; value: number }
 
 type Props = {

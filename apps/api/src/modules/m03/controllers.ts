@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Backend
+ * File: controllers.ts
+ * Purpose: Supports the c on tr ol le rs flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import type { Request, Response, NextFunction } from "express";
 import { Types } from "mongoose";
 

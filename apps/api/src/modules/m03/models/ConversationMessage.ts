@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Backend
+ * File: ConversationMessage.ts
+ * Purpose: Supports the C on ve rs at io nM es sa ge flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Document, Types } from "mongoose";
 
 const { Schema, model } = mongoose;

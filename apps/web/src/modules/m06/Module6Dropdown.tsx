@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: Module6Dropdown.tsx
+ * Purpose: Supports the M od ul e6 Dr op do wn flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useState, useRef, useEffect } from 'react'
 import './module6.css'
 import RoundedButton from './RoundedButton.tsx'

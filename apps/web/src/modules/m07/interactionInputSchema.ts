@@ -1,3 +1,11 @@
+/**
+ * Module: Funnel Insight (m07)
+ * Layer: Frontend
+ * File: interactionInputSchema.ts
+ * Purpose: Supports the i nt er ac ti on In pu tS ch em a flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export type InteractionFieldKey =
   | 'interaction_id'
   | 'lead_id'

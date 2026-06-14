@@ -1,3 +1,11 @@
+/**
+ * Module: Lead Quality & Scoring (m01)
+ * Layer: Backend
+ * File: targetSchema.ts
+ * Purpose: Supports the t ar ge tS ch em a flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export type TargetColumn = {
   key: string;
   label?: string;

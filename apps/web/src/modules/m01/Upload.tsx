@@ -1,4 +1,12 @@
-Ôªøimport { useEffect, useState } from "react";
+/**
+ * Module: Lead Quality & Scoring (m01)
+ * Layer: Frontend
+ * File: Upload.tsx
+ * Purpose: Supports the U pl oa d flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
+import { useEffect, useState } from "react";
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import MERGED_COLUMNS from './mergedColumns';
@@ -8,7 +16,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 import { getWorkspaceIdFromHash } from '../../utils/workspace';
 
-// (helper inferType removed ‚Äî unused in this module)
+// (helper inferType removed ó unused in this module)
 
 export default function Upload(){
   function getAuthHeaders(extra: Record<string,string> = {}){
@@ -27,7 +35,7 @@ export default function Upload(){
   const [selectedForMerge, setSelectedForMerge] = useState<Record<string, boolean>>({});
   const [headersByUpload, setHeadersByUpload] = useState<Record<string, string[]>>({});
   // Sample rows kept local in modal; no component state needed
-  // column type inference and warnings removed ‚Äî treat everything as compatible
+  // column type inference and warnings removed ó treat everything as compatible
   const [headerPromotedByUpload, setHeaderPromotedByUpload] = useState<Record<string, boolean>>({});
   const [headerIndexByUpload, setHeaderIndexByUpload] = useState<Record<string, number|null>>({});
   const [useDetectedHeader, setUseDetectedHeader] = useState<Record<string, boolean>>({});
@@ -35,7 +43,7 @@ export default function Upload(){
   const [mergeLoading, setMergeLoading] = useState(false);
   // legacy 'mappings' state removed; we now build mappings from mappingsByFile
   const [step, setStep] = useState<1|2>(1);
-  // Casting toggle removed ‚Äî all types treated permissively
+  // Casting toggle removed ó all types treated permissively
   const [matchingColumns, setMatchingColumns] = useState<Record<string,string>>({});
   const [mappingsByFile, setMappingsByFile] = useState<Record<string, Array<{ source: string; target: string; customName?: string }>>>({});
   const [targetKey, setTargetKey] = useState<string>('lead_id');
@@ -116,7 +124,7 @@ export default function Upload(){
 
   async function openMergeModal(){
     // debug marker to verify this updated code runs in the browser bundle
-    try { console.debug('[m01.upload] openMergeModal invoked ‚Äî bundle marker v2'); } catch (e) {}
+    try { console.debug('[m01.upload] openMergeModal invoked ó bundle marker v2'); } catch (e) {}
     const ids = Object.keys(selectedForMerge).filter(k => selectedForMerge[k]);
     if(ids.length < 2) {
       setMessage('Select at least 2 uploads to merge');
@@ -575,7 +583,7 @@ export default function Upload(){
               <div className="mb-8 muted">Follow the two-step merge: 1) choose matching key per file; 2) map source columns to target schema (source-first).</div>
               <div style={{ maxHeight: '60vh', overflow: 'auto' }}>
                 {mergeLoading ? (
-                  <div style={{ padding: 20 }}>Loading previews‚Ä¶</div>
+                  <div style={{ padding: 20 }}>Loading previewsÖ</div>
                 ) : (
                   <>
                 {/* Step 1: choose matching column per file */}
@@ -614,7 +622,7 @@ export default function Upload(){
                                 ) : (
                                   <div>
                                     <div style={{ marginBottom: 6, color: '#cfc' }}>
-                                      Using manual column name ‚Äî you unchecked the detected header. Enter the matching column name below.
+                                      Using manual column name ó you unchecked the detected header. Enter the matching column name below.
                                     </div>
                                     <input placeholder="Enter matching column name" value={matchingColumns[uid] ?? ''} onChange={(e) => setMatchingColumns(prev => ({ ...prev, [uid]: e.target.value }))} />
                                   </div>
@@ -623,7 +631,7 @@ export default function Upload(){
                             ) : (
                               <div>
                                 <div style={{ marginBottom: 6, color: '#cfc' }}>
-                                  No header row detected for this file ‚Äî enter the matching column name manually or check the CSV.
+                                  No header row detected for this file ó enter the matching column name manually or check the CSV.
                                 </div>
                                 <input placeholder="Enter matching column name" value={matchingColumns[uid] ?? ''} onChange={(e) => setMatchingColumns(prev => ({ ...prev, [uid]: e.target.value }))} />
                               </div>
@@ -650,7 +658,7 @@ export default function Upload(){
                 {/* Step 2: source-first mapping blocks */}
                 {step === 2 && (
                   <div>
-                    <div style={{ marginBottom: 8 }}>Map each source column (left) to a single merged target column (right). The selected join key ‚Äú{targetKey}‚Äù will be filled automatically from your matching columns and is excluded from the options.</div>
+                    <div style={{ marginBottom: 8 }}>Map each source column (left) to a single merged target column (right). The selected join key ì{targetKey}î will be filled automatically from your matching columns and is excluded from the options.</div>
                     {/* Type warning legend removed per request */}
                     <div style={{ marginBottom: 8 }}>
                       <label>Merge name (optional): </label>
@@ -669,7 +677,7 @@ export default function Upload(){
                                   <div style={{ width: '55%' }}>
                                     <select value={row.target} onChange={(e) => setMapping(uid, row.source, e.target.value)} style={{ width: '100%' }}>
                                       <option value="__skip">Skip Column</option>
-                                      <option value="__custom">Custom Field‚Ä¶</option>
+                                      <option value="__custom">Custom FieldÖ</option>
                                       {availableTargetsFor(uid, row.target).map(k => {
                                         const meta = MERGED_COLUMNS.find(c => c.key === k);
                                         const label = meta ? `${meta.label} (${meta.key})` : k;

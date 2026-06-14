@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Backend
+ * File: forecasting.ts
+ * Purpose: Supports the f or ec as ti ng flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse/sync';

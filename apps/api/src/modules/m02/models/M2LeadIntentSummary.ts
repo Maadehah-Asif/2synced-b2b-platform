@@ -1,3 +1,11 @@
+/**
+ * Module: Intent Signals (m02)
+ * Layer: Backend
+ * File: M2LeadIntentSummary.ts
+ * Purpose: Supports the M2 Le ad In te nt Su mm ar y flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Schema, Types, Model } from 'mongoose';
 
 export type IntentSegment = 'COLD' | 'WARM' | 'HOT' | 'BLAZING';

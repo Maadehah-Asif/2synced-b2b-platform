@@ -1,3 +1,11 @@
+/**
+ * Module: Funnel Insight (m07)
+ * Layer: Frontend
+ * File: FunnelOverview.tsx
+ * Purpose: Supports the F un ne lO ve rv ie w flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useMemo, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';

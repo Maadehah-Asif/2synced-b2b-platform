@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Backend
+ * File: AttributionRun.ts
+ * Purpose: Supports the A tt ri bu ti on Ru n flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Schema, Types, Model } from 'mongoose';
 
 export type AttributionModelType = 'first_touch' | 'last_touch' | 'linear' | 'time_decay' | 'other';

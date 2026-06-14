@@ -1,3 +1,11 @@
+/**
+ * Module: Report Center (m08)
+ * Layer: Frontend
+ * File: ModuleReportPage.tsx
+ * Purpose: Supports the M od ul eR ep or tP ag e flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';

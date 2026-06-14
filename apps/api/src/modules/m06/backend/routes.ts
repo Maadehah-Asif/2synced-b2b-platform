@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Backend
+ * File: routes.ts
+ * Purpose: Supports the r ou te s flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { Router } from 'express';
 import {
 	stats,

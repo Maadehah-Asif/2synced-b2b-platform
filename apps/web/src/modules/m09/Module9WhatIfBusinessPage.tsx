@@ -1,3 +1,11 @@
+/**
+ * Module: Campaign Performance Optimization (m09)
+ * Layer: Frontend
+ * File: Module9WhatIfBusinessPage.tsx
+ * Purpose: Supports the M od ul e9 Wh at If Bu si ne ss Pa ge flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import type React from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'

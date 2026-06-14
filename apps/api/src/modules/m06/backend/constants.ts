@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Backend
+ * File: constants.ts
+ * Purpose: Supports the c on st an ts flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 // Centralized constants for Module 7 touch & campaign validation
 export const CHANNELS = ['email','ads','linkedin','webinar','other'] as const;
 export type Channel = typeof CHANNELS[number];

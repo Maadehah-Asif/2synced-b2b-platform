@@ -1,3 +1,11 @@
+/**
+ * Module: Lead Quality & Scoring (m01)
+ * Layer: Backend
+ * File: routes.ts
+ * Purpose: Supports the r ou te s flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { Router } from "express";
 import multer from "multer";
 import { uploadFile, listUploads, previewUpload, previewMerged, listMergedFiles, getMergedFileDetails, getUploadDetails, deleteUpload, restoreUpload, permanentDeleteUpload, mergeUploads, checkUploadsConsistency, fixUploadRecord, createMappingTemplate, listMappingTemplates, getMappingTemplate, updateMappingTemplate, deleteMappingTemplate, listLeadsCodes, getLeadsCodeDetails, previewLeadsCode, generateLeadsCode, downloadLeadsCode, getForecastOptions, forecastLeadQuality, getLeadsDashboardData } from "./controllers.js";

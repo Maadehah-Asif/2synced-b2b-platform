@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: PieChart.tsx
+ * Purpose: Supports the P ie Ch ar t flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 type PieSlice = { label?: string; value: number; color?: string }
 
 const palette = ['#0f4258', '#0F766E', '#B7791F', '#5B6C8B', '#7AA6B8', '#9CB7A4']

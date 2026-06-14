@@ -1,3 +1,11 @@
+/**
+ * Module: Lead Quality & Scoring (m01)
+ * Layer: Backend
+ * File: LeadsCodeFile.ts
+ * Purpose: Supports the L ea ds Co de Fi le flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose from "mongoose";
 
 const { Schema, model } = mongoose;

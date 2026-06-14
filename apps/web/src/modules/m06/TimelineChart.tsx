@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: TimelineChart.tsx
+ * Purpose: Supports the T im el in eC ha rt flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export type TimelinePoint = {
   month: string
   total: number

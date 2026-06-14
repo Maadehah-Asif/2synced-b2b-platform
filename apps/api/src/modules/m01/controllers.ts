@@ -1,3 +1,11 @@
+/**
+ * Module: Lead Quality & Scoring (m01)
+ * Layer: Backend
+ * File: controllers.ts
+ * Purpose: Supports the c on tr ol le rs flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import type { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Readable } from 'stream';
@@ -50,6 +58,8 @@ export async function uploadFile(req: Request, res: Response) {
         return res.status(500).json({ error: 'upload failed' });
       })
       .on('finish', async () => {
+        // Keep a historical uploader snapshot for reports and audit views rather
+        // than depending only on mutable user profile fields.
         const uploaderSnapshot = user ? {
           id: String(uploaderId ?? ''),
           email: user.email ?? null,
@@ -121,7 +131,7 @@ export async function previewUpload(req: Request, res: Response) {
       } catch (e) { /* ignore */ }
     }, PREVIEW_TIMEOUT_MS);
 
-    // prefer a record-count based streaming parse for robustness on large files
+    // Prefer a bounded streaming parse so preview stays fast even for large CSVs.
     const RECORD_LIMIT = 500; // number of CSV records to scan for header/type inference
     let handled = false;
 
@@ -171,6 +181,8 @@ export async function previewUpload(req: Request, res: Response) {
         for (let i = headerIndex + 1; i < bufferRecords.length; i++) dataRecords.push(bufferRecords[i] ?? []);
 
         const inferTypes = (rows: string[][], cols: number) => {
+          // These inferred types are used as UI hints during merge/mapping; they
+          // are not meant to be a strict data warehouse schema contract.
           const types: string[] = Array.from({ length: cols }, () => 'text');
           const scan = Math.min(rows.length, 5);
           for (let c = 0; c < cols; c++) {
@@ -1014,6 +1026,10 @@ export async function listLeadsCodes(req: Request, res: Response) {
     const docs = await LeadsCodeFile.find(filter).sort(dbSort).limit(500).lean();
     if (outputKind !== 'm01' && outputKind !== 'm02') return res.json({ ok: true, items: docs });
 
+    // Module 1 stores file binaries in GridFS while tracking the surrounding
+    // import metadata in Mongo documents, so both layers are touched here.
+    // Preview reads from GridFS directly so large CSVs can be inspected without
+    // generating a separate cached preview file first.
     const db = mongoose.connection.db;
     if (!db) return res.status(500).json({ error: 'db not ready' });
     const bucket = new mongoose.mongo.GridFSBucket(db as any, { bucketName: 'm01_leads' });

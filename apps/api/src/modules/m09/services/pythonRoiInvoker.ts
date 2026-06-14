@@ -1,3 +1,11 @@
+/**
+ * Module: Campaign Performance Optimization (m09)
+ * Layer: Backend
+ * File: pythonRoiInvoker.ts
+ * Purpose: Supports the p yt ho nR oi In vo ke r flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';

@@ -1,3 +1,11 @@
+/**
+ * Module: Campaign Performance Optimization (m09)
+ * Layer: Frontend
+ * File: Module9WhatIfSimulatorPage.tsx
+ * Purpose: Supports the M od ul e9 Wh at If Si mu la to rP ag e flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export { default } from './Module9WhatIfBusinessPage'
 /*
 import type React from 'react'

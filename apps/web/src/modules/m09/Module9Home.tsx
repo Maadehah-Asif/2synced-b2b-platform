@@ -1,3 +1,11 @@
+/**
+ * Module: Campaign Performance Optimization (m09)
+ * Layer: Frontend
+ * File: Module9Home.tsx
+ * Purpose: Supports the M od ul e9 Ho me flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'

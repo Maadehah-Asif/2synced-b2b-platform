@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: rounded-button.css
+ * Purpose: Supports the r ou nd ed b ut to n flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 .m7-rounded {
   background: linear-gradient(180deg, #65A1BF 0%, #5E94B9 100%);
   color: white;

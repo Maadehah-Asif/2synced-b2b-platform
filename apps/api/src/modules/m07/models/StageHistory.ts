@@ -1,3 +1,11 @@
+/**
+ * Module: Funnel Insight (m07)
+ * Layer: Backend
+ * File: StageHistory.ts
+ * Purpose: Supports the S ta ge Hi st or y flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Schema, Types, Model } from 'mongoose';
 
 export interface StageHistoryDoc {

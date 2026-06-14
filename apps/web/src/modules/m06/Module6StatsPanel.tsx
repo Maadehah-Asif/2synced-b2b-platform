@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: Module6StatsPanel.tsx
+ * Purpose: Supports the M od ul e6 St at sP an el flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useState } from 'react';
 import './module6.css';
 import PieChart from './PieChart';

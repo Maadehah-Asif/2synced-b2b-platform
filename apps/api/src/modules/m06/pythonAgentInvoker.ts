@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Backend
+ * File: pythonAgentInvoker.ts
+ * Purpose: Supports the p yt ho nA ge nt In vo ke r flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 

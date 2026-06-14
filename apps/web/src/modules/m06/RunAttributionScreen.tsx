@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: RunAttributionScreen.tsx
+ * Purpose: Supports the R un At tr ib ut io nS cr ee n flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';

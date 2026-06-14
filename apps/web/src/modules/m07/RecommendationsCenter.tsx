@@ -1,3 +1,11 @@
+/**
+ * Module: Funnel Insight (m07)
+ * Layer: Frontend
+ * File: RecommendationsCenter.tsx
+ * Purpose: Supports the R ec om me nd at io ns Ce nt er flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useMemo, useState } from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'

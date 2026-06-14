@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: attributionRuns.ts
+ * Purpose: Supports the a tt ri bu ti on Ru ns flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 // Attribution Runs service
 // Uses same pattern as other m06 services with env-based API base.
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';

@@ -1,3 +1,11 @@
+/**
+ * Module: Sales & Marketing Alignment (m05)
+ * Layer: Frontend
+ * File: Module5WebEngagementPage.tsx
+ * Purpose: Supports the M od ul e5 We bE ng ag em en tP ag e flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'
 import {

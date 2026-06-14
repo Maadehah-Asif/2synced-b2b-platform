@@ -1,3 +1,11 @@
+/**
+ * Module: Intent Signals (m02)
+ * Layer: Frontend
+ * File: UploadPreview.tsx
+ * Purpose: Supports the U pl oa dP re vi ew flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useState } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';

@@ -1,3 +1,11 @@
+/**
+ * Module: Campaign Performance Optimization (m09)
+ * Layer: Frontend
+ * File: useModule9Simulator.ts
+ * Purpose: Supports the u se Mo du le9 Si mu la to r flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useMemo, useState } from 'react'
 import { getWorkspaceIdFromHash } from '../../utils/workspace'
 

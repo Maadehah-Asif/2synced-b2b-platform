@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Backend
+ * File: controllers.ts
+ * Purpose: Supports the c on tr ol le rs flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import type { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { parse as parseCsv } from 'csv-parse/sync';
@@ -3593,6 +3601,8 @@ export async function forecast(req: Request, res: Response) {
   try {
     // For now, forecast is global over the synthetic dataset and does not
     // filter by workspace; project/workspace scoping can be layered later.
+    // This endpoint keeps the older in-process TypeScript forecaster available
+    // for CSV-driven scenarios that do not need the Python agent.
     const horizonRaw = (req.body && req.body.horizonMonths as number | string | undefined)
       ?? (req.query.horizonMonths as string | undefined)
       ?? (req.query.months as string | undefined);
@@ -3616,6 +3626,8 @@ export async function forecast(req: Request, res: Response) {
 
 export async function forecastOptions(_req: Request, res: Response) {
   try {
+    // Options come from the forecast dataset itself, so the UI stays aligned
+    // with the currently shipped synthetic channels.
     return res.json({ ok: true, channels: getForecastChannels() });
   } catch (e) {
     console.error('[m06/forecast-options]', e);
@@ -3634,6 +3646,8 @@ export async function forecastViaAgent(req: Request, res: Response) {
       spend_multiplier?: unknown;
     };
 
+    // The UI prefers channel-wide forecasting, but the endpoint still accepts a
+    // single campaign id for narrower scenario runs and backwards compatibility.
     const channelStrRaw = (typeof campaign_channel === 'string' ? campaign_channel : (typeof channel === 'string' ? channel : '')).trim();
     const hasChannel = !!channelStrRaw;
 

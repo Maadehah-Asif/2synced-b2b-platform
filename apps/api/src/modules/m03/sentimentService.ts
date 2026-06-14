@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Backend
+ * File: sentimentService.ts
+ * Purpose: Supports the s en ti me nt Se rv ic e flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { Types } from "mongoose";
 import ConversationThread, {
   type ConversationThreadDocument,

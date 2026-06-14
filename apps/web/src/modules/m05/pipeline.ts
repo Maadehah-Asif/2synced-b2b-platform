@@ -1,3 +1,11 @@
+/**
+ * Module: Sales & Marketing Alignment (m05)
+ * Layer: Frontend
+ * File: pipeline.ts
+ * Purpose: Supports the p ip el in e flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import type { DashboardData, StageRecord } from './overview'
 
 export type PipelineKpi = {

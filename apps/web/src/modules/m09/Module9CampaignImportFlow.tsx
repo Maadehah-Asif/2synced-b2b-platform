@@ -1,3 +1,11 @@
+/**
+ * Module: Campaign Performance Optimization (m09)
+ * Layer: Frontend
+ * File: Module9CampaignImportFlow.tsx
+ * Purpose: Supports the M od ul e9 Ca mp ai gn Im po rt Fl ow flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import type React from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import Layout from '../../components/Layout'

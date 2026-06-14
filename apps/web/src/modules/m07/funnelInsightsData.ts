@@ -1,3 +1,11 @@
+/**
+ * Module: Funnel Insight (m07)
+ * Layer: Frontend
+ * File: funnelInsightsData.ts
+ * Purpose: Supports the f un ne lI ns ig ht sD at a flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export type M07Lead = {
   lead_id: string;
   full_name: string;

@@ -1,3 +1,11 @@
+/**
+ * Module: Guided Assistant (m04)
+ * Layer: Frontend
+ * File: assistantConfig.ts
+ * Purpose: Supports the a ss is ta nt Co nf ig flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export type AssistantPageConfig = {
   workspaceId: string;
   pageKey: string;

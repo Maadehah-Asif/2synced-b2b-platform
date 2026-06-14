@@ -1,3 +1,11 @@
+/**
+ * Module: Intent Signals (m02)
+ * Layer: Frontend
+ * File: Prioritization.tsx
+ * Purpose: Supports the P ri or it iz at io n flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useState, useRef } from 'react';
 import Layout from '../../components/Layout';
 import ModuleBackButton from '../../components/ModuleBackButton';

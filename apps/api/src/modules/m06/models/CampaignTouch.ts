@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Backend
+ * File: CampaignTouch.ts
+ * Purpose: Supports the C am pa ig nT ou ch flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Schema, Types, Model } from 'mongoose';
 
 export type TouchType = 'email_open' | 'ad_click' | 'webinar' | 'email_click' | 'form_submit' | 'other';

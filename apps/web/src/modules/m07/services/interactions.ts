@@ -1,3 +1,11 @@
+/**
+ * Module: Funnel Insight (m07)
+ * Layer: Frontend
+ * File: interactions.ts
+ * Purpose: Supports the i nt er ac ti on s flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { getWorkspaceIdFromHash } from '../../../utils/workspace';
 import { fetchFromApi, parseApiJson } from '../../../utils/api';
 

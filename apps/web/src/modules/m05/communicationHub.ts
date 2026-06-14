@@ -1,3 +1,11 @@
+/**
+ * Module: Sales & Marketing Alignment (m05)
+ * Layer: Frontend
+ * File: communicationHub.ts
+ * Purpose: Supports the c om mu ni ca ti on Hu b flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { getAuthHeaders } from './webEngagement'
 
 export type CommunicationThreadType =

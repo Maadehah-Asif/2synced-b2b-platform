@@ -1,3 +1,11 @@
+/**
+ * Module: Funnel Insight (m07)
+ * Layer: Frontend
+ * File: stageInputSchema.ts
+ * Purpose: Supports the s ta ge In pu tS ch em a flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export type StageFieldKey =
   | 'lead_id'
   | 'stage_name'

@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: deals.ts
+ * Purpose: Supports the d ea ls flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { getWorkspaceIdFromHash } from '../../../utils/workspace';
 import { fetchFromApi, parseApiJson } from '../../../utils/api';
 

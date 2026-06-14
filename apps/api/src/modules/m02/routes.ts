@@ -1,3 +1,11 @@
+/**
+ * Module: Intent Signals (m02)
+ * Layer: Backend
+ * File: routes.ts
+ * Purpose: Supports the r ou te s flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import express from 'express';
 import { listLeadScoreFiles, generateIntent, previewIntentRun, listIntentRuns, getRunData, downloadRunCsv, getLeadFromRun, getSegmentBehavior, intentForecast, seedDemo, uploadLeadsIntent, uploadBehaviors, getPrioritization, getBehaviorTimeline, getBehaviorTimelineByLead, getForecastDatasetOptions, intentForecastDataset, getIntentDashboardData, listIntentDashboardFiles } from './controllers.js';
 import multer from 'multer';

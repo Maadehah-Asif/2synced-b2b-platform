@@ -1,3 +1,11 @@
+/**
+ * Module: Lead Quality & Scoring (m01)
+ * Layer: Backend
+ * File: UploadFile.ts
+ * Purpose: Supports the U pl oa dF il e flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose from "mongoose";
 
 const { Schema, model } = mongoose;

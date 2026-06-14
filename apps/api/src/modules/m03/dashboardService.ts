@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Backend
+ * File: dashboardService.ts
+ * Purpose: Supports the d as hb oa rd Se rv ic e flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { Types } from "mongoose";
 import ConversationThread from "./models/ConversationThreads.js";
 import DealHealth from "./models/DealHealth.js";

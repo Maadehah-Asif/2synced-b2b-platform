@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Frontend
+ * File: ConversationUpload.tsx
+ * Purpose: Supports the C on ve rs at io nU pl oa d flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import type { FormEvent, ChangeEvent } from "react";
 import { useState } from "react";
 import Layout from "../../components/Layout";

@@ -1,3 +1,11 @@
+/**
+ * Module: Sales & Marketing Alignment (m05)
+ * Layer: Frontend
+ * File: overview.ts
+ * Purpose: Supports the o ve rv ie w flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export type PrioritizationRow = {
   leadId: string
   fullName?: string

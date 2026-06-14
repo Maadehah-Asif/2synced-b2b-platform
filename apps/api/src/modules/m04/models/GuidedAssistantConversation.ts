@@ -1,3 +1,11 @@
+/**
+ * Module: Guided Assistant (m04)
+ * Layer: Backend
+ * File: GuidedAssistantConversation.ts
+ * Purpose: Supports the G ui de dA ss is ta nt Co nv er sa ti on flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose, { Schema, Types, Model } from "mongoose";
 
 export type GuidedAssistantSender = "user" | "assistant" | "admin";

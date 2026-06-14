@@ -1,3 +1,11 @@
+/**
+ * Module: Funnel Insight (m07)
+ * Layer: Frontend
+ * File: stages.ts
+ * Purpose: Supports the s ta ge s flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { getWorkspaceIdFromHash } from '../../../utils/workspace';
 import { fetchFromApi, parseApiJson } from '../../../utils/api';
 

@@ -1,3 +1,11 @@
+/**
+ * Module: Intent Signals (m02)
+ * Layer: Frontend
+ * File: IntentDashboard.tsx
+ * Purpose: Supports the I nt en tD as hb oa rd flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useMemo, useState } from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
@@ -55,6 +63,8 @@ export default function IntentDashboard() {
       setLoadingList(true)
       setError(null)
       try {
+        // The dashboard is always built from already-generated intent outputs,
+        // not raw uploads, so the dropdown is sourced from the dedicated file list.
         const params = new URLSearchParams({ workspace: workspaceId })
         const res = await fetchFromApi(`${API_BASE}/m02/dashboard-files?${params.toString()}`, undefined, API_BASE)
         const json = await parseApiJson<{ items: IntentFile[] }>(res, 'Could not load intent outputs')
@@ -79,6 +89,8 @@ export default function IntentDashboard() {
       setLoadingDashboard(true)
       setError(null)
       try {
+        // The selected file id becomes the single source of truth for all
+        // dashboard metrics, charts, and top-lead highlights.
         const params = new URLSearchParams({ workspace: workspaceId })
         const res = await fetchFromApi(`${API_BASE}/m02/dashboard/${selectedId}?${params.toString()}`, undefined, API_BASE)
         const json = await parseApiJson<IntentDashboardResponse>(res, 'Could not load the intent dashboard')
@@ -94,6 +106,8 @@ export default function IntentDashboard() {
   }, [workspaceId, selectedId])
 
   const lineData = useMemo(() => (dashboard?.charts.line || []).map((item) => ({ month: item.label, total: item.value })), [dashboard])
+  // Reuse the same visual primitives as the other insight dashboards so M02
+  // reads as part of the same reporting system.
   const barData = dashboard?.charts.bars || []
   const pieData = dashboard?.charts.pie || []
 

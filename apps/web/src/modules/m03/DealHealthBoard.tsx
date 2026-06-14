@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Frontend
+ * File: DealHealthBoard.tsx
+ * Purpose: Supports the D ea lH ea lt hB oa rd flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useState } from "react";
 import Layout from "../../components/Layout";
 import ModuleBackButton from "../../components/ModuleBackButton";

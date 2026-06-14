@@ -1,3 +1,11 @@
+/**
+ * Module: Lead Quality & Scoring (m01)
+ * Layer: Backend
+ * File: MergedFile.ts
+ * Purpose: Supports the M er ge dF il e flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import mongoose from "mongoose";
 
 const { Schema, model } = mongoose;

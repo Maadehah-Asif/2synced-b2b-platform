@@ -1,3 +1,11 @@
+/**
+ * Module: Intent Signals (m02)
+ * Layer: Frontend
+ * File: MergeCSV.tsx
+ * Purpose: Supports the M er ge CS V flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useState } from 'react';
 import ModuleBackButton from '../../components/ModuleBackButton';
 import MERGED_COLUMNS from '../m01/mergedColumns';

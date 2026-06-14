@@ -1,3 +1,11 @@
+/**
+ * Module: Sales & Marketing Alignment (m05)
+ * Layer: Frontend
+ * File: shortcomings.ts
+ * Purpose: Supports the s ho rt co mi ng s flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { buildPipelineMetrics } from './pipeline'
 import type { DashboardData } from './overview'
 import type { Module5AnalyticsResponse } from './webEngagement'

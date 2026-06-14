@@ -1,3 +1,11 @@
+/**
+ * Module: Guided Assistant (m04)
+ * Layer: Backend
+ * File: faqCatalog.ts
+ * Purpose: Supports the f aq Ca ta lo g flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 export type GuidedAssistantFaq = {
   id: string;
   label: string;

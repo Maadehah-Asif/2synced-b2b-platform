@@ -1,3 +1,11 @@
+/**
+ * Module: Conversation Intelligence (m03)
+ * Layer: Frontend
+ * File: Module3Companies.tsx
+ * Purpose: Supports the M od ul e3 Co mp an ie s flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useState } from "react";
 import Layout from "../../components/Layout";
 import ModuleBackButton from "../../components/ModuleBackButton";

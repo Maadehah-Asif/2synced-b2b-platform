@@ -1,3 +1,11 @@
+/**
+ * Module: Guided Assistant (m04)
+ * Layer: Frontend
+ * File: GuidedAssistantHost.tsx
+ * Purpose: Supports the G ui de dA ss is ta nt Ho st flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { getAssistantConfigFromHash, getAssistantPageTitle } from "./assistantConfig";
 

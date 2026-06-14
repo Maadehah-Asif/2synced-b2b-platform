@@ -1,3 +1,11 @@
+/**
+ * Module: Revenue Attribution & ROI (m06)
+ * Layer: Frontend
+ * File: Element2Page.tsx
+ * Purpose: Supports the E le me nt2 Pa ge flow for this module.
+ * Notes: Documentation header added for maintainability.
+ */
+
 import React from 'react'
 import Layout from '../../components/Layout'
 import ModuleBackButton from '../../components/ModuleBackButton'
